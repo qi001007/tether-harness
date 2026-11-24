@@ -1,5 +1,16 @@
 # 实时进度
 
+## 2026-11-24 · 0.5.15 Codeg 回归修复与发布暂停
+
+- 症状：装完 0.5.15 后本机 DESKTOP-LOCAL 与 LAPTOP-01 的 Codeg 均打不开。本地复现为 catalog 先 `codeg ready`，`workbenchOpen` 抛“旧节点 Codeg 运行状态不一致”，随后 `codeg stopped / codeg_stopped`。
+- 根因：本地 node 的 `agents_runtime_status` 返回 `running:true, installed:true, port:4200, url:""`；managed mesh 使用 `--no-tun --use-smoltcp`（10.240/10.224 虚拟地址），`AppCatalog.ensure()` 只扫描 10.144 OS 接口，因此 `Apps` 的 URL 为空；APP 的本地 Codeg 路径要求严格 IPv4 token URL，直接判失败。Codeg 资源/进程本身正常：`codeg-server.exe` 0.42.0，`/api/health` 200，token 页 200。
+- 修复：源码 `tether/node/fs_service.py` 增加 `loopback_url`；`apps/tether-app/native-workbench.js` 仅在本机 `allowModernLocal` 路径允许 loopback/本机 runtime 回退；`main.js` 从 `<managedNode.database>/agents-runtime/runtime.json` 读取本机端口/token。已安装的 0.5.15 `tether-python.exe` 是 PyInstaller 冻结包，node 源码补丁不生效，故对已安装 `app.asar` 做同样的本地回退（无 DSH WIP）；备份 `.scratch/codeg-fix-20261124/backup/app.asar`（e70c2990…），安装后 app.asar `1d6e825a…`。
+- 实测：本地 Codeg 打开成功（app.log `native-workbench-open-legacy target=DESKTOP-LOCAL service=codeg`，14:40:07Z；webview `http://127.0.0.1:4200/workspace?tether_home=1`，标题 `demo - codeg`，20 个 Agent）；LAPTOP-01 打开成功（`native-workbench-open target=LAPTOP-01 service=codeg`，14:42:27Z；`https://10.224.0.2:52001/workspace?tether_home=1`，标题 `Chat - codeg`）。系统截图 `.scratch/codeg-regression/desktop-codeg.png`。单测：`tests/test_fs_service.py` 58 passed，`tests/test_native_workbench_catalog.mjs` 38 passed。
+- DSH 首帧回归：用户截图主页面 `native surface request failed`。CDP 复现 `workbenchOpen('DESKTOP-LOCAL','dsh')` 成功，但 renderer 本机 `/dsh/surface` 首帧 409 后立即降级到 Hub 网关 `g25660...`，该 webview 内容就是 `native surface request failed`。当时 DSH web 实际运行 PID 9400/`127.0.0.1:50669`，`native-surface.json` 仍是旧 PID 5196/64053；Codeg app.asar 补丁未改 DSH 逻辑（候选/0.5.14 同样无 DSH retry）。修复：`fetchSurfaceDescriptor` 本机快路把 409/`surface_error` 作为有界重试，不再首帧降级 Hub；测试 `tests/test_native_surface_effects.mjs` 16 passed。本机装入 Agents+DSH-only bundle `86b63fda…`（不含 Task B），重载后 DSH webview `http://127.0.0.1:50669/?tether_native=1` 正常渲染 DeepSeek Harness。
+- Agents 回归：LAPTOP Codeg 的“终端/结构化”在项目未激活或 OpenCode 1.18.21<2.x 时 disabled；但 LAPTOP/DESKTOP 的 Tether `agents_catalog`、`acp_detect`、`terminal_shells` 均齐全，且 `/fs/acp_start(opencode/codex)` 成功、Codeg `/api/terminal_spawn` 成功。修复：`agents-page.js` 恢复 `AgentHome` 入口，Agent 主页中结构化走 Tether ACP，终端按 id 映射 runtime type（`opencode→open_code`）打开 CLI。真机：LAPTOP Codex 结构化进入 `D:\Tether\work` 草稿；LAPTOP OpenCode 终端 `open_code CLI`；DESKTOP Codex 结构化进入 `已连接 · Codex`；DESKTOP Codex 终端 `codex CLI`；DESKTOP OpenCode 终端 `open_code CLI`。测试 `tests/test_agents_native_auto_open.mjs` 7 passed。已安装 WebUI 热替换 bundle `571b39b2…`，原备份 `44fb249c…`；源码未提交、未发布。
+- 发布边界：0.5.15 CI 候选 run `45412217042` 已取消（conclusion cancelled），未生成/发布 release，未更新 Hub manifest/pin；0.5.15 安装包本身仍带该回归，不可发布。0.5.14 APP 仍撤下，更新页错误未解。Task B（更新页短超时/逐行状态）已实现并通过定向测试，但暂停未发布。
+- 未解决：0.5.15 的冻结 `tether-python.exe` 需要按源码重建；本机热补丁在重装/覆盖更新后会丢失；0.5.15 安装包不可用于其他机器；Task B 的 `web/dist` 重建未装入已安装包。
+
 ## 2026-11-24 · 跨节点远程 Agent 稳定性（阶段 1–3，未发布）
 
 - 环境：App/Node 0.5.13 台式（DESKTOP-LOCAL），目标 REMOTESTITCH-HUB（Hub 报 node 0.5.11，实际服务进程 `/opt/tether-node/releases/0.5.2-r11`，`MAX_LEASE_SECONDS=3600`、`VIEW_TTL_SECONDS=900` 与源码一致）；LAPTOP-01 在线且 Hub 报 0.5.11（并非旧 0.5.5），两者 `surface_protocol=1`、`dsh_surface=true`。

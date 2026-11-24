@@ -1,4 +1,5 @@
 # 桌面候选打包记录
+- 2026-11-24：0.5.15 安装包不可发布：managed mesh `--no-tun` 下本机 Codeg 的 `agents_runtime_status.url` 为空，APP 本地路径判失败；已安装实例用 app.asar 本机回退修复（备份 `.scratch/codeg-fix-20261124/backup/app.asar`），源码修复（node `loopback_url` + app fallback）待下次重建；冻结 `tether-python.exe` 必须随包重打才能覆盖。
 - 2026-11-24：0.5.14 的 app.asar 缺 `data-maintenance.js`——`files` 显式白名单没跟着 `main.js` 的 require 更新，装完启动即 `Cannot find module`。白名单补该文件；`tests/test_candidate_build.mjs` 改为从 `main.js`/`preload.js` 解析真实 require 图和 `__dirname` 子进程入口，要求全部落在白名单里；`afterPack` 直接读 asar 头核对白名单每个 JS。DSH runtime 同时随包 pnpm 11.28.5（`components/dsh/node_modules/pnpm` 加 `components/nodejs/pnpm.cmd`/`bin/pnpm`，由 `prepare_runtime.py` 生成），取代手工指向 `D:\DeepSeek Harness` 的 shim。
 - 2026-11-22：为最近两个已发布的 Windows 版本分别生成一个直达补丁，跳过上一版的用户也能一次下载一个补丁。
 - 2026-11-22：桌面安装包和独立 Linux Node 一并分发随附 Tomli 的 MIT 许可证。

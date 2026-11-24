@@ -1702,6 +1702,9 @@ class FsService:
         # This URL is consumed by the APP viewer. A node-local loopback URL
         # points at the viewer's machine for remote nodes, so fail closed when
         # the app gateway has not published the node route yet.
+        port = int(result.get("port") or getattr(self.agents_runtime, "port", 0) or 0)
+        result["loopback_url"] = (self.agents_runtime.surface_url("http://127.0.0.1:%d" % port)
+                                  if result.get("running") and port else "")
         result["url"] = self.agents_runtime.surface_url(base) if base else ""
         result.pop("token", None)
         return result

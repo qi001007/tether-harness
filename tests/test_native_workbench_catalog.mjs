@@ -14,7 +14,8 @@ const app = fs.readFileSync(path.join(root, 'packages/tether-ui/src/app.js'), 'u
 
 function workbenchWith(fetcher, {
   getActorId = async () => 'actor-1', getServiceSession = () => null,
-  getSourceRoute = async () => null, getLocalDeviceId = () => 'local-1'
+  getSourceRoute = async () => null, getLocalDeviceId = () => 'local-1',
+  getLocalCodegRuntime = () => null
 } = {}) {
   return createNativeWorkbench({
     controllerUrl: 'https://controller.test',
@@ -23,7 +24,8 @@ function workbenchWith(fetcher, {
     createBootstrapContents: () => { throw new Error('unexpected DSH bootstrap') },
     getActorId,
     getLocalDeviceId,
-    getSourceRoute
+    getSourceRoute,
+    getLocalCodegRuntime
   })
 }
 
@@ -741,6 +743,63 @@ test('modern same-device Codeg starts its stopped runtime once and opens through
   } finally {
     os.networkInterfaces = originalNetworkInterfaces
   }
+})
+
+test('modern same-device Codeg opens through the node loopback URL without a mesh route', async () => {
+  const session = legacySession()
+  const calls = []
+  const workbench = workbenchWith(async (url, init) => {
+    const path = new URL(url).pathname
+    calls.push({ path, method: init.method })
+    if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+      protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+    })
+    if (path.endsWith('/agents_runtime_status')) return jsonResponse(200, {
+      device_id: 'target-1', installed: true, running: true, port: 4200, url: '',
+      loopback_url: 'http://127.0.0.1:4200/token.html?token=private-token'
+    })
+    throw new Error('unexpected request: ' + path)
+  }, { getServiceSession: () => session, getLocalDeviceId: async () => 'target-1' })
+
+  const opened = await workbench.open('target-1', 'codeg')
+  assert.equal(opened.endpoint, 'http://127.0.0.1:4200/')
+  assert.equal(opened.legacy, true)
+  assert.doesNotMatch(JSON.stringify(opened), /private-token|token\.html|\?token=/)
+  assert.deepEqual(session.calls.proxy, [{ mode: 'direct' }],
+    'the local APP connects directly instead of requiring a mesh SOCKS route')
+  assert.deepEqual(calls.map((call) => call.path), [
+    '/api/devices/target-1/fs/service_catalog',
+    '/api/devices/target-1/fs/agents_runtime_status'
+  ])
+})
+
+test('modern same-device Codeg falls back to the local node runtime state when both URLs are empty', async () => {
+  const session = legacySession()
+  const calls = []
+  const workbench = workbenchWith(async (url, init) => {
+    const path = new URL(url).pathname
+    calls.push({ path, method: init.method })
+    if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+      protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+    })
+    if (path.endsWith('/agents_runtime_status')) return jsonResponse(200, {
+      device_id: 'target-1', installed: true, running: true, port: 4200, url: ''
+    })
+    throw new Error('unexpected request: ' + path)
+  }, {
+    getServiceSession: () => session, getLocalDeviceId: async () => 'target-1',
+    getLocalCodegRuntime: () => ({ port: 4200, token: 'private-token' })
+  })
+
+  const opened = await workbench.open('target-1', 'codeg')
+  assert.equal(opened.endpoint, 'http://127.0.0.1:4200/')
+  assert.equal(opened.legacy, true)
+  assert.doesNotMatch(JSON.stringify(opened), /private-token|token\.html|\?token=/)
+  assert.deepEqual(session.calls.proxy, [{ mode: 'direct' }])
+  assert.deepEqual(calls.map((call) => call.path), [
+    '/api/devices/target-1/fs/service_catalog',
+    '/api/devices/target-1/fs/agents_runtime_status'
+  ])
 })
 
 test('modern remote Codeg remains on service_open and never starts through the local token gateway', async () => {

@@ -1,6 +1,7 @@
 import { createTerminalDock } from './terminal-dock.js'
 import { TargetFileExplorer } from './target-file-explorer.js'
 import { TetherFolderPickDialog } from './tether-folder-pick-dialog.js'
+import { AgentHome } from './agents-home.js'
 import { readCatalog, writeCatalog, readHarnesses, writeHarnesses } from './agent-cache.js'
 import { writeAccount } from './agent-account-cache.js'
 
@@ -8,6 +9,21 @@ const HERDR_SUPPORTED_CODEG_TYPES = new Set([
   'codex', 'claude_code', 'gemini', 'open_code', 'cursor',
   'kimi_code', 'qwen_code', 'qoder'
 ])
+
+const RUNTIME_AGENT_TYPE_BY_ID = {
+  codex: 'codex',
+  opencode: 'open_code',
+  claude: 'claude_code',
+  gemini: 'gemini',
+  qoder: 'qoder',
+  cursor: 'cursor',
+  kimi: 'kimi_code',
+  qwen: 'qwen_code',
+  openclaw: 'open_claw',
+  codebuddy: 'code_buddy',
+  mcode: 'minimax_code',
+  'command-code': 'command_code'
+}
 
 export function createAgentsPage(props) {
   const { React, devices = [], localDevice = '', activeDevice = '', isActive = true } = props
@@ -1089,11 +1105,22 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
     }
   }
 
+  const defaultAgentCwd = () => {
+    const target = devices.find((item) => item && item.device_id === device)
+    const caps = (target && target.capabilities) || {}
+    const value = caps.workspace || caps.workspaces_root || ''
+    return typeof value === 'string' ? value : ''
+  }
+
   const openAgent = (agent, surface, harness) => {
     if (surface === 'workbench') { if (onOpenWorkbench) onOpenWorkbench(); return }
     if (surface === 'web') { void openWeb(agent); return }
     if (surface === 'acp' && harness) { setHomeOpen(false); void start(harness); setWorkspaceOpen(false); return }
-    openTerminal(agent)
+    setHomeOpen(false)
+    const cwd = defaultAgentCwd()
+    const runtimeType = RUNTIME_AGENT_TYPE_BY_ID[String((agent && agent.id) || '')] || ''
+    if (cwd && runtimeType) openRuntimeCli(cwd, runtimeType)
+    else openTerminal(agent)
   }
 
   const field = {
@@ -1198,11 +1225,44 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
         style: { position: 'absolute', inset: 0, display: pane.key === activePane ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0 }
       }, paneBody(pane)))))
     : null
+  const homeButton = { height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8,
+    background: C.bg, color: C.ink, fontSize: 11.5, cursor: 'pointer' }
+  const agentHomeView = !panes.length && homeOpen ? h('div', { key: 'agent-home', style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg } },
+    h('div', { style: { height: 42, flex: '0 0 42px', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderBottom: '1px solid ' + C.line } },
+      h('button', { type: 'button', onClick: () => setHomeOpen(false), style: homeButton }, '← 返回工作台'),
+      h('strong', { style: { fontSize: 13 } }, 'Agent 主页'),
+      h('button', { type: 'button', onClick: () => setCatalogOpen(true), style: { ...homeButton, marginLeft: 'auto' } }, 'Agent 设置')),
+    h(AgentHome, { React, Glyph, C, post, device, catalog, harnesses, panes, loading: catalogBusy,
+      error: catalogError, installing, onInstall: installAgent, onOpen: openAgent,
+      onOpenCatalog: () => setCatalogOpen(true), onOpenPane: (key) => { setActivePane(key); setWorkspaceOpen(true) },
+      onClosePane: closePane, onLoginTerminal: openLogin })) : null
+  const sessionView = session ? h('div', { key: 'acp-session', style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg } },
+    h('div', { style: { height: 42, flex: '0 0 42px', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderBottom: '1px solid ' + C.line } },
+      h('button', { type: 'button', onClick: () => { void stop(); setHomeOpen(true) }, style: homeButton }, '← 返回 Agent 主页'),
+      h('strong', { style: { fontSize: 13 } }, (agent && (agent.title || agent.name)) || '结构化会话'),
+      models.length ? h('button', { type: 'button', onClick: () => setModelOpen(!modelOpen), style: { ...homeButton, marginLeft: 'auto' } },
+        (models.find((item) => item.modelId === model) || {}).name || model || '模型') : null),
+    tabs.length > 1 ? h('div', { style: { display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid ' + C.line } },
+      tabs.map((tab) => h('button', { key: tab.id, type: 'button', onClick: () => selectTab(tab.id),
+        style: { height: 26, padding: '0 8px', border: '1px solid ' + C.line, borderRadius: 7, background: tab.id === session ? C.soft : C.bg, color: C.ink, fontSize: 11.5, cursor: 'pointer' } }, tab.name))) : null,
+    h('div', { ref: transcriptRef, style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 } },
+      ...items.map((item, index) => h('div', { key: index, style: { fontSize: 12, lineHeight: '19px', color: item.kind === 'error' ? C.red : item.kind === 'user' ? C.ink : C.sub, background: item.kind === 'user' ? C.soft : 'transparent', border: '1px solid ' + (item.kind === 'user' ? C.line : 'transparent'), borderRadius: 8, padding: item.kind === 'user' ? '7px 9px' : 0, maxWidth: '92%' } },
+        item.kind === 'user' ? '你：' : item.kind === 'tool' ? ((item.title || '工具') + ' · ' + (item.status || '') + '：') : item.kind === 'plan' ? '计划：' : '',
+        item.text || (item.entries || []).join(' / ') || item.detail || ''))),
+    pending.length ? h('div', { role: 'alert', style: { margin: '0 12px 8px', padding: 10, border: '1px solid ' + C.line, borderRadius: 8, background: C.soft } },
+      ...pending.map((entry) => h('div', { key: entry.requestId, style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+        h('span', { style: { fontSize: 12 } }, entry.title || '需要确认'),
+        ...(entry.options || []).map((option) => h('button', { key: option.optionId, type: 'button', onClick: () => void reply(entry.requestId, option.optionId), style: { height: 26, padding: '0 8px', border: '1px solid ' + C.line, borderRadius: 7, background: C.bg, color: C.ink, fontSize: 11.5, cursor: 'pointer' } }, option.name || option.label || option.optionId))))) : null,
+    h('form', { onSubmit: send, style: { display: 'flex', gap: 8, padding: 12, borderTop: '1px solid ' + C.line } },
+      h('textarea', { value: input, onChange: (event) => setInput(event.target.value), placeholder: '输入消息', disabled: !ready || busy, style: { flex: '1 1 auto', minHeight: 46, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 8, padding: '8px 9px', background: C.bg, color: C.ink, fontSize: 12, resize: 'none' } }),
+      h('button', { type: 'submit', disabled: busy || !ready || !input.trim(), style: { ...button, alignSelf: 'flex-end' } }, busy ? '处理中…' : '发送'))) : null
   return h('div', {
     style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }
   },
+    sessionView,
+    agentHomeView,
     workspace,
-    !panes.length && nativeWorkbench ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', padding: 24, color: C.mute, fontSize: 12 } },
+    !panes.length && !homeOpen && !session && nativeWorkbench ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', padding: 24, color: C.mute, fontSize: 12 } },
       h('div', { style: { fontSize: 16, fontWeight: 600, color: C.ink } }, '目标设备工作台'),
       serviceCatalogBusy ? h('div', null, '正在读取目标服务状态…')
         : codegService ? h('div', { style: { textAlign: 'center', lineHeight: 1.6 } },
@@ -1219,6 +1279,7 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
       workbenchLoginBusy ? '等待登录完成…' : workbenchLoginRequired ? '通过主进程登录' : serviceOpening ? '正在打开…'
         : codegService ? (legacyCodegBlocked ? legacyCodegLabel : codegService.state === 'ready' ? '打开 Codeg'
           : codegService.state === 'missing' ? codegUnavailableLabel : '启动并打开 Codeg') : '重试服务目录'),
+      h('button', { type: 'button', onClick: () => setHomeOpen(true), style: { ...button, marginTop: 8 } }, 'Agent 主页'),
       desktopService ? h('div', { style: { marginTop: 4, textAlign: 'center', lineHeight: 1.55 } },
         h('div', { style: { color: C.sub } }, '远程桌面：' + (serviceStateLabel[desktopService.state] || desktopService.state || '未知')),
         desktopService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, desktopService.reason) : null,

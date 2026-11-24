@@ -353,6 +353,8 @@ async function createWindow() {
     log('Controller authentication status unavailable code=' + String(error && error.code || 'status_failed').slice(0, 64))
   }
   void refreshAppUpdateBridgeRegistration()
+  const localCodegRuntimePath = managedNode && managedNode.database
+    ? path.join(path.dirname(managedNode.database), 'agents-runtime', 'runtime.json') : ''
   nativeWorkbench = createNativeWorkbench({
     controllerUrl: controller,
     loginSession: legacyControllerSession,
@@ -383,6 +385,18 @@ async function createWindow() {
       }
     },
     getLocalDeviceId: () => supervisor.device,
+    // The packaged Node is a frozen PyInstaller executable, so it cannot be
+    // patched in place. Its local runtime state is the one source the APP can
+    // read for its own Codeg without requiring a mesh route.
+    getLocalCodegRuntime: () => {
+      if (!localCodegRuntimePath) return null
+      try {
+        const state = JSON.parse(fs.readFileSync(localCodegRuntimePath, 'utf8'))
+        const port = Number(state.port)
+        const token = typeof state.token === 'string' ? state.token : ''
+        return port > 0 && token ? { port, token } : null
+      } catch (_) { return null }
+    },
     getSourceRoute: async (networkId, sourceDeviceId) => {
       if (!supervisor.remoteUrl || !supervisor.hasLocalNodeApi() || sourceDeviceId !== supervisor.device) {
         throw new Error('local mesh route unavailable')

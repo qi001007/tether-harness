@@ -45,7 +45,7 @@ def test_readonly_allows_project_root_and_denies_outside(env, tmp_path: Path) ->
     assert any(row["phase"] == "result" and row["result"] == "ok" for row in audit)
 
 
-def test_agents_runtime_surface_does_not_return_node_loopback_when_gateway_route_is_missing(env) -> None:
+def test_agents_runtime_surface_keeps_remote_url_empty_but_exposes_local_loopback(env) -> None:
     svc: FsService = env["svc"]
     svc.agents_runtime.port = 4200
     svc.agents_runtime.token = "private-token"
@@ -53,6 +53,7 @@ def test_agents_runtime_surface_does_not_return_node_loopback_when_gateway_route
         "running": True, "url": "http://127.0.0.1:4200/", "token": "private-token",
     })
     assert result["url"] == ""
+    assert result["loopback_url"].startswith("http://127.0.0.1:4200/token.html?token=")
     assert "token" not in result
 
 

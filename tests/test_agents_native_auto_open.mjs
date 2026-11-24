@@ -69,7 +69,7 @@ function hookRenderer() {
   const expand = (node, path) => {
     if (Array.isArray(node)) return node.map((child, index) => expand(child, path + '/' + index))
     if (!node || typeof node !== 'object') return node
-    if (typeof node.type === 'function' && node.type.name === 'AgentTargetPage') {
+    if (typeof node.type === 'function' && ['AgentTargetPage', 'AgentHome'].includes(node.type.name)) {
       return invoke(node.type, node.props, path)
     }
     return { ...node, children: expand(node.children || [], path) }
@@ -296,6 +296,76 @@ test('native Agents opens legacy Codeg only through the manual entry after its r
     await blockedRenderer.render(blockedProps)
     assert.equal(blockedCalls.legacy + blockedCalls.open + blockedCalls.runtime, 0,
       'even a forced click cannot bypass the legacy guard')
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
+  }
+})
+test('native Agents Agent home starts Tether structured sessions when Codeg gates the agent', async () => {
+  const previousWindow = globalThis.window
+  globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
+  try {
+    const calls = { catalog: 0, open: 0, dsh: 0, acpStart: 0 }
+    const renderer = hookRenderer()
+    const props = pageProps(renderer.React, async () => {
+      calls.open += 1
+      return { targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg' }
+    }, calls, {
+      post: async (url, body) => {
+        if (url.endsWith('/agents_catalog')) { calls.catalog += 1; return { agents: [{ id: 'opencode', name: 'OpenCode', available: true, enabled: true, transports: ['terminal', 'acp'], command: 'D:\\Tether\\agents\\opencode.CMD', version: '1.18.21' }] } }
+        if (url.endsWith('/acp_detect')) return { harnesses: [{ id: 'opencode', name: 'OpenCode', command: 'opencode' }] }
+        if (url.endsWith('/terminal_shells')) return { shells: [{ id: 'herdr', available: true }] }
+        if (url.endsWith('/acp_start')) { calls.acpStart += 1; return { session_id: 'session-1', harness: body.harness, cwd: 'D:/work' } }
+        if (url.endsWith('/acp_poll')) return { next: 1, events: [{ type: 'ready', agent: { title: 'OpenCode' } }] }
+        if (url.endsWith('/acp_stop')) return { ok: true }
+        return {}
+      }
+    })
+    let tree = await renderer.render(props)
+    const home = findButton(tree, 'Agent 主页')
+    assert.ok(home, 'the target workbench keeps a visible Agent home entry')
+    home.props.onClick()
+    tree = await renderer.render(props)
+    assert.ok(findButton(tree, 'OpenCode'), 'the Agent home lists the detected OpenCode agent')
+    const structured = findButton(tree, '结构化')
+    assert.ok(structured, 'OpenCode has a structured action in the Tether home')
+    structured.props.onClick()
+    tree = await renderer.render(props)
+    assert.equal(calls.acpStart, 1, 'structured starts the Tether ACP session')
+    const back = findButton(tree, '← 返回 Agent 主页')
+    assert.ok(back, 'the structured session becomes the active draft')
+    back.props.onClick()
+    await renderer.render(props)
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
+  }
+})
+
+test('native Agents Agent home opens the agent CLI terminal with the device workspace', async () => {
+  const previousWindow = globalThis.window
+  globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
+  try {
+    const calls = { catalog: 0, open: 0, dsh: 0 }
+    const renderer = hookRenderer()
+    const base = pageProps(renderer.React, async () => ({ targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg' }), calls)
+    const props = { ...base, devices: [{ device_id: 'target-a', online: true, name: 'Target A', capabilities: { workspace: 'D:\Tether\work' } }] }
+    props.post = async (url) => {
+      if (url.endsWith('/agents_catalog')) return { agents: [{ id: 'opencode', name: 'OpenCode', available: true, enabled: true, transports: ['terminal', 'acp'], command: 'D:\\Tether\\agents\\opencode.CMD', version: '1.18.21' }] }
+      if (url.endsWith('/acp_detect')) return { harnesses: [{ id: 'opencode', name: 'OpenCode', command: 'opencode' }] }
+      if (url.endsWith('/terminal_shells')) return { shells: [{ id: 'herdr', available: true }] }
+      if (url.endsWith('/terminal_start')) return { session_id: 'term-1' }
+      if (url.endsWith('/terminal_output')) return { output: '', cursor: 0 }
+      return {}
+    }
+    let tree = await renderer.render(props)
+    findButton(tree, 'Agent 主页').props.onClick()
+    tree = await renderer.render(props)
+    const terminal = findButton(tree, '终端')
+    assert.ok(terminal, 'the Agent home lists a terminal action')
+    terminal.props.onClick()
+    tree = await renderer.render(props)
+    assert.ok(findButton(tree, 'open_code CLI') || findButton(tree, '← 返回 Agent 主页'), 'the Tether CLI terminal pane opens with the runtime agent type')
   } finally {
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow

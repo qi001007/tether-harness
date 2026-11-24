@@ -1064,3 +1064,67 @@ test('NativeSurface skips the mesh attempt when the service catalog is not ready
     assert.equal(degraded[1].reason, 'catalog_not_ready')
   } finally { fixture.dispose() }
 })
+
+test('local Electron NativeSurface retries the local descriptor before mounting a Hub gateway', async () => {
+  const previous = { fetch: globalThis.fetch, window: globalThis.window, document: globalThis.document,
+    setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout }
+  let timerId = 0
+  const timers = new Map()
+  globalThis.setTimeout = (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id }
+  globalThis.clearTimeout = (id) => timers.delete(id)
+  globalThis.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} }
+  globalThis.window = { location: { origin: 'http://127.0.0.1:18892', protocol: 'http:' },
+    localStorage: { getItem: () => null, setItem() {} } }
+  let localCalls = 0
+  const gatewayCalls = []
+  globalThis.fetch = async (url) => {
+    const path = new URL(url, 'http://127.0.0.1:18892').pathname
+    if (path.endsWith('/dsh/surface')) {
+      localCalls += 1
+      if (localCalls === 1) {
+        return { ok: false, status: 409, json: async () => ({ detail: { code: 'descriptor_missing' } }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ available: true, url: 'http://127.0.0.1:50669/?token=fresh_local_descriptor_1234567890', pid: 9400 }) }
+    }
+    throw new Error('unexpected local fetch: ' + path)
+  }
+  const host = {
+    kind: 'app', apiBase: () => 'http://127.0.0.1:18892', surfaceBase: () => 'http://127.0.0.1:18892',
+    apiHeaders: () => undefined, hubConfig: () => null, hubRequest: async (request) => {
+      gatewayCalls.push(request)
+      return { status: 200, body: { available: true, url: 'https://hub.example/g25660/?token=hub' } }
+    },
+    workbench: { catalog: async () => ({ services: [] }), openDshSurface: async () => {
+      gatewayCalls.push('openDshSurface')
+      return { targetId: 'device-a', serviceId: 'dsh-native', grantId: 'grant-hub',
+        partition: 'persist:tether-wb-' + 'a'.repeat(40), endpoint: 'https://g25660.example/?tether_native=1' }
+    } }
+  }
+  const renderer = createHookRenderer({ deviceId: 'device-a', online: true, visible: true, localDeviceId: 'device-a' })
+  const surface = createTetherPanel({ React: renderer.React, Native: createWebNative(renderer.React), host }).NativeSurface
+  renderer.setComponent(surface)
+  try {
+    renderer.render()
+    await tick(); await tick(); await tick()
+    assert.equal(localCalls, 1, 'the local target asks the loopback console first')
+    assert.equal(gatewayCalls.filter((item) => item === 'openDshSurface' || (item && item.path && item.path.endsWith('/dsh/surface'))).length, 0,
+      'a first-frame descriptor_missing must not fall back to the Hub gateway')
+    assert.ok([...timers.values()].some((timer) => timer.delay === 4000), 'the local descriptor waits before retry')
+    const retry = [...timers.entries()].find(([, timer]) => timer.delay === 4000)
+    timers.delete(retry[0]); retry[1].callback()
+    renderer.render()
+    await tick(); await tick(); await tick(); renderer.render(); await tick()
+    assert.equal(localCalls, 2, 'the retry uses the local fast path again')
+    assert.equal(gatewayCalls.filter((item) => item === 'openDshSurface' || (item && item.path && item.path.endsWith('/dsh/surface'))).length, 0,
+      'a ready local descriptor never mounts the dead Hub gateway')
+    const webview = walk(renderer.output(), (node) => node.type === 'webview')
+    assert.ok(webview, 'the local descriptor mounts the loopback DSH page: ' + JSON.stringify(renderer.output()).slice(0, 1000))
+    assert.match(webview.props.src, /^http:\/\/127\.0\.0\.1:50669\/\?token=fresh_local_descriptor_1234567890/)
+  } finally {
+    renderer.dispose()
+    for (const key of Object.keys(previous)) {
+      if (previous[key] === undefined) delete globalThis[key]
+      else globalThis[key] = previous[key]
+    }
+  }
+})

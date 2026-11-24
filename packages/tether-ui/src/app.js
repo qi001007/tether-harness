@@ -2850,7 +2850,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
     function nativeSurfaceTransientError(error) {
       return !!error && (error.surfaceStatus === 502 || error.surfaceStatus === 504
-        || error.surfaceCode === 'device_offline' || error.surfaceCode === 'surface_timeout')
+        || error.surfaceCode === 'device_offline' || error.surfaceCode === 'surface_timeout'
+        || error.surfaceCode === 'surface_error')
     }
 
     function reportNativeSurfaceTiming(phase, startedAt) {
@@ -3152,6 +3153,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             && typeof window !== 'undefined' && window.location
             && /^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/.test(window.location.origin)) {
           let localDescriptor = null
+          let localFailure = null
           try {
             const localResponse = await fetch('/api/devices/' + encodeURIComponent(id) + '/dsh/surface', {
               headers: { 'Cache-Control': 'no-store' }, cache: 'no-store', signal
@@ -3163,11 +3165,19 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 available: true, url: localUrl, pid: Number(localData.pid) || 0,
                 updated_at: localData.updated_at, localDirect: true
               } }
+            } else if (!localResponse.ok) {
+              localFailure = { response: { ok: false, status: localResponse.status }, data: localData || {} }
+            } else {
+              localFailure = { response: { ok: false, status: 502 }, data: { detail: { code: 'descriptor_invalid' } } }
             }
           } catch (error) {
             if (signal && signal.aborted) throw error
           }
           if (localDescriptor) return localDescriptor
+          // The DSH web process can answer before its native-surface descriptor
+          // is written. Keep retrying the local fast path instead of mounting a
+          // Hub gateway frame that renders a dead "native surface request failed".
+          if (localFailure) return localFailure
           if (signal && signal.aborted) {
             const error = new Error('The operation was aborted')
             error.name = 'AbortError'
@@ -3349,7 +3359,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                   : code === 'device_offline' ? '目标设备离线。设备重新在线后可重试。'
                     : code === 'descriptor_missing' ? '目标设备的 DeepSeek Harness 未运行，或没有安装 Tether surface 组件。请先启动目标 DSH。'
                       : code === 'descriptor_invalid' ? '目标设备的 DSH surface 描述无效，请重启目标 DSH 或重新安装插件。'
-                        : code === 'host_unreachable' ? '目标 DSH 进程没有响应，请确认它已启动。'
+                        : code === 'surface_error' ? '目标设备的 DSH surface 请求尚未就绪，正在自动重试。'
+                          : code === 'host_unreachable' ? '目标 DSH 进程没有响应，请确认它已启动。'
                           : code === 'auth_failed' ? '目标 DSH 的登录态已失效，请在目标机重新登录 DeepSeek Harness。'
                             : code === 'surface_timeout' ? '目标设备没有及时响应，请稍后重试。'
                               : '原生 DSH 页面暂不可用'
@@ -3382,7 +3393,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           })
           .catch((error) => {
             if (!current) return
-            if (error.surfaceCode === 'descriptor_missing'
+            if ((error.surfaceCode === 'descriptor_missing' || error.surfaceCode === 'surface_error')
                 && descriptorRetryCountRef.current < 6) {
               descriptorRetryCountRef.current += 1
               setState({ deviceId, status: 'loading', url: '', message: 'DSH 正在启动，等待工作区描述符就绪…' })
