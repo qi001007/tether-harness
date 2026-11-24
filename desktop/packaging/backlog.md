@@ -1,4 +1,5 @@
 # 桌面候选打包记录
+- 2026-11-25：LibreOffice 候选下载改为三次有界重试并先核对 `Content-Length`；0.5.15 CI 在 macOS x64 命中临时镜像篡改，固定 SHA 仍保持真源值，不放宽校验。
 - 2026-11-24：0.5.15 安装包不可发布：managed mesh `--no-tun` 下本机 Codeg 的 `agents_runtime_status.url` 为空，APP 本地路径判失败；已安装实例用 app.asar 本机回退修复（备份 `.scratch/codeg-fix-20261124/backup/app.asar`），源码修复（node `loopback_url` + app fallback）待下次重建；冻结 `tether-python.exe` 必须随包重打才能覆盖。
 - 2026-11-24：0.5.14 的 app.asar 缺 `data-maintenance.js`——`files` 显式白名单没跟着 `main.js` 的 require 更新，装完启动即 `Cannot find module`。白名单补该文件；`tests/test_candidate_build.mjs` 改为从 `main.js`/`preload.js` 解析真实 require 图和 `__dirname` 子进程入口，要求全部落在白名单里；`afterPack` 直接读 asar 头核对白名单每个 JS。DSH runtime 同时随包 pnpm 11.28.5（`components/dsh/node_modules/pnpm` 加 `components/nodejs/pnpm.cmd`/`bin/pnpm`，由 `prepare_runtime.py` 生成），取代手工指向 `D:\DeepSeek Harness` 的 shim。
 - 2026-11-22：为最近两个已发布的 Windows 版本分别生成一个直达补丁，跳过上一版的用户也能一次下载一个补丁。
@@ -58,3 +59,5 @@
 - 2026-11-22：Windows 发行和隔离 QA 共用 NSIS 压缩入口。核验锁定的 7-Zip 24.09 并固定四线程，复现原公仓安装器的 LZMA2 分块。压缩参数仅在本次打包时生效，打包退出后还原依赖文件。
 
 - 2026-11-22 Windows 安装包携带原节点接管工具，配合正式更新启动流程直接改用同一 App 内的节点程序。
+
+- 2026-11-25 唯一入口收口：入口创建只归安装器。`electron-builder.yml` 显式 `nsis.shortcutName: Tether`（productName 改名不得静默换桌面图标名）；`nsis/migration.nsh` 的 `TetherPurgeLegacyEntries` 由 `customInit` 与 `customUnInstall` 同时调用，删 `Tether APP.lnk`/`Tether APP.cmd`/`Tether-App.cmd`（current 与 all 两个 shell 上下文都扫，公共目录无权限时静默失败）。清理对 legacy 名是无条件的，与 APP 运行时的"指向另一份仍在的安装就保留"不同——安装动作本身是用户显式发起的。`desktop/install-app.ps1` 不再用 `electron.exe` 兜底图标，缺品牌图标直接 throw。

@@ -14,6 +14,7 @@ import json
 import os
 import platform
 import random
+import re
 import sqlite3
 import ssl
 import sys
@@ -914,7 +915,7 @@ class Node:
         allowed = ({"type", "req_id", "action", "component", "bridge_url", "bridge_token"}
                    if registration else {"type", "req_id", "action", "component", "prepared_id"})
         if (set(msg) - allowed or not isinstance(component, str) or component not in self.update_managers
-                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply", "commit", "rollback", "restart", "register_app_bridge"}
+                or not isinstance(action, str) or action not in {"check", "status", "prepare", "prefetch", "apply", "commit", "rollback", "cancel", "restart", "register_app_bridge"}
                 or (action in {"apply", "commit", "rollback"}) != ("prepared_id" in msg)
                 or (action == "restart" and component != "plugin")
                 or (registration and (component != "app" or set(msg) != {
@@ -926,6 +927,16 @@ class Node:
             )
             return
         component = str(component)
+        if action == "cancel":
+            # Cancelling has to be reachable while a prepare is still running, so
+            # it deliberately skips update_lock and the ownership guards.
+            self.update_managers[component].cancel()
+            await self._send_update_result(
+                response_ws,
+                {"type": "update_result", "req_id": req_id, "ok": True, "component": component,
+                 "cancelled": True, "error": ""},
+            )
+            return
         if registration:
             await self._register_app_update_bridge(msg, response_ws, req_id)
             return
@@ -977,6 +988,14 @@ class Node:
                      "error": "Native Debian package updates are unavailable on this Node"},
                 )
                 return
+        if action == "prefetch":
+            # A background pull must not hold update_lock: the user may press
+            # 更新 while it runs, and apply then only costs a cache lookup.
+            result = await asyncio.to_thread(self.update_managers[component].prefetch)
+            await self._send_update_result(
+                response_ws, {"type": "update_result", "req_id": req_id, **result}
+            )
+            return
         if component == "app":
             self._refresh_app_update_manager()
         applying = action == "apply"
@@ -1712,10 +1731,21 @@ def restart_node_process() -> None:
     os.execv(sys.executable, [sys.executable, "-m", "tether.node.agent", *sys.argv[1:]])
 
 
+def default_device_id() -> str:
+    configured = os.environ.get("TETHER_DEVICE", "").strip()
+    if configured:
+        return configured
+    hostname = platform.node().strip()
+    candidate = re.sub(r"[^A-Za-z0-9._:-]+", "-", hostname).strip("-._:")
+    if candidate:
+        return candidate[:128]
+    return f"TETHER-{os.getpid()}"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--controller", default=os.environ.get("TETHER_CONTROLLER", "ws://127.0.0.1:18890/ws/node"))
-    ap.add_argument("--device", default=os.environ.get("TETHER_DEVICE", "DESKTOP-LOCAL"))
+    ap.add_argument("--device", default=default_device_id())
     ap.add_argument("--workspace", default=str(ROOT / "work-local"))
     ap.add_argument("--workspaces-root", default=os.environ.get("TETHER_WORKSPACES_ROOT"),
                     help="root for new remote projects (default D:\\TetherWorkspaces)")

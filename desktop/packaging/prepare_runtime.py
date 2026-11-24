@@ -13,6 +13,7 @@ import stat
 import tarfile
 import tempfile
 import subprocess
+import time
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -31,18 +32,37 @@ MESHCTRL_SOURCE_SHA256 = "f40a77911f4bddd211b3807236a986db5647ea968d151bddeed01c
 MESHCTRL_PATCHED_SHA256 = "11e5a718832d8caa6c99c6fc21d72ab4fb499729fa32bc8dfac5e01af238b140"
 
 
-def download(asset: dict, destination: Path) -> None:
-    request = urllib.request.Request(str(asset["url"]), headers={"User-Agent": "Tether-desktop-candidate-builder"})
-    digest = hashlib.sha256()
-    size = 0
-    with urllib.request.urlopen(request, timeout=90) as response, destination.open("wb") as output:
-        while block := response.read(1024 * 1024):
-            output.write(block)
-            digest.update(block)
-            size += len(block)
-    if size != asset["size"] or digest.hexdigest() != asset["sha256"]:
-        destination.unlink(missing_ok=True)
-        raise ValueError(f"download failed size/SHA-256 verification: {asset['name']}")
+def download(asset: dict, destination: Path, attempts: int = 3) -> None:
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        request = urllib.request.Request(
+            str(asset["url"]),
+            headers={"User-Agent": "Tether-desktop-candidate-builder", "Connection": "close"},
+        )
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response, destination.open("wb") as output:
+                content_length = response.headers.get("Content-Length")
+                if content_length and int(content_length) != asset["size"]:
+                    raise ValueError(
+                        f"mirror content length mismatch: {asset['name']} "
+                        f"(got {content_length}, want {asset['size']})"
+                    )
+                while block := response.read(1024 * 1024):
+                    output.write(block)
+                    digest.update(block)
+                    size += len(block)
+            if size != asset["size"] or digest.hexdigest() != asset["sha256"]:
+                raise ValueError(f"download failed size/SHA-256 verification: {asset['name']}")
+            return
+        except Exception as exc:
+            last_error = exc
+            destination.unlink(missing_ok=True)
+            if attempt + 1 < attempts:
+                print(f"retry {asset['name']} after {type(exc).__name__}: {exc}", file=sys.stderr)
+                time.sleep(5 * (attempt + 1))
+    raise last_error or ValueError(f"download failed: {asset['name']}")
 
 
 def safe_relative(name: str) -> Path:
