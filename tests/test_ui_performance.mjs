@@ -51,8 +51,8 @@ test('APP-managed device updates include APP and Node only', async () => {
   assert.deepEqual(deviceUpdateComponents({ dsh_surface: true }), ['node'])
   assert.deepEqual(deviceUpdateComponents({}), ['node'])
   assert.equal(updateAvailableFor({ devices: { laptop: { app: { update_available: true } } } }, 'app', 'laptop'), true)
-  assert.match(source, /await watchNodeRestart\(scope, entry\.authority, entry\.expectedVersion\)/)
-  assert.match(source, /await watchAppRestart\(scope, entry\.authority, entry\.expectedVersion\)/)
+  assert.match(source, /await watchNodeRestart\(entry\.scope, entry\.authority, entry\.expectedVersion, entry\.preparedId\)/)
+  assert.match(source, /await watchAppRestart\(nodeScope, entry\.authority, entry\.expectedVersion\)/)
 })
 
 test('hover uses an in-app tooltip and double click is guarded', () => {
@@ -65,7 +65,7 @@ test('hover uses an in-app tooltip and double click is guarded', () => {
 })
 
 test('APP routes the local device file API and surface descriptor to the node and keeps the token server-side', () => {
-  assert.match(server, /const LOCAL_ROUTES = \['\/fs\/', '\/workspaces', '\/drives', '\/policy', '\/audit', '\/dsh\/sessions', '\/dsh\/surface', '\/dsh\/workspaces\/register'\]/)
+  assert.match(server, /const LOCAL_ROUTES = \['\/fs\/', '\/workspaces', '\/drives', '\/policy', '\/audit', '\/dsh\/sessions', '\/dsh\/surface', '\/dsh\/workspaces\/register', '\/dsh\/live\/'\]/)
   assert.match(server, /headers\.authorization = 'Bearer ' \+ localToken/)
   assert.match(server, /'x-tether-local': '1'/)
   assert.match(supervisor, /crypto\.randomBytes\(24\)\.toString\('hex'\)/)

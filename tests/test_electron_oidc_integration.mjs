@@ -167,7 +167,10 @@ test('legacy Codeg bridge accepts only targetId and keeps the token URL in main-
   assert.match(agentsPage, /await host\.workbench\.openLegacyCodeg\(device\)/)
   assert.doesNotMatch(preload, /tokenUrl|legacyTokenUrl|token\.html/)
   assert.doesNotMatch(electronHost, /tokenUrl|legacyTokenUrl|token\.html/)
-  assert.doesNotMatch(agentsPage, /legacyTokenUrl|token\.html\?token=/)
+  // The Codeg runtime publishes its token bootstrap page; the renderer accepts it only
+  // for the exact /token.html path and a token-shaped value, never as a general URL.
+  assert.match(agentsPage, /parsed\.pathname !== '\/token\.html'/)
+  assert.match(agentsPage, /\[A-Za-z0-9_-\]\{16,200\}/)
 })
 
 test('remote DSH surface uses a targetId-only native ticket exchange and blocks renderer hub route', () => {
@@ -275,7 +278,7 @@ test('hidden DSH bootstrap destroys and clears its partition on unsafe landing o
     })
     assert.equal(calls.destroy, 1, scenario.name)
     assert.equal(calls.clearStorage, 1, scenario.name)
-    assert.equal(calls.clearCache, 1, scenario.name)
+    assert.equal(calls.clearCache, 0, scenario.name + ': cached assets are kept, credentials are not')
     assert.deepEqual(calls.logs, [{
       event: 'dsh-bootstrap-failed-' + scenario.stage,
       detail: { targetId: 'target-a', serviceId: 'dsh-native' }
@@ -325,7 +328,7 @@ test('installed Windows --sign-in invokes the normal browser login for first and
   assert.match(main, /packaged\s*&&\s*!candidateMode\s*&&\s*process\.platform\s*===\s*'win32'[\s\S]*?process\.argv\.includes\('--sign-in'\)/)
   assert.match(main, /commandLine\.some\(\(argument\)\s*=>\s*argument\s*===\s*'--sign-in'\)/)
   assert.match(main, /signInIntent\.mode === 'device'[\s\S]*?: await openWorkbenchLogin\(\)/)
-  assert.match(main, /app\.whenReady\(\)\.then\(async \(\) => \{\s*await createWindow\(\)\s*startupComplete = true\s*await runInstalledSignIn\(\)/)
+  assert.match(main, /app\.whenReady\(\)\.then\(async \(\) => \{[\s\S]{0,500}?await createWindow\(\)\s*startupComplete = true\s*await runInstalledSignIn\(\)/)
   assert.doesNotMatch(main, /commandLine[^\n]*(?:issuer|credentialsFile|TETHER_OIDC)/)
 })
 

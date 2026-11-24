@@ -206,6 +206,7 @@ def test_app_status_keeps_old_runtime_version_and_same_version_retry(
     assert missing_baseline["restart_required"] is True
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows APP restart process identity")
 def test_app_restart_clears_for_new_process_identity_even_when_pid_reused(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     root = tmp_path / "app-install"

@@ -96,6 +96,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e . pytest pytest-asyncio httpx cryptography 'PyYAML==6.0.2'
           npm ci --prefix packages/tether-ui
+          npm ci --prefix apps/tether-app
       - name: Run Python and JavaScript regressions
         shell: bash
         run: |

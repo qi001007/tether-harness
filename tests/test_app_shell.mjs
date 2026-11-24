@@ -68,6 +68,7 @@ test('startup preserves a usable shortcut for a different Tether installation', 
     path: path.win32,
     process: { platform: 'win32', execPath: 'C:/QA/electron.exe' },
     repoRoot: 'C:/QA',
+    packaged: false,
     shell: {
       readShortcutLink: link => entries.get(link),
       writeShortcutLink: (link, mode) => { written.push([link, mode]); return true }
@@ -91,7 +92,7 @@ test('closing the window hides it to the tray until an explicit quit', () => {
   assert.match(main, /event\.preventDefault\(\)/)
   assert.match(main, /mainWindow\.hide\(\)/)
   assert.match(main, /if \(isQuitting \|\| !tray\) app\.quit\(\)/)
-  assert.match(main, /app\.on\('second-instance', \(\) => \{/)
+  assert.match(main, /app\.on\('second-instance', \(_event, commandLine\) => \{/)
 })
 
 test('one icon source ships for the window, shortcut and tray', () => {

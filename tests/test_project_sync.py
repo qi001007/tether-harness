@@ -1,4 +1,5 @@
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,7 @@ from tether.node import project_sync
 
 
 class ProjectPathTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "Windows drive case folding")
     def test_normalizes_case_and_slashes(self):
         self.assertEqual(
             project_sync.normalize_project_path("D:/TetherWorkSpaces/Demo/"),

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -92,6 +93,7 @@ def test_existing_dsh_workspace_is_writable_in_readonly(env) -> None:
     assert (dsh_dir / "file.txt").read_text(encoding="utf-8") == "ok"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows drive and system path policy")
 def test_full_mode_writes_outside_but_still_protects_system_and_credentials(env, tmp_path: Path) -> None:
     svc: FsService = env["svc"]
     svc.dispatch("policy_set", {"mode": "full"})
@@ -1219,6 +1221,7 @@ def test_audit_uses_sqlite_and_pages_newest_first(env) -> None:
     assert (env["data"] / "audit.db").is_file()
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows drive root resolution")
 def test_drive_root_without_trailing_separator_resolves(env) -> None:
     svc: FsService = env["svc"]
     resolved = svc._resolve("C:")

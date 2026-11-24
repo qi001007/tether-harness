@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,7 @@ def test_status_reports_an_installed_app_from_the_env_override(tmp_path, monkeyp
     assert status["exe"] == str(exe)
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows detached process flags")
 def test_start_uses_a_windowless_detached_process(tmp_path, monkeypatch):
     exe = tmp_path / "DeepSeek Harness.exe"
     exe.write_bytes(b"MZ")
@@ -121,6 +123,7 @@ def test_fs_service_exposes_dsh_status(tmp_path, monkeypatch):
     assert result["installed"] is True
     assert result["version"] == "0.2.1-rc.3"
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows CREATE_NO_WINDOW flag")
 def test_restart_schedules_a_windowless_dsh_restart_helper(tmp_path, monkeypatch):
     exe = tmp_path / "DeepSeek Harness.exe"
     exe.write_bytes(b"MZ")

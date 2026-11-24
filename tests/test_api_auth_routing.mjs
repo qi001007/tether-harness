@@ -142,7 +142,7 @@ test('Hub 401 and 403 responses remain terminal and do not trigger local fallbac
 
 test('Electron login authority sends each selected account token only to its Hub', async () => {
   let saved = { url: 'https://hub.example', token: 'account-a-secret' }
-  globalThis.window = { localStorage: { getItem: () => JSON.stringify(saved) } }
+  globalThis.window = { localStorage: { getItem: () => JSON.stringify(saved) }, tetherApp: {} }
   const host = createElectronHost({ apiBase: 'http://127.0.0.1:18890' })
   const calls = []
   const fetcher = async (url, init) => {
@@ -174,7 +174,7 @@ test('Electron login authority sends each selected account token only to its Hub
 test('Electron Hub probe verifies the newly selected account and keeps authorization failures terminal', async (t) => {
   const previousFetch = globalThis.fetch
   let saved = { url: 'https://hub-b.example', token: 'account-b-secret' }
-  globalThis.window = { localStorage: { getItem: () => JSON.stringify(saved) } }
+  globalThis.window = { localStorage: { getItem: () => JSON.stringify(saved) }, tetherApp: {} }
   const calls = []
   globalThis.fetch = async (url, init) => {
     calls.push({ url, authorization: init.headers.Authorization })

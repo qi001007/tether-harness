@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+import pytest
 
 from tether.node import agent
 from tether.updates import UpdateManager
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows detached process flags")
 def test_app_restart_helper_uses_supported_popen_kwargs(tmp_path: Path, monkeypatch) -> None:
     executable = tmp_path / "apps/tether-app/node_modules/electron/dist/electron.exe"
     executable.parent.mkdir(parents=True)
