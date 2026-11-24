@@ -100,9 +100,15 @@ export function createSettingsPanel(React) {
     const updateRef = React.useRef(update)
     updateRef.current = update
     React.useEffect(() => {
-      if (!open || section !== 'update') return
-      const handler = updateRef.current && updateRef.current.onRefresh
-      if (typeof handler === 'function') handler()
+      if (!open || section !== 'update') return undefined
+      const refresh = () => {
+        const handler = updateRef.current && updateRef.current.onRefresh
+        if (typeof handler === 'function') handler()
+      }
+      // Opening or returning to the update section checks immediately; no APP restart.
+      refresh()
+      window.addEventListener('focus', refresh)
+      return () => window.removeEventListener('focus', refresh)
     }, [open, section])
     React.useEffect(() => {
       if (!crop) return undefined
@@ -605,7 +611,10 @@ export function createSettingsPanel(React) {
         h('span', { style: { color: mute } }, product.label),
         h('span', { className: 'tether-num' }, product.current || '—')))
       const action = row.updateAction || (row.running
-        ? h('span', { className: 'tether-spin', title: '更新中', 'aria-label': '更新中', style: { display: 'grid', placeItems: 'center', color: blue } }, Glyph ? h(Glyph, { name: 'refresh', size: 15 }) : null)
+        ? h('span', {
+          title: row.progressText || '更新中', 'aria-label': row.progressText || '更新中',
+          style: { display: 'grid', placeItems: 'center', color: blue }
+        }, Glyph ? h(Glyph, { name: 'refresh', size: 15 }) : null)
         : row.error
           ? h('button', {
             type: 'button', onClick: () => update && update.onUpdate(row), title: row.error, 'aria-label': '重试',
@@ -630,7 +639,8 @@ export function createSettingsPanel(React) {
         h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
           h('span', { style: { fontSize: 13, color: ink, fontWeight: 'var(--tether-strong, 500)', flex: '0 0 auto', maxWidth: '42%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, row.name || '—'),
           chips,
-          row.updateReason ? h('span', { style: { color: mute, fontSize: 11, flex: '1 0 100%' } }, row.updateReason) : null),
+          row.updateReason ? h('span', { style: { color: mute, fontSize: 11, flex: '1 0 100%' } }, row.updateReason) : null,
+          row.running && row.progressText ? h('span', { style: { color: mute, fontSize: 11, flex: '1 0 100%' } }, row.progressText) : null),
         h('span', { style: { width: 28, flex: '0 0 28px', display: 'grid', placeItems: 'center' } }, action))
     }
     const updateGroup = (key, label, rows) => rows.length

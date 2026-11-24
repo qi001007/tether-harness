@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -8,6 +9,24 @@ import { builderTargetArgs, pruneManagedCandidateOutputs, replaceCandidateOutput
 const root = new URL('../', import.meta.url)
 const read = path => readFileSync(new URL(path, root), 'utf8')
 const buildScript = read('desktop/packaging/build-candidate.mjs')
+const require = createRequire(import.meta.url)
+const checkPackagedRuntime = require('../desktop/packaging/check-packaged-runtime.cjs')
+
+/** Plain (non-glob, non-exclusion) entries of the electron-builder `files` list. */
+function listedPackagedFiles() {
+  const listed = new Set()
+  let inFiles = false
+  for (const line of read('desktop/packaging/electron-builder.yml').split(/\r?\n/)) {
+    if (/^\S/.test(line)) {
+      inFiles = /^files:/.test(line)
+      continue
+    }
+    if (!inFiles) continue
+    const entry = /^\s+-\s+['"]?([^'"\s]+)['"]?\s*$/.exec(line)
+    if (entry && !entry[1].startsWith('!')) listed.add(entry[1])
+  }
+  return listed
+}
 
 test('candidate app and node versions are synchronized with the frozen plugin', () => {
   const manifest = JSON.parse(read('version.json'))
@@ -261,4 +280,123 @@ test('candidate run ownership and pruning happen before heavy builds', () => {
   assert.ok(directChildCheckIndex > 0 && markerIndex > directChildCheckIndex)
   assert.ok(outputCheckIndex > 0 && markerIndex > outputCheckIndex)
   assert.ok(webBuildIndex > cleanupIndex && builderIndex > webBuildIndex)
+})
+
+// 0.5.14 shipped an app.asar without data-maintenance.js: main.js requires it on
+// startup, but the electron-builder `files` whitelist is hand-maintained and was
+// never updated. Resolve the real require graph instead of restating the list.
+test('every main-process module reachable from the app entry points is packaged', () => {
+  const appFiles = readdirSync(new URL('apps/tether-app/', root))
+  const listed = listedPackagedFiles()
+  assert.ok(listed.has('main.js'), 'electron-builder files list must include main.js')
+
+  const resolve = (from, specifier) => {
+    const base = path.posix.normalize(path.posix.join(path.posix.dirname(from), specifier))
+    return [base, `${base}.js`, `${base}.json`, `${base}/index.js`].find(candidate => appFiles.includes(candidate))
+  }
+  const reachable = new Set()
+  const queue = ['main.js', 'preload.js']
+  while (queue.length) {
+    const current = queue.shift()
+    if (reachable.has(current)) continue
+    reachable.add(current)
+    const source = read(`apps/tether-app/${current}`)
+    for (const match of source.matchAll(/require\(\s*['"](\.[^'"]+)['"]\s*\)/g)) {
+      const resolved = resolve(current, match[1])
+      assert.ok(resolved, `${current} requires an unresolved module: ${match[1]}`)
+      queue.push(resolved)
+    }
+    // Child-process helpers are spawned by path, not required.
+    for (const match of source.matchAll(/path\.join\(__dirname,\s*['"]([^'"]+\.js)['"]\)/g)) {
+      assert.ok(appFiles.includes(match[1]), `${current} spawns an unknown module: ${match[1]}`)
+      queue.push(match[1])
+    }
+  }
+
+  const missing = [...reachable].filter(name => !listed.has(name))
+  assert.deepEqual(missing, [], `electron-builder files list omits packaged modules: ${missing.join(', ')}`)
+  assert.ok(reachable.has('data-maintenance.js'), 'main.js must still require ./data-maintenance')
+})
+
+/** Minimal readable asar: 16-byte size header, padded JSON tree, then contents. */
+function writeFakeAsar(file, modules) {
+  const entries = {}
+  const bodies = []
+  let offset = 0
+  for (const name of modules) {
+    const body = Buffer.from(`module.exports = ${JSON.stringify(name)}\n`)
+    entries[name] = { size: body.length, offset: String(offset) }
+    bodies.push(body)
+    offset += body.length
+  }
+  const json = Buffer.from(JSON.stringify({ files: entries }))
+  const paddedLength = Math.ceil(json.length / 8) * 8
+  const headerSize = 8 + paddedLength
+  const header = Buffer.alloc(16)
+  header.writeUInt32LE(4, 0)
+  header.writeUInt32LE(headerSize, 4)
+  header.writeUInt32LE(headerSize - 4, 8)
+  header.writeUInt32LE(json.length, 12)
+  const padding = Buffer.alloc(paddedLength, 0x20)
+  json.copy(padding)
+  writeFileSync(file, Buffer.concat([header, padding, ...bodies]))
+}
+
+test('packaged runtime guard rejects a runtime without pnpm and an asar without a listed module', async () => {
+  const workspace = mkdtempSync(path.join(os.tmpdir(), 'tether-packaged-runtime-'))
+  try {
+    const resources = path.join(workspace, 'resources')
+    const runtime = path.join(resources, 'tether-runtime')
+    const required = [
+      'tether-python.exe',
+      'components/nodejs/node.exe',
+      'components/nodejs/pnpm.cmd',
+      'components/dsh/node_modules/pnpm/bin/pnpm.mjs',
+      'components/meshcentral/meshcentral.js',
+      'components/meshagent/windows-x64/MeshService64.exe',
+      'components/dsh/node_modules/@deepseek-ai/libreoffice-kit-win32-x64/bin/libreoffice-kit.exe',
+      'components/dsh/node_modules/@deepseek-ai/libreoffice-kit/lib/cli.js',
+      'components/libreoffice/System64/msvcp140_2.dll',
+      'components/caddy/caddy.exe',
+      'components/rclone/rclone.exe',
+      'components/easytier/easytier-core.exe',
+      'components/easytier/easytier-cli.exe'
+    ]
+    for (const relative of required) {
+      mkdirSync(path.dirname(path.join(runtime, relative)), { recursive: true })
+      writeFileSync(path.join(runtime, relative), 'fixture\n')
+    }
+    writeFileSync(path.join(runtime, 'components/nodejs/pnpm.json'), JSON.stringify({
+      component: 'pnpm', version: '11.28.5', license: 'MIT', shim: 'pnpm.cmd',
+      entry: '../dsh/node_modules/pnpm/bin/pnpm.mjs'
+    }))
+    writeFileSync(path.join(runtime, 'components/dsh/node_modules/pnpm/package.json'),
+      JSON.stringify({ name: 'pnpm', version: '11.28.5', bin: { pnpm: 'bin/pnpm.mjs' } }))
+
+    const archive = path.join(resources, 'app.asar')
+    const packaged = [...listedPackagedFiles()]
+    writeFakeAsar(archive, packaged)
+    const context = {
+      appOutDir: resources, electronPlatformName: 'win32', arch: 1,
+      packager: { getResourcesDir: appOutDir => appOutDir }
+    }
+    await assert.doesNotReject(checkPackagedRuntime(context))
+
+    writeFakeAsar(archive, packaged.filter(name => name !== 'data-maintenance.js'))
+    await assert.rejects(checkPackagedRuntime(context), /missing main-process module data-maintenance\.js/)
+    writeFakeAsar(archive, packaged)
+
+    const launcher = path.join(runtime, 'components/nodejs/pnpm.cmd')
+    rmSync(launcher)
+    await assert.rejects(checkPackagedRuntime(context), /missing pnpm launcher/)
+
+    writeFileSync(launcher, 'fixture\n')
+    writeFileSync(path.join(runtime, 'components/nodejs/pnpm.json'), JSON.stringify({
+      component: 'pnpm', version: '11.28.5', license: 'MIT', shim: 'pnpm.cmd',
+      entry: 'D:/DeepSeek Harness/pnpm.mjs'
+    }))
+    await assert.rejects(checkPackagedRuntime(context), /must stay inside the runtime/)
+  } finally {
+    rmSync(workspace, { recursive: true, force: true })
+  }
 })

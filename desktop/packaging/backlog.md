@@ -1,4 +1,5 @@
 # 桌面候选打包记录
+- 2026-11-24：0.5.14 的 app.asar 缺 `data-maintenance.js`——`files` 显式白名单没跟着 `main.js` 的 require 更新，装完启动即 `Cannot find module`。白名单补该文件；`tests/test_candidate_build.mjs` 改为从 `main.js`/`preload.js` 解析真实 require 图和 `__dirname` 子进程入口，要求全部落在白名单里；`afterPack` 直接读 asar 头核对白名单每个 JS。DSH runtime 同时随包 pnpm 11.28.5（`components/dsh/node_modules/pnpm` 加 `components/nodejs/pnpm.cmd`/`bin/pnpm`，由 `prepare_runtime.py` 生成），取代手工指向 `D:\DeepSeek Harness` 的 shim。
 - 2026-11-22：为最近两个已发布的 Windows 版本分别生成一个直达补丁，跳过上一版的用户也能一次下载一个补丁。
 - 2026-11-22：桌面安装包和独立 Linux Node 一并分发随附 Tomli 的 MIT 许可证。
 - 2026-11-13：候选 builder 将固定版本号的 electron-builder 输出根重定向到当前 manifest 版本目录，避免 0.5.5 使用残留的 0.5.4 静态配置时四平台共同失败。

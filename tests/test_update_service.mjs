@@ -241,7 +241,7 @@ try {
   assert.ok(ui.includes("'Tether for DSH（插件）'"))
   assert.ok(ui.includes("'Tether Desktop（APP + Node）'"))
   assert.ok(!ui.includes('目标设备上的'), 'card titles must name the device, not "target device"')
-  assert.ok(ui.includes('disabled: disabled || card.disabled'), 'one-click must be disabled when already current')
+  assert.ok(ui.includes('disabled: off'), 'one-click must be disabled when already current')
   assert.ok(ui.includes("role: 'progressbar'") && ui.includes("'aria-valuenow': percent"),
     'a running install shows determinate progress instead of a confirm dialog')
   assert.ok(!ui.includes("btn('稍后'") && !ui.includes("btn('重启并安装'") && !ui.includes('APP 已下载'),

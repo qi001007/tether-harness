@@ -24,6 +24,7 @@ REMOTE_MANIFEST = Path(__file__).with_name("remote-desktop-assets.json")
 DSH_MANIFEST = Path(__file__).with_name("dsh-assets.json")
 LICENSE_DIR = Path(__file__).with_name("licenses")
 TARGETS = {"windows-x64", "linux-x64", "macos-x64", "macos-arm64"}
+PNPM_VERSION = "11.28.5"
 MESHCENTRAL_TIMESTAMP_SOURCE_SHA256 = "19de2c8d87e8bbd12b1a7b46fe0dfa4a78c3c46a70464814b1f106af1d07eb26"
 MESHCENTRAL_TIMESTAMP_PATCHED_SHA256 = "5abee591a3c5e1d8864b4e14df3832be7e11089ce60a3b39b9d31dc9614839ba"
 MESHCTRL_SOURCE_SHA256 = "f40a77911f4bddd211b3807236a986db5647ea968d151bddeed01ce8253aec15"
@@ -576,6 +577,51 @@ def assemble_dsh(manifest: dict, target: str, runtime_destination: Path, plugin_
     }, indent=2) + "\n", encoding="utf-8")
 
 
+def install_pnpm_launcher(node_runtime_dir: Path, dsh_runtime_dir: Path) -> None:
+    """Put the DSH-owned pnpm on the Node component's PATH entry.
+
+    `dsh plugin --profile web add` forwards to a bare `pnpm` on PATH, and
+    dsh_web.py prepends the Node component directory to the child PATH, so the
+    launcher lives next to the pinned node executable and points back into the
+    packaged DSH dependencies. 0.5.14 shipped without it, so plugin installs
+    failed unless an operator hand-copied a launcher that pointed at a local
+    DeepSeek Harness install.
+    """
+    package_dir = dsh_runtime_dir / "node_modules" / "pnpm"
+    metadata_path = package_dir / "package.json"
+    if not metadata_path.is_file():
+        raise ValueError("locked DSH runtime is missing the bundled pnpm package")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if metadata.get("name") != "pnpm" or metadata.get("version") != PNPM_VERSION:
+        raise ValueError(f"bundled pnpm version {metadata.get('version')} is not the pinned {PNPM_VERSION}")
+    entry_name = (metadata.get("bin") or {}).get("pnpm")
+    if not isinstance(entry_name, str):
+        raise ValueError("bundled pnpm package declares no pnpm executable")
+    entry = package_dir / entry_name
+    if not entry.is_file():
+        raise ValueError(f"bundled pnpm executable is missing: {entry_name}")
+    relative_entry = Path("..", "dsh", "node_modules", "pnpm", entry_name).as_posix()
+    shim_name = "pnpm.cmd" if sys.platform == "win32" else "pnpm"
+    if sys.platform == "win32":
+        # The Windows PATH entry is the component directory itself.
+        shim = node_runtime_dir / shim_name
+        shim.write_bytes(
+            f'@echo off\r\n"%~dp0node.exe" "%~dp0{relative_entry.replace("/", chr(92))}" %*\r\n'.encode("ascii"))
+    else:
+        # POSIX puts the component's bin directory on PATH, one level deeper.
+        shim = node_runtime_dir / "bin" / shim_name
+        shim.write_text(
+            "#!/bin/sh\n"
+            f'node_dir="$(cd "$(dirname "$0")" && pwd)"\n'
+            f'exec "$node_dir/node" "$node_dir/../{relative_entry}" "$@"\n', encoding="utf-8")
+    shim.chmod(0o755)
+    (node_runtime_dir / "pnpm.json").write_text(json.dumps({
+        "component": "pnpm", "version": metadata["version"], "license": metadata.get("license", "MIT"),
+        "source": "https://www.npmjs.com/package/pnpm/v/" + metadata["version"],
+        "shim": shim.relative_to(node_runtime_dir).as_posix(), "entry": relative_entry,
+    }, indent=2) + "\n", encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True, choices=sorted(TARGETS))
@@ -619,6 +665,7 @@ def main() -> int:
     assemble_libreoffice(libreoffice_manifest, args.target, component_root / "libreoffice")
     assemble_dsh(dsh_manifest, args.target, component_root / "dsh", component_root / "dsh-plugin",
                  output / "licenses" / "DSH-node-dependencies")
+    install_pnpm_launcher(node_runtime_dir, component_root / "dsh")
     for icon_name in ["tether-app-s.ico", "tether-app-s.png"]:
         icon_source = ROOT / "assets" / icon_name
         if not icon_source.is_file():

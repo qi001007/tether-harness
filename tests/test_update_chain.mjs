@@ -20,8 +20,8 @@ const nodeAgentSource = read('tether/node/agent.py')
 const appRestartSource = read('tether/node/app_restart.py')
 
 test('one click checks the desktop target, then finishes downloads before the first install', () => {
-  assert.match(source, /const appCheck = product === 'desktop' \? await updateAction\('app', 'check', undefined, null\)[\s\S]*?const appAdoptsNode = windowsAppUpdateAdoptsNode\(host, localDevice\?\.platform, appCheck\)/)
-  assert.match(source, /const updateNode = localDevice\?\.capabilities\?\.node_self_update_enabled !== false && !appAdoptsNode[\s\S]*?const plan = product === 'desktop'\s*\? \[\.\.\.\(updateNode \? \[\{ component: 'node', scope: nodeScope \}\] : \[\]\), \{ component: 'app', scope: null \}\]\s*: \[\{ component: 'localPlugin', scope: null \}\]/,
+  assert.match(source, /const appSummary = product === 'desktop' \? infoFor\('app'\)[\s\S]*?const appQuarantinedHint = product === 'desktop' && updatePayloadQuarantined\('app', appSummary\)[\s\S]*?updateAction\('app', 'check', undefined, null\)[\s\S]*?const appQuarantined = product === 'desktop' && updatePayloadQuarantined\('app', appCheck\)[\s\S]*?const appAdoptsNode = !appQuarantined && windowsAppUpdateAdoptsNode\(host, localDevice\?\.platform, appCheck\)/)
+  assert.match(source, /const updateNode = localDevice\?\.capabilities\?\.node_self_update_enabled !== false && !appAdoptsNode[\s\S]*?const plan = product === 'desktop'\s*\? \[\.\.\.\(updateNode \? \[\{ component: 'node', scope: nodeScope \}\] : \[\]\), \.\.\.\(appQuarantined \? \[\] : \[\{ component: 'app', scope: null \}\]\)\]\s*: \[\{ component: 'localPlugin', scope: null \}\]/,
     'installer-owned Nodes and qualified Windows targets skip the independent Node download')
   assert.match(source, /for \(const step of plan\) \{[\s\S]*?prepared\[step\.component\] = await prepareUpdateComponent\(step\.component, step\.scope,\s*step\.component === 'app' \? appCheck : undefined\)/)
   assert.match(source, /appAdoptsNode && prepared\.app\?\.preparedId && prepared\.app\.expectedVersion !== appCheck\.latest_version/)
@@ -112,7 +112,7 @@ test('device update buttons submit in parallel and suppress a duplicate click in
   const runningOldJob = { ...failedOldJob, status: 'downloading' }
   assert.equal(currentDeviceUpdateJob({ update_available: true, target_version: '0.5.12' }, runningOldJob), runningOldJob)
   assert.equal(currentDeviceUpdateJob({ update_available: true, target_version: '0.5.11' }, failedOldJob), failedOldJob)
-  assert.match(source, /topbarUpdateOrigin = host\?\.kind === 'dsh' \? 'plugin' : deviceUpdateOrigin\(selectedUpdateTarget\?\.capabilities\)/)
+  assert.match(source, /topbarUpdateOrigin = host\?\.kind === 'dsh' \? 'plugin' : deviceUpdateOriginFor\(updateInfo, deviceId, selectedUpdateTarget\?\.capabilities\)/)
   assert.match(source, /originProduct: topbarUpdateOrigin,[\s\S]*?busy: deviceUpdateRunning\(deviceId\)/)
 })
 
@@ -132,14 +132,33 @@ test('a device one click prepares APP and Node before applying, keeping plugin s
   assert.match(source, /export function deviceUpdateComponents\(capabilities = \{\}\) \{\s*return \[\.\.\.\(capabilities\.node_self_update_enabled === false \? \[\] : \['node'\]\), \.\.\.\(hasInstalledApp\(capabilities\) \? \['app'\] : \[\]\)\]/,
     'device update components honor Node ownership and installed APP capability')
   assert.match(source, /const componentNames = \[\.\.\.\(nodeUpdateManaged \? \[\] : \['node'\]\), \.\.\.\(hasApp \? \['app'\] : \[\]\)\]/)
-  assert.match(source, /const updateOrigin = deviceUpdateOrigin\(capabilities\)/,
+  assert.match(source, /const updateOrigin = deviceUpdateOriginFor\(updateInfo, item\.device_id, capabilities\)/,
     'device updates select the APP or Node owner for the remote update job')
-  assert.match(source, /h\(MinimalUpdateButton, \{[\s\S]*?originProduct: updateOrigin, triggerLabel: '一键更新'/,
-    'the device button starts the Hub-owned job with its selected component owner')
+  assert.match(source, /h\(MinimalUpdateButton, \{[\s\S]*?originProduct: updateOrigin, alwaysVisible: true/,
+    'the device icon starts the Hub-owned job with its selected component owner')
   assert.match(source, /devicePath \+ '\/update\/apply'[\s\S]*?body: JSON\.stringify\(\{ origin_product: originProduct \}\)/,
     'one-click submits the chosen origin to the device update job API')
   assert.match(source, /devicePath \+ '\/update\/job'[\s\S]*?const timer = setInterval\(poll, 1000\)/,
     'the device card follows the persistent job instead of running a second local prepare sequence')
+})
+
+test('only the initiator owns an update job and withdrawn APP payloads stay out', async () => {
+  const { markUpdateJobStarted, updateJobStartedHere, updatePayloadQuarantined, deviceUpdateOriginFor } = await import('../packages/tether-ui/src/app.js')
+  assert.equal(updateJobStartedHere('https://hub.example', 'LAPTOP-01', 'job-1'), false)
+  markUpdateJobStarted('https://hub.example/', 'LAPTOP-01', 'job-1')
+  assert.equal(updateJobStartedHere('https://hub.example', 'LAPTOP-01', 'job-1'), true)
+  assert.equal(updateJobStartedHere('https://hub.example', 'SERVER-01', 'job-1'), false,
+    'another device never inherits the job it did not start')
+  const rejected = { app_installed: true, node_self_update_enabled: true, node_update_owner: 'node' }
+  const updateInfo = { devices: { 'LAPTOP-01': { app: { current_version: '0.5.11', latest_version: '0.5.14', update_available: true } } } }
+  assert.equal(updatePayloadQuarantined('app', updateInfo.devices['LAPTOP-01'].app), true)
+  assert.equal(updatePayloadQuarantined('app', { ...updateInfo.devices['LAPTOP-01'].app, latest_version: '0.5.15' }), false)
+  assert.equal(updatePayloadQuarantined('node', { latest_version: '0.5.14' }), false,
+    'the Node 0.5.14 payload is still distributed')
+  assert.equal(deviceUpdateOriginFor(updateInfo, 'LAPTOP-01', rejected), 'node',
+    'a quarantined APP target still exposes its Node update path')
+  assert.equal(deviceUpdateOriginFor(updateInfo, 'LAPTOP-01', { app_installed: true, node_self_update_enabled: false }), '',
+    'no Node path means no remote button while the APP payload is withdrawn')
 })
 
 test('a running update shows a determinate progress bar instead of a restart dialog', () => {
@@ -158,8 +177,8 @@ test('a running update shows a determinate progress bar instead of a restart dia
   ]) {
     assert.equal(source.includes(removed), false, 'the old dialog path is gone: ' + removed)
   }
-  assert.equal((source.match(/btn\('立即生效'/g) || []).length, 1,
-    'only the standalone local-plugin restart card keeps an inline action')
+  assert.equal((source.match(/btn\('立即生效'/g) || []).length, 0,
+    'every update action is an icon button; restart copy lives in the tooltip and card label')
 })
 
 test('a second window attaches to a running install instead of failing it', () => {

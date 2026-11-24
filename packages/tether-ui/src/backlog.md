@@ -83,3 +83,5 @@
 - 2026-11-23：NativeSurface 承接映射 DSH（tether_native=1）的目录/文件选择：webview hash 与 iframe postMessage 双通道闭集校验，复用 agents-page 导出的 TetherFolderPickDialog，应答原路返回；iframe 监听对无 addEventListener 的宿主环境（测试 mock）直接跳过。
 
 - 2026-11-23：跨节点阶段 1 落地。NativeSurface 远端目标先试 mesh（目录 dsh=ready 才 open('dsh')，15s 上限，失败/超时回 Hub 网关并打 `[dsh-surface]` 降级日志，5 分钟降级窗口由手动重连清除）；本机仍直连快路。Codeg 无 Hub 兜底，mesh 失败给可读原因不白屏。会话正文与 run events 轮询改为签名比对免重渲染、events 走 after_seq 增量、空闲退避 1→2→3→5s。
+
+- 2026-11-24 远程更新静默化：更新入口一律 28px 图标（无“一键更新”文字按钮），进度用环形百分比而非无解释 spinner。`MinimalUpdateButton` 只认本页发起的 job（`markUpdateJobStarted`/`updateJobStartedHere`），其他机器发起的 job 在本机页面完全不渲染、不占全屏，进度只在发起端；目标端 0.5.11 的旧 `detailsOpen=true` 无法热修，新版本不再复现。APP 0.5.14 载荷 quarantine（`updatePayloadQuarantined`），远程优先 Node，本机一键更新只跑 Node；0.5.15 打包修复后移除该版本号即可恢复。设置“更新”分区打开或窗口获焦即重查，不依赖重启或 legacy localStorage。

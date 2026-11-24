@@ -7,6 +7,7 @@ directories:
   output: .scratch/tether-desktop-candidates/0.5.4
 files:
   - main.js
+  - data-maintenance.js
   - oidc-auth.js
   - preload.js
   - supervisor.js

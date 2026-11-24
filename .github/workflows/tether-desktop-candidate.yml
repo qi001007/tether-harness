@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: APP and Node version to build, for example 0.5.15
+        description: APP and Node version to build, for example 1.2.3
         required: true
         type: string
       preview_tag:

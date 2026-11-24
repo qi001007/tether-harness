@@ -172895,9 +172895,14 @@ function createSettingsPanel(React2) {
     const updateRef = React2.useRef(update);
     updateRef.current = update;
     React2.useEffect(() => {
-      if (!open || section !== "update") return;
-      const handler = updateRef.current && updateRef.current.onRefresh;
-      if (typeof handler === "function") handler();
+      if (!open || section !== "update") return void 0;
+      const refresh = () => {
+        const handler = updateRef.current && updateRef.current.onRefresh;
+        if (typeof handler === "function") handler();
+      };
+      refresh();
+      window.addEventListener("focus", refresh);
+      return () => window.removeEventListener("focus", refresh);
     }, [open, section]);
     React2.useEffect(() => {
       if (!crop) return void 0;
@@ -173705,7 +173710,11 @@ function createSettingsPanel(React2) {
         h3("span", { style: { color: mute } }, product2.label),
         h3("span", { className: "tether-num" }, product2.current || "\u2014")
       ));
-      const action = row.updateAction || (row.running ? h3("span", { className: "tether-spin", title: "\u66F4\u65B0\u4E2D", "aria-label": "\u66F4\u65B0\u4E2D", style: { display: "grid", placeItems: "center", color: blue } }, Glyph ? h3(Glyph, { name: "refresh", size: 15 }) : null) : row.error ? h3("button", {
+      const action = row.updateAction || (row.running ? h3("span", {
+        title: row.progressText || "\u66F4\u65B0\u4E2D",
+        "aria-label": row.progressText || "\u66F4\u65B0\u4E2D",
+        style: { display: "grid", placeItems: "center", color: blue }
+      }, Glyph ? h3(Glyph, { name: "refresh", size: 15 }) : null) : row.error ? h3("button", {
         type: "button",
         onClick: () => update && update.onUpdate(row),
         title: row.error,
@@ -173740,7 +173749,8 @@ function createSettingsPanel(React2) {
           { style: { flex: "1 1 auto", minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
           h3("span", { style: { fontSize: 13, color: ink, fontWeight: "var(--tether-strong, 500)", flex: "0 0 auto", maxWidth: "42%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.name || "\u2014"),
           chips,
-          row.updateReason ? h3("span", { style: { color: mute, fontSize: 11, flex: "1 0 100%" } }, row.updateReason) : null
+          row.updateReason ? h3("span", { style: { color: mute, fontSize: 11, flex: "1 0 100%" } }, row.updateReason) : null,
+          row.running && row.progressText ? h3("span", { style: { color: mute, fontSize: 11, flex: "1 0 100%" } }, row.progressText) : null
         ),
         h3("span", { style: { width: 28, flex: "0 0 28px", display: "grid", placeItems: "center" } }, action)
       );
@@ -180507,6 +180517,10 @@ function updateProgressText(progress) {
   const percent = Math.max(0, Math.min(100, Math.round(Number(progress && progress.percent) || 0)));
   return (labels[phase] || "\u6B63\u5728\u66F4\u65B0") + " " + percent + "%";
 }
+function updateProgressLabel(infos, fallback2 = "\u66F4\u65B0\u4E2D") {
+  const progress = updateProgressFor(infos);
+  return progress ? updateProgressText(progress) : fallback2;
+}
 function updateCardStateForInfos(infos, options = {}) {
   const list2 = (infos || []).filter(Boolean);
   const stale = list2.some(isUpdateInfoStale);
@@ -180530,6 +180544,31 @@ function windowsAppUpdateAdoptsNode(host, platform3, update) {
   return host?.kind === "app" && /^win(?:dows|32)(?:\b|$)/i.test(platform3 || "") && update?.source === "electron-updater" && update.update_available === true && !isUpdateInfoStale(update) && !!target && (target === "0.5.12" || isVersionNewer(target, "0.5.12"));
 }
 var startingUpdates = /* @__PURE__ */ new Set();
+var startedUpdateJobs = /* @__PURE__ */ new Map();
+function startedJobKey(authority, deviceId) {
+  return JSON.stringify([String(authority || "").replace(/\/+$/, ""), deviceId || ""]);
+}
+function markUpdateJobStarted(authority, deviceId, jobId) {
+  if (!jobId) return;
+  const key = startedJobKey(authority, deviceId);
+  const ids = startedUpdateJobs.get(key) || /* @__PURE__ */ new Set();
+  ids.add(String(jobId));
+  while (ids.size > 8) ids.delete(ids.values().next().value);
+  startedUpdateJobs.set(key, ids);
+}
+function updateJobStartedHere(authority, deviceId, jobId) {
+  if (!jobId) return false;
+  const ids = startedUpdateJobs.get(startedJobKey(authority, deviceId));
+  return !!(ids && ids.has(String(jobId)));
+}
+var QUARANTINED_UPDATE_PAYLOADS = { app: ["0.5.14"] };
+function updatePayloadQuarantined(component, info) {
+  if (!info || isUpdateInfoStale(info)) return false;
+  const allowed = QUARANTINED_UPDATE_PAYLOADS[component];
+  if (!allowed) return false;
+  const base = /^v?(\d+\.\d+\.\d+)/.exec(String(info.latest_version || ""))?.[1] || "";
+  return !!base && allowed.includes(base);
+}
 function beginDeviceUpdate(authority, deviceId) {
   const key = JSON.stringify([String(authority || "").replace(/\/+$/, ""), deviceId]);
   if (startingUpdates.has(key)) return null;
@@ -180738,6 +180777,14 @@ function hasInstalledApp(capabilities = {}) {
 }
 function deviceUpdateOrigin(capabilities = {}) {
   if (hasInstalledApp(capabilities)) return "app";
+  const installerOwnedNode = ["app_installer", "bundle_installer"].includes(capabilities.node_update_owner);
+  return capabilities.node_self_update_enabled === true && !installerOwnedNode ? "node" : "";
+}
+function deviceUpdateOriginFor(updateInfo, deviceId, capabilities = {}) {
+  const origin = deviceUpdateOrigin(capabilities);
+  if (origin !== "app") return origin;
+  const appInfo = deviceId ? updateInfo && updateInfo.devices && updateInfo.devices[deviceId] && updateInfo.devices[deviceId].app || {} : updateInfo && updateInfo.app || {};
+  if (!updatePayloadQuarantined("app", appInfo)) return "app";
   const installerOwnedNode = ["app_installer", "bundle_installer"].includes(capabilities.node_update_owner);
   return capabilities.node_self_update_enabled === true && !installerOwnedNode ? "node" : "";
 }
@@ -181010,6 +181057,7 @@ function MinimalUpdateButton({
   triggerLabel = "",
   disabled = false,
   busy = false,
+  alwaysVisible = false,
   onJobChange
 }) {
   const apiRef = React2.useRef(api2);
@@ -181022,12 +181070,15 @@ function MinimalUpdateButton({
   const [error, setError] = React2.useState("");
   const [detailsOpen, setDetailsOpen] = React2.useState(false);
   const [submitting, setSubmitting] = React2.useState(false);
-  const hubUrl = host && typeof host.hubConfig === "function" ? (host.hubConfig() || {}).url : "";
+  const hubUrl = (host && typeof host.hubConfig === "function" ? (host.hubConfig() || {}).url : "") || (host && host.kind === "app" ? "native-hub" : "") || (host && typeof host.apiBase === "function" ? host.apiBase() : "");
   const originProduct = requestedOriginProduct || (host && host.kind === "dsh" ? "plugin" : "app");
   const jobChangeRef = React2.useRef(onJobChange);
   jobChangeRef.current = onJobChange;
   const notifyJobChange = (next) => {
     if (typeof jobChangeRef.current === "function") jobChangeRef.current(next);
+  };
+  const notifyObservedJob = (next) => {
+    notifyJobChange(next && updateJobStartedHere(hubUrl, deviceId, next.job_id) ? next : null);
   };
   const devicePath = deviceId ? "/api/devices/" + encodeURIComponent(deviceId) : "";
   const scopeRef = React2.useRef(null);
@@ -181066,7 +181117,7 @@ function MinimalUpdateButton({
         if (data && data.job) {
           const current = currentDeviceUpdateJob(data, data.job);
           setJob(current);
-          notifyJobChange(current);
+          notifyObservedJob(current);
         } else {
           try {
             const latest = await apiRef.current(devicePath + "/update/job", { method: "GET" }, hubUrl);
@@ -181074,7 +181125,7 @@ function MinimalUpdateButton({
             const restored = currentDeviceUpdateJob(data, latest && latest.status !== "done" ? latest : null);
             setJob(restored);
             setError(restored && ["error", "failed", "cancelled"].includes(restored.status) ? restored.error && (restored.error.detail || restored.error.code) || "\u66F4\u65B0\u5931\u8D25" : "");
-            notifyJobChange(restored);
+            notifyObservedJob(restored);
           } catch (_2) {
             if (cancelled) return;
             setJob(null);
@@ -181101,7 +181152,7 @@ function MinimalUpdateButton({
         const next = currentDeviceUpdateJob(summary, await apiRef.current(devicePath + "/update/job", { method: "GET" }, hubUrl));
         if (cancelled) return;
         setJob(next);
-        notifyJobChange(next);
+        notifyObservedJob(next);
         const doneKey = devicePath + ":" + String(next && next.job_id || job && job.job_id || "");
         if (next && next.status === "done" && doneJobRef.current !== doneKey) {
           doneJobRef.current = doneKey;
@@ -181166,6 +181217,7 @@ function MinimalUpdateButton({
         body: JSON.stringify({ origin_product: originProduct })
       }, hubUrl);
       if (!isCurrentScope()) return;
+      if (created && created.job_id) markUpdateJobStarted(hubUrl, deviceId, created.job_id);
       setJob(created);
       notifyJobChange(created);
     } catch (cause) {
@@ -181198,6 +181250,7 @@ function MinimalUpdateButton({
         body: JSON.stringify({ job_id: retryJobId })
       }, hubUrl);
       if (!isCurrentScope()) return;
+      if (retried && retried.job_id) markUpdateJobStarted(hubUrl, deviceId, retried.job_id);
       setJob(retried);
       notifyJobChange(retried);
     } catch (cause) {
@@ -181212,12 +181265,35 @@ function MinimalUpdateButton({
   };
   if (!hubUrl || !devicePath) return null;
   const available = !!(summary && summary.update_available);
-  if (!available && !job) return null;
+  if (job && !updateJobStartedHere(hubUrl, deviceId, job.job_id)) return null;
+  if (!available && !job && !alwaysVisible) return null;
   const jobFailed = !!(job && ["error", "failed", "cancelled"].includes(job.status));
   const percent = Math.max(0, Math.min(100, Number(job && job.progress && job.progress.percent) || 0));
   const statusText = job ? job.progress && job.progress.step || labels[job.status] || "\u66F4\u65B0\u4E2D" : "\u51C6\u5907\u66F4\u65B0";
   const activeJob = !!(job && !["done", "error", "failed", "cancelled"].includes(job.status));
   const hasOpenJob = !!(job && job.status !== "done");
+  const statusLabel = jobFailed ? "\u66F4\u65B0\u5931\u8D25" : activeJob ? statusText + " " + percent + "%" : statusText;
+  const progressRing = (value, color) => {
+    const radius = 6;
+    const circumference = 2 * Math.PI * radius;
+    return h3(
+      "svg",
+      { width: 16, height: 16, viewBox: "0 0 16 16", "aria-hidden": true, style: { transform: "rotate(-90deg)" } },
+      h3("circle", { cx: 8, cy: 8, r: radius, fill: "none", stroke: "rgba(16,24,40,0.16)", strokeWidth: 2.4 }),
+      h3("circle", {
+        cx: 8,
+        cy: 8,
+        r: radius,
+        fill: "none",
+        stroke: color || C2.blue,
+        strokeWidth: 2.4,
+        strokeLinecap: "round",
+        strokeDasharray: circumference,
+        strokeDashoffset: circumference * (1 - Math.max(0, Math.min(100, value)) / 100),
+        style: { transition: "stroke-dashoffset 300ms ease" }
+      })
+    );
+  };
   const overlay = job && job.status !== "done" && detailsOpen ? h3("div", {
     role: "dialog",
     "aria-modal": "true",
@@ -181268,34 +181344,22 @@ function MinimalUpdateButton({
     type: "button",
     onClick: () => setDetailsOpen(true),
     "aria-label": "\u67E5\u770B\u66F4\u65B0\u72B6\u6001",
-    title: jobFailed ? "\u66F4\u65B0\u5931\u8D25\uFF0C\u67E5\u770B\u8BE6\u60C5" : statusText,
-    style: { height: 26, padding: "0 9px", border: 0, borderRadius: 7, background: jobFailed ? "var(--dsw-alias-state-error-bg, rgba(180,35,24,0.10))" : "var(--dsw-alias-interactive-bg-hover, rgba(38,49,72,0.06))", color: jobFailed ? C2.red : C2.sub, fontSize: 11, cursor: "pointer", flex: "0 0 auto" }
-  }, jobFailed ? "\u66F4\u65B0\u5931\u8D25" : statusText) : null;
+    title: statusLabel,
+    className: "tether-hover",
+    style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: jobFailed ? C2.red : C2.sub, cursor: "pointer", flex: "0 0 auto" }
+  }, jobFailed ? Glyph ? h3(Glyph, { name: "refresh", size: 15 }) : "!" : progressRing(percent, C2.blue)) : null;
   return h3(
     "div",
     { style: { display: "contents" } },
-    available ? h3("button", {
+    available || alwaysVisible ? h3("button", {
       type: "button",
       disabled: disabled || submitting || busy && !hasOpenJob,
-      title: hasOpenJob ? jobFailed ? "\u67E5\u770B\u66F4\u65B0\u5931\u8D25\u8BE6\u60C5" : "\u67E5\u770B\u66F4\u65B0\u8FDB\u5EA6" : "\u66F4\u65B0\u5230 " + (summary && summary.target_version || "\u6700\u65B0\u7248\u672C"),
+      title: hasOpenJob ? statusLabel : "\u66F4\u65B0\u5230 " + (summary && summary.target_version || "\u6700\u65B0\u7248\u672C"),
       "aria-label": hasOpenJob ? "\u67E5\u770B\u66F4\u65B0\u72B6\u6001" : "\u66F4\u65B0\u5230\u6700\u65B0\u7248\u672C",
       onClick: hasOpenJob ? () => setDetailsOpen(true) : start,
       className: "tether-hover",
-      style: triggerLabel ? {
-        height: 28,
-        padding: "0 10px",
-        display: "flex",
-        alignItems: "center",
-        border: 0,
-        borderRadius: 6,
-        background: jobFailed ? "var(--dsw-alias-state-error-bg, rgba(180,35,24,0.10))" : C2.blue,
-        color: jobFailed ? C2.red : "#fff",
-        fontSize: 12,
-        cursor: disabled ? "default" : "pointer",
-        opacity: disabled ? 0.6 : 1,
-        flex: "0 0 auto"
-      } : { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: jobFailed ? C2.red : C2.sub, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.6 : 1, flex: "0 0 auto" }
-    }, triggerLabel ? jobFailed ? "\u66F4\u65B0\u5931\u8D25" : job ? statusText : triggerLabel : Glyph ? h3(Glyph, { name: hasOpenJob ? "refresh" : "download", size: 15 }) : hasOpenJob ? "\u2197" : "\u2193") : null,
+      style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: jobFailed ? C2.red : C2.sub, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.6 : 1, flex: "0 0 auto" }
+    }, hasOpenJob && activeJob ? progressRing(percent, jobFailed ? C2.red : C2.blue) : Glyph ? h3(Glyph, { name: hasOpenJob ? "refresh" : "download", size: 15 }) : hasOpenJob ? "\u2197" : "\u2193") : null,
     restoreDetails,
     overlay
   );
@@ -185876,10 +185940,18 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }
     };
     const updateButton = (card, onRetry, onRecheck, onPrimary, disabled = false) => {
-      if (card.action === "retry") return btn("\u91CD\u8BD5", onRetry, { primary: true, disabled });
-      if (card.action === "recheck") return btn("\u91CD\u8BD5", onRecheck, { primary: true, disabled });
-      if (card.action === "restart") return btn("\u7ACB\u5373\u751F\u6548", applyDshUpdate, { primary: true, disabled });
-      return btn(card.disabled ? "\u4E00\u952E\u66F4\u65B0" : card.label, onPrimary, { primary: true, disabled: disabled || card.disabled });
+      const icon = card.action === "retry" || card.action === "recheck" || card.action === "restart" ? "refresh" : "download";
+      const action = card.action === "retry" ? onRetry : card.action === "recheck" ? onRecheck : card.action === "restart" ? applyDshUpdate : card.action === "none" ? void 0 : onPrimary;
+      const off = disabled || card.disabled || !action;
+      return h3("button", {
+        type: "button",
+        disabled: off,
+        onClick: action,
+        title: card.pill + (card.label && card.label !== card.pill ? " \xB7 " + card.label : ""),
+        "aria-label": card.label,
+        className: "tether-hover",
+        style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: card.kind === "error" ? C2.red : C2.sub, cursor: off ? "default" : "pointer", opacity: off ? 0.55 : 1 }
+      }, Glyph ? h3(Glyph, { name: icon, size: 15 }) : icon === "download" ? "\u2193" : "\u21BB");
     };
     const updateProgressBar = (infos, active) => {
       if (!active) return null;
@@ -185941,7 +186013,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         restartAction: nodeAcceptancePending ? "update" : "restart",
         failed
       });
-      const active = card.kind === "running";
+      const active = running;
+      const appQuarantined = product2 === "desktop" && updatePayloadQuarantined("app", infos[0]);
       const versionText = product2 === "desktop" ? versionLine(
         "APP",
         { current: infos[0].current_version, latest: infos[0].latest_version },
@@ -185955,7 +186028,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           "div",
           { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
           h3("strong", { style: { fontSize: 13 } }, title),
-          h3("span", { style: { marginLeft: "auto" } }, active ? h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.amber } }, h3(Glyph, { name: "refresh", size: 14 })) : pill(card.pill, updateToneColor(card.tone)))
+          h3("span", { style: { marginLeft: "auto" } }, active ? pill(updateProgressLabel(infos), C2.amber) : appQuarantined ? pill("APP 0.5.14 \u6682\u505C\u5206\u53D1", C2.amber) : pill(card.pill, updateToneColor(card.tone)))
         ),
         h3("div", { style: { color: C2.sub, fontSize: 12, lineHeight: "19px" } }, versionText),
         null,
@@ -185963,8 +186036,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         h3(
           "div",
           { style: { marginTop: 8 } },
-          active ? btn(h3("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h3(Glyph, { name: "refresh", size: 16 })), () => {
-          }, { primary: true, disabled: true }) : updateButton(
+          active ? null : appQuarantined ? h3("button", {
+            type: "button",
+            onClick: () => runProductUpdate(product2),
+            disabled: deviceUpdateRunning(localId),
+            title: "APP 0.5.14 \u5DF2\u6682\u505C\u5206\u53D1\uFF0C\u672C\u6B21\u53EA\u66F4\u65B0 Node\uFF1B0.5.15 \u6253\u5305\u4FEE\u590D\u540E\u6062\u590D APP \u66F4\u65B0",
+            "aria-label": "\u53EA\u66F4\u65B0 Node",
+            style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C2.sub, cursor: deviceUpdateRunning(localId) ? "default" : "pointer", opacity: deviceUpdateRunning(localId) ? 0.55 : 1 }
+          }, Glyph ? h3(Glyph, { name: "download", size: 15 }) : "\u2193") : updateButton(
             card,
             () => runProductUpdate(product2),
             () => refreshUpdateCenter(true),
@@ -185983,13 +186062,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const appUpdateUnavailable = capabilities.app_update_owner === "electron_updater" && capabilities.app_update_bridge_available !== true;
       const componentNames = [...nodeUpdateManaged ? [] : ["node"], ...hasApp ? ["app"] : []];
       const infos = componentNames.map((component) => component === "node" ? node : app);
-      const updateOrigin = deviceUpdateOrigin(capabilities);
+      const updateOrigin = deviceUpdateOriginFor(updateInfo, item.device_id, capabilities);
       const runKey = "device:" + item.device_id;
       const run = updateRunState("device:" + item.device_id);
       const running = run?.state === "running";
       const failed = infos.some((info, index) => !!(updateErrors.devices[item.device_id] || {})[componentNames[index]] || !!(info && info.check_error));
       const card = updateCardStateForInfos(infos, { running, error: run?.state === "error" ? run.message : "", failed });
-      const active = card.kind === "running";
+      const active = running;
       const updateAction2 = updateOrigin ? h3(MinimalUpdateButton, {
         React: React2,
         h: h3,
@@ -186005,7 +186084,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         C: C2,
         Glyph,
         originProduct: updateOrigin,
-        triggerLabel: "\u4E00\u952E\u66F4\u65B0",
+        alwaysVisible: true,
         disabled: !item.online,
         busy: running,
         onJobChange: (job) => trackDeviceUpdateJob(runKey, job)
@@ -186023,7 +186102,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
           h3("strong", { style: { fontSize: 13 } }, item.name || item.device_id),
           h3("span", { style: { color: C2.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ""),
-          h3("span", { style: { marginLeft: "auto" } }, !item.online ? pill("\u79BB\u7EBF", C2.mute) : active ? h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.amber } }, h3(Glyph, { name: "refresh", size: 14 })) : pill(card.pill, updateToneColor(card.tone)))
+          h3("span", { style: { marginLeft: "auto" } }, !item.online ? pill("\u79BB\u7EBF", C2.mute) : active ? pill(updateProgressLabel(infos), C2.amber) : pill(card.pill, updateToneColor(card.tone)))
         ),
         h3(
           "div",
@@ -186034,10 +186113,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         h3(
           "div",
           { style: { marginTop: 8 } },
-          updateAction2 || (active ? btn(h3("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h3(Glyph, { name: "refresh", size: 16 })), () => {
-          }, { primary: true, disabled: true }) : !item.online ? btn("\u79BB\u7EBF", () => {
-          }, { primary: true, disabled: true }) : card.action === "update" ? btn("\u6682\u4E0D\u53EF\u66F4\u65B0", () => {
-          }, { primary: true, disabled: true }) : updateButton(
+          updateAction2 || (active ? pill(updateProgressLabel(infos), C2.amber) : !item.online ? btn("\u79BB\u7EBF", () => {
+          }, { primary: true, disabled: true }) : card.action === "update" ? h3("button", {
+            type: "button",
+            disabled: true,
+            title: "APP 0.5.14 \u5DF2\u6682\u505C\u5206\u53D1\uFF0C\u7B49 0.5.15 \u6253\u5305\u4FEE\u590D\u540E\u6062\u590D",
+            "aria-label": "\u6682\u4E0D\u53EF\u66F4\u65B0",
+            style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C2.mute, cursor: "default", opacity: 0.6 }
+          }, Glyph ? h3(Glyph, { name: "download", size: 15 }) : "\u2193") : updateButton(
             card,
             () => refreshUpdateCenter(true),
             () => refreshUpdateCenter(true),
@@ -186060,14 +186143,21 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       try {
         const nodeScope = localId ? { deviceId: localId, epoch: 0 } : null;
         const localDevice = (stateRef.current?.devices || []).find((item) => item.device_id === localId);
-        const appCheck = product2 === "desktop" ? await updateAction("app", "check", void 0, null) : void 0;
+        const appSummary = product2 === "desktop" ? infoFor("app") : void 0;
+        const appQuarantinedHint = product2 === "desktop" && updatePayloadQuarantined("app", appSummary);
+        const appCheck = product2 === "desktop" ? appQuarantinedHint ? appSummary : await updateAction("app", "check", void 0, null) : void 0;
         if (product2 === "desktop" && !appCheck) {
           failure2 = "APP \u66F4\u65B0\u68C0\u67E5\u5931\u8D25";
           return;
         }
-        const appAdoptsNode = windowsAppUpdateAdoptsNode(host, localDevice?.platform, appCheck);
+        const appQuarantined = product2 === "desktop" && updatePayloadQuarantined("app", appCheck);
+        const appAdoptsNode = !appQuarantined && windowsAppUpdateAdoptsNode(host, localDevice?.platform, appCheck);
         const updateNode = localDevice?.capabilities?.node_self_update_enabled !== false && !appAdoptsNode;
-        const plan = product2 === "desktop" ? [...updateNode ? [{ component: "node", scope: nodeScope }] : [], { component: "app", scope: null }] : [{ component: "localPlugin", scope: null }];
+        const plan = product2 === "desktop" ? [...updateNode ? [{ component: "node", scope: nodeScope }] : [], ...appQuarantined ? [] : [{ component: "app", scope: null }]] : [{ component: "localPlugin", scope: null }];
+        if (!plan.length) {
+          failure2 = "APP 0.5.14 \u5DF2\u6682\u505C\u5206\u53D1\uFF0CNode \u4E0D\u652F\u6301\u81EA\u66F4\u65B0";
+          return;
+        }
         const prepared = {};
         const rollbackPreparedNode = async (reason) => {
           const node = prepared.node;
@@ -189339,7 +189429,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }
     const liveHubStatus = hubBusy ? "checking" : stateOkAtRef.current && Date.now() - stateOkAtRef.current < 8e3 ? "online" : hubStatus === "offline" ? "offline" : "checking";
     const selectedUpdateTarget = (state?.devices || []).find((item) => item.device_id === deviceId);
-    const topbarUpdateOrigin = host?.kind === "dsh" ? "plugin" : deviceUpdateOrigin(selectedUpdateTarget?.capabilities);
+    const topbarUpdateOrigin = host?.kind === "dsh" ? "plugin" : deviceUpdateOriginFor(updateInfo, deviceId, selectedUpdateTarget?.capabilities);
     const settingsUpdate = (() => {
       const localId = appLocalDevice || deviceId;
       const devices = state && state.devices || [];
@@ -189374,7 +189464,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }));
         const key = local ? "product:" + product2 : "device:" + item.device_id;
         const run = updateRuns[key];
-        const updateAction2 = !local && updateOrigin ? h3(MinimalUpdateButton, {
+        const appInfo = scopedInfo(item.device_id, "app");
+        const appQuarantined = updatePayloadQuarantined("app", appInfo);
+        const nodeOrigin = caps.node_self_update_enabled !== false && caps.node_version ? "node" : "";
+        const remoteOrigin = !local ? nodeOrigin || (hasApp && !appQuarantined && !appUpdateUnavailable ? "app" : "") || deviceUpdateOrigin(caps) : "";
+        const updateAction2 = !local && remoteOrigin ? h3(MinimalUpdateButton, {
           React: React2,
           h: h3,
           api: api2,
@@ -189388,7 +189482,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           host,
           C: C2,
           Glyph,
-          originProduct: updateOrigin,
+          originProduct: remoteOrigin,
+          alwaysVisible: true,
           disabled: !item.online,
           busy: run?.state === "running",
           onJobChange: (job) => trackDeviceUpdateJob(key, job)
@@ -189402,9 +189497,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           online: local ? true : !!item.online,
           products,
           updateAction: updateAction2,
-          updateReason: appUpdateUnavailable ? "\u8BF7\u5148\u542F\u52A8\u76EE\u6807\u684C\u9762 APP \u540E\u518D\u66F4\u65B0" : !local && !hasApp && !updateOrigin ? "\u6B64\u8BBE\u5907\u5C1A\u672A\u62A5\u544A\u53EF\u7528\u7684 Node \u81EA\u66F4\u65B0\u80FD\u529B" : "",
+          updateReason: appUpdateUnavailable ? "\u8BF7\u5148\u542F\u52A8\u76EE\u6807\u684C\u9762 APP \u540E\u518D\u66F4\u65B0" : appQuarantined ? "APP 0.5.14 \u5DF2\u6682\u505C\u5206\u53D1\uFF0C\u7B49 0.5.15 \u4FEE\u590D\uFF1BNode \u53EF\u5355\u72EC\u66F4\u65B0" : !local && !hasApp && !updateOrigin ? "\u6B64\u8BBE\u5907\u5C1A\u672A\u62A5\u544A\u53EF\u7528\u7684 Node \u81EA\u66F4\u65B0\u80FD\u529B" : "",
           available: (local || !!updateOrigin) && infos.some((info) => info && info.update_available === true && !isUpdateInfoStale(info)),
-          running: deviceUpdateRunning(item.device_id),
+          running: run?.state === "running",
+          progressText: updateProgressLabel(infos, ""),
           error: run && run.state === "error" ? run.message || "\u66F4\u65B0\u5931\u8D25" : ""
         };
       };

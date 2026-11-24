@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createTetherPanel, dshWebGuestSameOrigin, MinimalUpdateButton } from '../packages/tether-ui/src/app.js'
+import { createTetherPanel, dshWebGuestSameOrigin, MinimalUpdateButton, markUpdateJobStarted } from '../packages/tether-ui/src/app.js'
 import { createWebNative } from '../packages/tether-ui/src/hosts/web.js'
 
 function createHookRenderer(initialProps) {
@@ -91,6 +91,48 @@ const walk = (node, predicate) => {
   }
   return null
 }
+
+test('a remote-started job stays silent on the target machine page', async () => {
+  const previous = { window: globalThis.window, setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval }
+  globalThis.window = { location: { reload() {} } }
+  globalThis.setInterval = () => 0
+  globalThis.clearInterval = () => {}
+  const api = async (path) => {
+    if (path.endsWith('/update/job')) {
+      return { job_id: 'remote-job', status: 'downloading', progress: { percent: 0, step: '下载更新' } }
+    }
+    if (path.includes('/update?')) return { update_available: true, target_version: '0.5.15' }
+    throw new Error('unexpected update request: ' + path)
+  }
+  const props = {
+    React: null,
+    h: null,
+    api,
+    deviceId: 'LAPTOP-01',
+    localDeviceId: 'LAPTOP-01',
+    host: { kind: 'app', hubConfig: () => ({ url: 'https://hub.example' }) },
+    C: { ink: '#111', blue: '#08f', sub: '#666', red: '#d00' }
+  }
+  const renderer = createHookRenderer(props)
+  const withReact = (rendererProps) => ({ ...rendererProps, React: renderer.React, h: renderer.React.createElement })
+  renderer.setComponent((rendererProps) => MinimalUpdateButton(withReact(rendererProps)))
+  try {
+    renderer.render()
+    await tick()
+    renderer.render()
+    assert.equal(walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '查看更新状态'), null,
+      'a job this page did not start never renders a progress control')
+    assert.equal(walk(renderer.output(), (node) => node.props && node.props.role === 'dialog'), null,
+      'no full-screen dialog takes over the target machine')
+    markUpdateJobStarted('https://hub.example', 'LAPTOP-01', 'remote-job')
+    renderer.render()
+    assert.ok(walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '查看更新状态'),
+      'the initiator keeps progress for the job it started')
+  } finally {
+    renderer.dispose()
+    for (const [key, value] of Object.entries(previous)) globalThis[key] = value
+  }
+})
 
 test('remote update completion keeps this page while local completion reloads it', async () => {
   const previous = {

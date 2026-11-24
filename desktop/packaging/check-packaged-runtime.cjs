@@ -7,6 +7,78 @@ function requireFile(file, label) {
   }
 }
 
+// The app.asar `files` whitelist is hand-maintained, so a new main-process module
+// can ship missing and the packaged app then fails on its first require (0.5.14
+// shipped without data-maintenance.js). Read the whitelist itself as the contract.
+function listedAppModules(configPath = path.join(__dirname, 'electron-builder.yml')) {
+  const modules = []
+  let inFiles = false
+  for (const line of fs.readFileSync(configPath, 'utf8').split(/\r?\n/)) {
+    if (/^\S/.test(line)) {
+      inFiles = /^files:/.test(line)
+      continue
+    }
+    if (!inFiles) continue
+    const match = /^\s+-\s+['"]?([^'"\s]+)['"]?\s*$/.exec(line)
+    if (match && !match[1].startsWith('!') && match[1].endsWith('.js')) modules.push(match[1])
+  }
+  return modules
+}
+
+function readAsarTree(archivePath) {
+  const descriptor = fs.openSync(archivePath, 'r')
+  try {
+    const pickle = Buffer.alloc(16)
+    if (fs.readSync(descriptor, pickle, 0, 16, 0) !== 16) throw new Error(`Packaged app archive has no header: ${archivePath}`)
+    const headerSize = pickle.readUInt32LE(12)
+    if (headerSize < 2 || headerSize > 64 * 1024 * 1024) throw new Error(`Packaged app archive header size is invalid: ${archivePath}`)
+    const header = Buffer.alloc(headerSize)
+    if (fs.readSync(descriptor, header, 0, headerSize, 16) !== headerSize) {
+      throw new Error(`Packaged app archive header is truncated: ${archivePath}`)
+    }
+    const tree = JSON.parse(header.toString('utf8'))
+    if (!tree || typeof tree.files !== 'object' || tree.files === null) {
+      throw new Error(`Packaged app archive header has no file tree: ${archivePath}`)
+    }
+    return tree
+  } finally {
+    fs.closeSync(descriptor)
+  }
+}
+
+function requireAsarModule(archivePath, moduleName) {
+  const entry = readAsarTree(archivePath).files[moduleName]
+  if (!entry || entry.files !== undefined || typeof entry.size !== 'number' || entry.size <= 0
+      || typeof entry.offset !== 'string') {
+    throw new Error(`Packaged app archive is missing main-process module ${moduleName}: ${archivePath}`)
+  }
+}
+
+function requirePnpmLauncher(runtime, windows) {
+  const nodeRuntime = path.join(runtime, 'components', 'nodejs')
+  const metadataPath = path.join(nodeRuntime, 'pnpm.json')
+  requireFile(metadataPath, 'pnpm launcher metadata')
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'))
+  const shim = windows ? 'pnpm.cmd' : path.join('bin', 'pnpm')
+  if (metadata.component !== 'pnpm' || metadata.shim !== shim || typeof metadata.entry !== 'string'
+      || typeof metadata.version !== 'string') {
+    throw new Error(`Packaged pnpm launcher metadata is invalid: ${metadataPath}`)
+  }
+  const launcher = path.join(nodeRuntime, shim)
+  requireFile(launcher, 'pnpm launcher')
+  // `dsh plugin --profile web add` forwards to pnpm on PATH; a launcher that points
+  // outside the package would silently reintroduce the hand-patched D: path.
+  if (!/^\.\.?[\\/]/.test(metadata.entry)) {
+    throw new Error(`Packaged pnpm launcher must stay inside the runtime: ${metadata.entry}`)
+  }
+  const implementation = path.join(nodeRuntime, metadata.entry)
+  requireFile(implementation, 'pnpm implementation')
+  const manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(implementation), '..', 'package.json'), 'utf8'))
+  if (manifest.name !== 'pnpm' || manifest.version !== metadata.version) {
+    throw new Error(`Packaged pnpm version ${manifest.version} does not match its launcher metadata ${metadata.version}`)
+  }
+}
+
 function requireUniqueExecutable(componentRoot, executable) {
   const matches = []
   const walk = (directory) => {
@@ -57,4 +129,11 @@ module.exports = async function checkPackagedRuntime(context) {
     ['caddy', `caddy${suffix}`], ['rclone', `rclone${suffix}`],
     ['easytier', `easytier-core${suffix}`], ['easytier', `easytier-cli${suffix}`]
   ]) requireUniqueExecutable(path.join(runtime, 'components', component), executable)
+
+  requirePnpmLauncher(runtime, windows)
+
+  const archive = path.join(resources, 'app.asar')
+  requireFile(archive, 'app.asar')
+  for (const moduleName of listedAppModules()) requireAsarModule(archive, moduleName)
+  requireAsarModule(archive, 'package.json')
 }
