@@ -25,7 +25,7 @@ test('local plugin updater accepts only the four fixed authenticated logical end
   }
 })
 
-test('local plugin updater invokes a bundled Python module with fixed plugin paths and no renderer-controlled arguments', async () => {
+test('local plugin updater invokes a bundled Python module with fixed plugin paths and no renderer-controlled arguments', { skip: process.platform !== 'win32' }, async () => {
   const calls = []
   const handler = createLocalPluginUpdateHandler({
     env: { DSH_HOME: 'C:/fixture/.dsh', PATH: 'safe-path', DEEPSEEK_API_KEY: 'never-forward', TETHER_NODE_TOKEN: 'never-forward' },
@@ -147,7 +147,7 @@ test('missing bundled updater fails safely without confusing it with a missing P
   assert.equal(spawned, false)
 })
 
-test('selectedProfile falls back to the live DSH host profile argument', () => {
+test('selectedProfile falls back to the live DSH host profile argument', { skip: process.platform !== 'win32' }, () => {
   const root = 'C:/fixture/.dsh'
   assert.equal(selectedProfile('C:/installed/tether-dsh-surface', root, ['node', 'C:/fixture/.dsh/profiles/desktop']), 'desktop')
   assert.equal(selectedProfile('C:/installed/tether-dsh-surface', root, ['node', 'C:/fixture/.dsh/profiles/desktop/node_modules']), undefined)
