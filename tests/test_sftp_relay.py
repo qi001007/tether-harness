@@ -16,6 +16,9 @@ import pytest
 from tether.node import sftp_relay
 from tether.node import sftp_relay_managed
 
+# Wall-clock lease for the loopback fixture; see the comment where it is applied.
+LEASE_SECONDS = 10
+
 
 def _credentials(tmp_path):
     now = datetime.now(timezone.utc)
@@ -81,7 +84,10 @@ def test_only_pinned_client_can_reach_loopback_and_lease_closes_it(tmp_path, mon
         offer_path = directory / "lease-fixture.json"
         async with await asyncio.start_server(source, "127.0.0.1", 0) as origin:
             options.upstream_port = origin.sockets[0].getsockname()[1]
-            options.expires_unix = int(time.time()) + 2
+            # The lease is wall-clock while the reject phase that follows costs two TLS
+            # handshakes, which take over two seconds on the Windows runner; keep headroom
+            # so the pinned client still reaches the listener before the lease expires.
+            options.expires_unix = int(time.time()) + LEASE_SECONDS
             offer = sftp_relay._offer_fields("32a14b80-f578-44c0-8f5d-fe8cfbd3696a", "origin", "target",
                                             "10.224.0.3", options.listen_port, options.expires_unix)
             assert sftp_relay.read_offer(tmp_path, "relay") is None
@@ -115,7 +121,7 @@ def test_only_pinned_client_can_reach_loopback_and_lease_closes_it(tmp_path, mon
             await writer.drain()
             assert await asyncio.wait_for(reader.readexactly(4), 0.5) == b"dcba"
             assert accepts == [True]
-            await asyncio.wait_for(relay, 3)
+            await asyncio.wait_for(relay, LEASE_SECONDS + 10)
             assert sftp_relay.read_offer(tmp_path, "relay") is None
             await asyncio.wait_for(source_closed.wait(), 1)
             try:
