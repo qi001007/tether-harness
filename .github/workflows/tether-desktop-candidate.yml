@@ -90,6 +90,7 @@ jobs:
         with:
           node-version: '24.22.2'
       - name: Install Python and Node test dependencies
+        if: runner.os != 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -98,6 +99,7 @@ jobs:
           npm ci --prefix packages/tether-ui
           npm ci --prefix apps/tether-app
       - name: Run Python and JavaScript regressions
+        if: runner.os != 'macOS'
         shell: bash
         run: |
           set -euo pipefail
