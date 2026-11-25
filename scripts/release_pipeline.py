@@ -3,21 +3,48 @@
 
 `status` and `plan` inspect the checkout and print what would be built.
 `bump` rewrites the four version sources; it is a dry run unless --write is
-passed. `build` and `promote` deliberately do not act: they print the exact
-manual command and exit 2. Nothing here uploads, publishes, signs or touches
-the Hub. See docs/RELEASE_PIPELINE.md.
+passed. `run` drives the whole chain in order — bump, build, test, gate,
+publish, pin — by calling the entry points that already exist (the matrix
+workflow, `scripts/release_gate.py`, the Hub pin route). It does not invent a
+second release path.
+
+Everything that leaves this machine is off by default. A bare `run` is a local
+readiness report: it bumps in dry-run, runs the update test suites and the
+release gate, and refuses `build`, `publish` and `pin` because a CI dispatch
+burns minutes and creates a draft, a public release is visible to every device,
+and a pin repoints the whole fleet. Name those stages in --approve to let them
+act: `--approve build,test` style, comma separated.
+
+Credentials come from the environment and are never printed:
+GITHUB_PAT_TOKEN (repo scopes) and TETHER_HUB_OWNER_TOKEN (owner session).
+Progress lands in `.scratch/release-run/<version>/state.json` so a watcher can
+poll one file and only surface anomalies. See docs/RELEASE_PIPELINE.md.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
+import time
 import tomllib
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Windows 控制台默认 GBK，中文提示会乱码；强制 UTF-8 输出。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
+API = "https://api.github.com"
+STAGES = ("bump", "build", "test", "gate", "publish", "pin")
+CONCLUSION_OK = ("success", "skipped")
 
 # target -> (runner, electron, node_only, reason)
 MATRIX = {
@@ -204,12 +231,237 @@ def bump(root: Path, version: str, write: bool) -> int:
     return 0
 
 
+def _github(method: str, path: str, body: dict | None = None) -> tuple[int, object]:
+    """One GitHub REST call. The token comes from the environment and is never printed."""
+    token = os.environ.get("GITHUB_PAT_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("GITHUB_PAT_TOKEN is not set; this script will not fall back to gh.")
+    request = urllib.request.Request(
+        f"{API}{path}",
+        data=(json.dumps(body).encode() if body is not None else None),
+        method=method,
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
+                 "X-GitHub-Api-Version": "2022-11-28",
+                 "User-Agent": "Tether-Release-Pipeline"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            raw = response.read()
+            return response.status, (json.loads(raw) if raw else {})
+    except urllib.error.HTTPError as exc:
+        return exc.code, str(exc.read()[:400], "utf-8", "replace")
+
+
+def _hub(method: str, path: str, body: dict | None = None) -> tuple[int, object]:
+    base = os.environ.get("TETHER_HUB_URL", "").strip().rstrip("/")
+    token = os.environ.get("TETHER_HUB_OWNER_TOKEN", "").strip()
+    if not base or not token:
+        raise RuntimeError("TETHER_HUB_URL and TETHER_HUB_OWNER_TOKEN are required to pin.")
+    request = urllib.request.Request(
+        f"{base}{path}",
+        data=(json.dumps(body).encode() if body is not None else None),
+        method=method,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            raw = response.read()
+            return response.status, (json.loads(raw) if raw else {})
+    except urllib.error.HTTPError as exc:
+        return exc.code, str(exc.read()[:400], "utf-8", "replace")
+
+
+def _repo() -> str:
+    raw = subprocess.run(["git", "-C", str(ROOT), "remote", "get-url", "origin"],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    match = re.search(r"github\.com[:/]([^/]+)/([^/.]+)", raw)
+    if not match:
+        raise RuntimeError(f"origin is not a GitHub repository: {raw}")
+    return f"{match.group(1)}/{match.group(2)}"
+
+
+def _state_file(version: str) -> Path:
+    path = ROOT / ".scratch" / "release-run" / version
+    path.mkdir(parents=True, exist_ok=True)
+    return path / "state.json"
+
+
+def _record(version: str, stage: str, status: str, **extra) -> None:
+    """Append one stage result so a watcher polls a single file for anomalies."""
+    path = _state_file(version)
+    state = {"version": version, "stages": {}}
+    if path.is_file():
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pass
+    state.setdefault("stages", {})[stage] = {"status": status, "at": int(time.time()), **extra}
+    state["current"] = stage
+    state["anomaly"] = status not in CONCLUSION_OK + ("planned", "dry-run")
+    path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    print(f"[{stage}] {status} " + " ".join(f"{key}={value}" for key, value in extra.items()))
+
+
+def stage_build(version: str, channel: str, ref: str, sign: bool, poll: float, timeout: float,
+                approve: bool = True) -> int:
+    """Reuse an existing preview draft, or dispatch the matrix workflow when asked."""
+    repo = _repo()
+    tag = _tag(version, channel)
+    status, release = _github("GET", f"/repos/{repo}/releases/tags/{tag}")
+    if status == 200:
+        _record(version, "build", "existing", tag=tag,
+                url=str((release or {}).get("html_url", "")))
+        return 0
+    # A dispatch burns CI minutes and creates a draft release, so a bare `run`
+    # does not do it. The unattended chain is a local readiness report.
+    if not approve:
+        _record(version, "build", "refused", tag=tag, ref=ref,
+                reason="pass --approve build; this dispatches CI and creates a draft")
+        return 2
+    _record(version, "build", "running", workflow="release-matrix.yml", tag=tag)
+    status, payload = _github("POST", f"/repos/{repo}/actions/workflows/release-matrix.yml/dispatches",
+                              {"ref": ref, "inputs": {"version": version, "channel": channel,
+                                                      "sign": "true" if sign else "false"}})
+    if status not in (200, 204):
+        _record(version, "build", "failed", http=status, detail=str(payload)[:200])
+        return 1
+    deadline = time.monotonic() + timeout
+    run: dict = {}
+    while time.monotonic() < deadline:
+        time.sleep(poll)
+        status, listed = _github("GET", f"/repos/{repo}/actions/runs?event=workflow_dispatch"
+                                        "&per_page=20")
+        items = (listed or {}).get("workflow_runs", []) if status == 200 else []
+        candidate = next((item for item in items
+                          if item.get("name") == "Tether release matrix"
+                          and (str(item.get("display_title", "")).find(version) >= 0
+                               or str(item.get("head_commit", {}).get("message", "")).find(version) >= 0)),
+                         None)
+        if candidate is None:
+            continue
+        run = candidate
+        print(f"  run {run['id']} status={run.get('status')} "
+              f"https://github.com/{repo}/actions/runs/{run['id']}")
+        if run.get("status") == "completed":
+            conclusion = str(run.get("conclusion"))
+            _record(version, "build", conclusion, run_id=run["id"], url=run.get("html_url"))
+            return 0 if conclusion in CONCLUSION_OK else 1
+    _record(version, "build", "timeout", run_id=run.get("id"))
+    return 1
+
+
+def stage_test(version: str, commit: str) -> int:
+    """The matrix gates packaging on its own test jobs; locally this is the gate's REG list."""
+    result = subprocess.run([sys.executable, "-m", "pytest", "-q",
+                             "tests/test_updates.py", "tests/test_update_rollback_script.py",
+                             "tests/test_update_fleet_probe.py", "tests/test_release_manifest_assembly.py",
+                             "tests/test_node_update_protocol.py"],
+                            cwd=str(ROOT), capture_output=True, text=True)
+    tail = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+    _record(version, "test", "success" if result.returncode == 0 else "failed", summary=tail[:160])
+    return 0 if result.returncode == 0 else 1
+
+
+def stage_gate(version: str, commit: str) -> int:
+    result = subprocess.run([sys.executable, "scripts/release_gate.py", "run",
+                             "--version", version, "--commit", commit],
+                            cwd=str(ROOT), capture_output=True, text=True)
+    verdict = "PUBLISH-OK" if result.returncode == 0 else "PUBLISH-BLOCKED"
+    _record(version, "gate", verdict, exit=result.returncode)
+    print("\n".join(line for line in result.stdout.splitlines() if line.strip())[-4000:])
+    return 0 if result.returncode == 0 else 1
+
+
+def stage_publish(version: str, channel: str, approve: bool) -> int:
+    repo = _repo()
+    tag = _tag(version, channel)
+    # Refuse before the first request: an unapproved run must not even look at
+    # GitHub, and a missing tag must not be reported as a failed publish.
+    if not approve:
+        _record(version, "publish", "refused", tag=tag,
+                reason="pass --approve publish; a public release is visible to every device")
+        return 2
+    status, releases = _github("GET", f"/repos/{repo}/releases/tags/{tag}")
+    if status != 200:
+        _record(version, "publish", "failed", http=status, tag=tag, detail=str(releases)[:200])
+        return 1
+    release = releases
+    if not release.get("draft"):
+        _record(version, "publish", "already-public", tag=tag)
+        return 0
+    status, payload = _github("PATCH", f"/repos/{repo}/releases/{release['id']}", {"draft": False})
+    ok = status == 200
+    _record(version, "publish", "success" if ok else "failed", tag=tag, http=status,
+            url=(payload or {}).get("html_url") if ok else str(payload)[:200])
+    return 0 if ok else 1
+
+
+def stage_pin(version: str, channel: str, approve: bool) -> int:
+    if not approve:
+        _record(version, "pin", "refused", target=version,
+                reason="pass --approve pin; this points every device feed at this version")
+        return 2
+    status, payload = _hub("POST", "/api/releases/pin", {"version": version})
+    ok = status == 200
+    _record(version, "pin", "success" if ok else "failed", http=status,
+            detail=str(payload)[:200] if not ok else "")
+    return 0 if ok else 1
+
+
+def run_chain(version: str, channel: str, until: str, approve: set[str], ref: str,
+              sign: bool, write: bool) -> int:
+    if version not in STAGES and not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        print(f"invalid version: {version}", file=sys.stderr)
+        return 2
+    if until not in STAGES:
+        print(f"--until must be one of {STAGES}", file=sys.stderr)
+        return 2
+    commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+                            capture_output=True, text=True).stdout.strip()
+    order = STAGES[:STAGES.index(until) + 1]
+    refused: list[str] = []
+    print(f"release run {version} channel={channel} stages={'->'.join(order)} approve={sorted(approve)}")
+    print(f"commit {commit[:9]} ref={ref} state={_state_file(version).relative_to(ROOT).as_posix()}")
+    for stage in order:
+        if stage == "bump":
+            code = bump(ROOT, version, write)
+            if code != 0:
+                return code
+            _record(version, "bump", "success" if write else "dry-run", write=write)
+        elif stage == "build":
+            code = stage_build(version, channel, ref, sign, 20.0, 3 * 3600.0,
+                               approve="build" in approve)
+        elif stage == "test":
+            code = stage_test(version, commit)
+        elif stage == "gate":
+            code = stage_gate(version, commit)
+            if code != 0:
+                print("\nPUBLISH-BLOCKED：见 docs/RELEASE_GATE.md 的冻结条件。")
+        elif stage == "publish":
+            code = stage_publish(version, channel, "publish" in approve)
+        elif stage == "pin":
+            code = stage_pin(version, channel, "pin" in approve)
+        else:
+            code = 0
+        # A failure (1) stops the chain. A refusal (2) means "I did not do this
+        # because you did not approve it", which is not an error: keep going so a
+        # single run reports every approval that is still missing.
+        if code == 1:
+            return code
+        if code == 2:
+            refused.append(stage)
+    if refused:
+        print(f"\n未执行（缺批准）：{', '.join(refused)}。重跑并加 --approve {','.join(refused)}")
+        return 2
+    if "publish" not in approve or "pin" not in approve:
+        print("\n本轮没有对外可见的动作。要发布/切 pin，重跑并加 --approve publish,pin。")
+    return 0
+
+
 def refuse(action: str, version: str, channel: str) -> int:
-    tag = _tag(version, channel) if version else "<version>"
-    print(f"`{action}` is not wired on purpose; this script never dispatches or publishes.")
-    print("Manual path after approval:")
-    print(f"  gh workflow run release-matrix.yml -f version={version or '<version>'} -f channel={channel} -f sign=false")
-    print(f"  # then scripts/qa_release_artifacts.py against the draft {tag}")
+    print(f"`{action}` was the pre-automation stub and is retired; the chain is one command now.")
+    print("Use:")
+    print(f"  python scripts/release_pipeline.py run --version {version or '<version>'} "
+          f"--channel {channel}")
+    print("It stops after `gate` unless you pass --approve publish,pin.")
     return 2
 
 
@@ -224,8 +476,18 @@ def main(argv: list[str] | None = None) -> int:
     bump_parser = sub.add_parser("bump", help="rewrite the four version sources (dry run by default)")
     bump_parser.add_argument("--version", required=True)
     bump_parser.add_argument("--write", action="store_true", help="apply the rewrite")
+    run_parser = sub.add_parser("run", help="bump -> build -> test -> gate -> publish -> pin")
+    run_parser.add_argument("--version", required=True)
+    run_parser.add_argument("--channel", default="preview", choices=("preview", "stable"))
+    run_parser.add_argument("--until", default="gate", choices=STAGES,
+                            help="last stage to attempt (default gate: nothing externally visible)")
+    run_parser.add_argument("--approve", default="",
+                            help="comma list of stages that may leave this machine: build,publish,pin")
+    run_parser.add_argument("--ref", default=None, help="branch/tag the workflow dispatches on")
+    run_parser.add_argument("--sign", action="store_true", help="ask CI to sign (needs certs)")
+    run_parser.add_argument("--write", action="store_true", help="let the bump stage rewrite files")
     for name in ("build", "promote"):
-        command = sub.add_parser(name, help="refuse and print the manual command")
+        command = sub.add_parser(name, help="retired stub; prints the run command")
         command.add_argument("--version", default="")
         command.add_argument("--channel", default="preview", choices=("preview", "stable"))
     args = parser.parse_args(argv)
@@ -235,6 +497,12 @@ def main(argv: list[str] | None = None) -> int:
         return plan(args.version, args.channel)
     if args.command == "bump":
         return bump(ROOT, args.version, args.write)
+    if args.command == "run":
+        ref = args.ref or subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--abbrev-ref", "HEAD"],
+                                         capture_output=True, text=True).stdout.strip()
+        return run_chain(args.version, args.channel, args.until,
+                         {item.strip() for item in args.approve.split(",") if item.strip()},
+                         ref, args.sign, args.write)
     return refuse(args.command, args.version, args.channel)
 
 
