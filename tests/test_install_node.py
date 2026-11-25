@@ -86,8 +86,10 @@ def _run_installer(tmp_path: Path, short_responses: int, *, resolve_latest: bool
         requests = 0
 
         def do_GET(self) -> None:
-            if self.path == "/install/version.json":
-                body = json.dumps({"components": {"node": version}}).encode()
+            if self.path == "/install/tether-update.json":
+                body = json.dumps({"schema": 1, "components": {"node": {
+                    "version": version, "protocol": 1, "min_updater": "0.2.1",
+                    "rollout": {"percent": 100, "include": [], "exclude": []}}}}).encode()
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
@@ -128,6 +130,9 @@ def _run_installer(tmp_path: Path, short_responses: int, *, resolve_latest: bool
             "HOME": _shell_path(home),
             "PATH": _shell_path(bin_dir) + ":" + shell_path,
             "TETHER_TEST_REAL_PYTHON": _shell_path(Path(sys.executable)) if os.name == "nt" else sys.executable,
+            # The origin layer must never reach the real release host from a test:
+            # it used to cost 250s of retries and could download a live artifact.
+            "TETHER_ORIGIN_BASE": "http://127.0.0.1:1",
         })
         if os.name == "nt":
             env["MSYS"] = "winsymlinks:native"
@@ -165,8 +170,15 @@ def test_exhausted_short_download_preserves_existing_archive_and_does_not_instal
     result, requests, _payload = _run_installer(tmp_path, short_responses=3)
 
     assert result.returncode != 0
-    assert requests == 3
-    assert "complete valid archive after 3 attempts" in result.stderr
+    # Revised with the layered fetch: retries are now bounded per layer instead of
+    # three attempts at one address, so an exhausted mirror costs two requests and
+    # the run then names the layer that failed rather than a URL.
+    assert requests == 2
+    # Revised again with the backoff rule: a repeated identical failure now stops the
+    # run and names the signature, instead of walking every layer. Stopping early is
+    # the point - hammering a failing feed can get this host blackholed.
+    assert "stopped after the same failure repeated" in result.stderr
+    assert "hub_mirror:curl_18 repeated 2 times" in result.stderr
     assert (tmp_path / "prefix" / "tether-node-9.8.7.zip").read_bytes() == b"previous complete archive"
     assert not (tmp_path / "prefix" / "tether-node-9.8.7").exists()
     assert not (tmp_path / "prefix" / "venv").exists()
@@ -185,6 +197,17 @@ def test_latest_with_explicit_base_url_resolves_mirror_version_json(tmp_path: Pa
 def test_default_latest_resolution_uses_the_published_release_manifest() -> None:
     source = (Path(__file__).resolve().parents[1] / "laptop" / "install-node.sh").read_text(encoding="utf-8")
 
+    # The intent is unchanged - the default resolution still reads the published
+    # signed manifest - but the URLs are now layer-derived, so assert the layers
+    # and the origin default instead of one concatenated literal.
     assert 'BASE_URL="${TETHER_ASSET_BASE:-}"' in source
-    assert 'releases/latest/download/tether-update.json' in source
-    assert 'releases/download/v$VERSION/tether-node-$VERSION.zip' in source
+    assert 'ORIGIN_BASE="${TETHER_ORIGIN_BASE:-https://github.com/qi001007/tether-harness/releases}"' in source
+    # The mirror layer is now opt-in: deriving it from the baked-in HUB_URL default
+    # made every unattended install retry a production domain, which must not come back.
+    assert 'if [ -n "$BASE_URL" ] || [ -n "${TETHER_HUB_URL:-}" ]; then' in source
+    assert 'LAYER_KINDS+=("hub_mirror")' in source
+    assert 'LAYER_KINDS+=("origin")' in source
+    assert 'tether-update.json' in source
+    assert 'LAYER_MANIFEST_BASES+=("${ORIGIN_BASE}/latest/download")' in source
+    assert 'LAYER_ASSET_BASES+=("${ORIGIN_BASE}")' in source
+    assert 'for ATTEMPT in 1 2 3' not in source, "single-address triple retry must not come back"

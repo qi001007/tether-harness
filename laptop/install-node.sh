@@ -19,6 +19,10 @@ USER_TOKEN="${TETHER_USER_TOKEN:-}"
 SYSTEMD=0
 NO_SYSTEMD=0
 BASE_URL="${TETHER_ASSET_BASE:-}"
+# The origin layer is overridable so a regional CDN can stand in for github.com and
+# so tests never reach the real release host. Default is unchanged.
+ORIGIN_BASE="${TETHER_ORIGIN_BASE:-https://github.com/qi001007/tether-harness/releases}"
+LAYER_FOR_VERSION=""
 ALLOWED_ROOTS="${TETHER_ALLOWED_ROOTS:-}"
 WORKSPACES_ROOT="${TETHER_WORKSPACES_ROOT:-}"
 AGENT="${TETHER_AGENT:-dsh}"
@@ -75,6 +79,32 @@ done
 say() { printf '%s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
+# One layer table drives both release resolution and archive fetch, and it is built
+# after option parsing so --base-url actually lands in a layer. Deriving it from the
+# resolution result would drop the mirror whenever --version was passed explicitly,
+# which is the single-source failure this replaces.
+#
+# The mirror layer exists only when the operator named it. Deriving it from the
+# baked-in HUB_URL default made every unattended install retry a production domain
+# nobody asked it to contact, which is the shape that has to stop while the Hub is
+# unhealthy; it is opt-in now.
+LAYER_KINDS=()
+LAYER_MANIFEST_BASES=()
+LAYER_ASSET_BASES=()
+if [ -n "$BASE_URL" ] || [ -n "${TETHER_HUB_URL:-}" ]; then
+  LAYER_KINDS+=("hub_mirror")
+  LAYER_MANIFEST_BASES+=("${BASE_URL:-${HUB_URL%/}/install}")
+  LAYER_ASSET_BASES+=("${BASE_URL:-${HUB_URL%/}/install}")
+fi
+LAYER_KINDS+=("origin")
+LAYER_MANIFEST_BASES+=("${ORIGIN_BASE}/latest/download")
+LAYER_ASSET_BASES+=("${ORIGIN_BASE}")
+
+# Backoff escalates to minutes and a repeated identical failure stops the run: a
+# fixed small bound with one-second sleeps can get this host's address blackholed.
+INSTALL_RETRY_LADDER=(1 10 60 180)
+INSTALL_MAX_SAME_ERROR="${TETHER_INSTALL_MAX_SAME_ERROR:-2}"
+
 if [ "$SYSTEMD" = 0 ] && [ "$NO_SYSTEMD" = 0 ] && [ "$INSTALL_ONLY" != 1 ] && [ "$(id -u)" = 0 ] && [ "$(uname -s)" = "Linux" ]; then
   SYSTEMD=1
 fi
@@ -125,17 +155,71 @@ if [ -n "$ARCHIVE" ] && [ "$VERSION" = latest ]; then
   [ -n "$VERSION" ] || fail "could not derive version from archive name: $ARCHIVE"
 fi
 if [ "$VERSION" = latest ] && [ -z "$ARCHIVE" ] && [ -z "$RUNTIME_ARCHIVE" ]; then
-  if [ -n "$BASE_URL" ]; then
-    META_URL="${BASE_URL%/}/version.json"
-    VERSION=$(curl -fsSL --retry 2 "$META_URL" | python3 -c 'import json,sys; node=json.load(sys.stdin)["components"]["node"]; print(node["version"] if isinstance(node,dict) else node)') \
-      || fail "could not resolve latest node version from $META_URL"
-  else
-    META_URL="https://github.com/qi001007/tether-harness/releases/latest/download/tether-update.json"
-    VERSION=$(curl -fsSL --retry 2 "$META_URL" | python3 -c 'import json,sys; print(json.load(sys.stdin)["components"]["node"]["version"])') \
-      || fail "could not resolve latest node version from $META_URL"
+  # Same layer idea as the updater's _artifact_sources(): every layer is named and
+  # every refusal is reported. Retrying one address three times left a machine with
+  # no route to github.com unable to install at all, while the very same machine
+  # could still update fine.
+  LAYER_FAILURES=()
+  RESOLVED=0
+  for INDEX in "${!LAYER_KINDS[@]}"; do
+    LAYER="${LAYER_KINDS[$INDEX]}"
+    META_URL="${LAYER_MANIFEST_BASES[$INDEX]%/}/tether-update.json"
+    say "resolving latest node release from layer=$LAYER"
+    MANIFEST_JSON=""
+    if MANIFEST_JSON=$(curl -fsSL --retry 2 --max-time 30 "$META_URL" 2>/dev/null) && [ -n "$MANIFEST_JSON" ]; then
+      VERDICT=$(printf '%s' "$MANIFEST_JSON" | python3 -c '
+import json, sys
+device = (sys.argv[1] or "").strip()
+try:
+    manifest = json.load(sys.stdin)
+except Exception:
+    print("REFUSE manifest_unreadable"); raise SystemExit(0)
+node = (manifest.get("components") or {}).get("node") or {}
+version = str(node.get("version") or "")
+if not version:
+    print("REFUSE manifest_missing_component"); raise SystemExit(0)
+withdrawn = (manifest.get("withdrawn") or {}).get("node") or []
+if version in [str(v) for v in withdrawn]:
+    print("REFUSE update_withdrawn " + version); raise SystemExit(0)
+rollout = node.get("rollout") or {}
+percent = rollout.get("percent", 100)
+excluded = str(device) in [str(v) for v in (rollout.get("exclude") or [])]
+included = [str(v) for v in (rollout.get("include") or [])]
+if excluded:
+    print("REFUSE rollout_excluded " + version); raise SystemExit(0)
+if isinstance(percent, int) and percent <= 0 and not (device in included):
+    print("REFUSE rollout_paused " + version); raise SystemExit(0)
+print("OK " + version)
+' "$DEVICE") || VERDICT="REFUSE manifest_fetch_failed"
+      case "$VERDICT" in
+        OK\ *)
+          VERSION="${VERDICT#OK }"
+          RESOLVED=1
+          LAYER_FOR_VERSION="$LAYER"
+          break
+          ;;
+        REFUSE\ *)
+          reason=$(printf '%s' "$VERDICT" | awk '{print $2}')
+          detail=$(printf '%s' "$VERDICT" | awk '{print $3}')
+          say "layer=$LAYER refused the release: $reason ${detail}"
+          LAYER_FAILURES+=("$LAYER:$reason")
+          fail "该版本已被发行方撤回或不在灰度范围内（$reason $detail），来源层 $LAYER；不安装旧版本"
+          ;;
+        *)
+          say "layer=$LAYER returned an unusable manifest"
+          LAYER_FAILURES+=("$LAYER:manifest_unreadable")
+          ;;
+      esac
+    else
+      say "layer=$LAYER could not be reached: $META_URL"
+      LAYER_FAILURES+=("$LAYER:unreachable")
+    fi
+  done
+  if [ "$RESOLVED" != 1 ]; then
+    fail "no release layer could be resolved: ${LAYER_FAILURES[*]:-none tried}"
   fi
   [ -n "$VERSION" ] && [ "$VERSION" != latest ] || fail "latest node version is empty"
-  say "latest node version: $VERSION"
+  say "latest node version: $VERSION (layer=$LAYER_FOR_VERSION)"
 fi
 [ -n "$ARCHIVE" ] || [ -n "$CONTROLLER" ] || fail "--controller is required (or set TETHER_CONTROLLER)"
 
@@ -276,35 +360,80 @@ if [ "$RUNTIME_MODE" != 1 ]; then
   ZIP="$ARCHIVE"
   if [ -z "$ZIP" ]; then
     ZIP="$PREFIX/tether-node-$VERSION.zip"
-    if [ -n "$BASE_URL" ]; then
-      ASSET_URL="${BASE_URL%/}/tether-node-$VERSION.zip"
-    else
-      ASSET_URL="https://github.com/qi001007/tether-harness/releases/download/v$VERSION/tether-node-$VERSION.zip"
-    fi
-    say "downloading tether-node $VERSION from $ASSET_URL ..."
+    # Layer order comes from the resolution above, so the bytes come from the same
+    # feed that was allowed to advertise them; the pinned GitHub tag is always kept
+    # as a last layer so a mirror that only holds old versions cannot win silently.
+    LAYER_URLS=()
+    for INDEX in "${!LAYER_KINDS[@]}"; do
+      # The two layers lay assets out differently: a mirror keeps the flat
+      # tether-node-<version>.zip the installer has always used, while GitHub
+      # namespaces each release under /v<version>/.
+      case "${LAYER_KINDS[$INDEX]}" in
+        origin) LAYER_URLS+=("${LAYER_ASSET_BASES[$INDEX]%/}/v$VERSION/tether-node-$VERSION.zip") ;;
+        *) LAYER_URLS+=("${LAYER_ASSET_BASES[$INDEX]%/}/tether-node-$VERSION.zip") ;;
+      esac
+    done
+    say "downloading tether-node $VERSION across ${#LAYER_URLS[@]} layer(s)"
     DOWNLOAD_TMP=$(mktemp "${ZIP}.tmp.XXXXXX") || fail "could not create temporary archive beside $ZIP"
     trap 'if [ -n "${DOWNLOAD_TMP:-}" ]; then rm -f "$DOWNLOAD_TMP"; fi' EXIT
     DOWNLOAD_OK=0
-    for ATTEMPT in 1 2 3; do
-      if curl -fL -o "$DOWNLOAD_TMP" "$ASSET_URL"; then
-        if python3 -m zipfile -t "$DOWNLOAD_TMP" >/dev/null 2>&1; then
-          mv -f "$DOWNLOAD_TMP" "$ZIP" || fail "could not promote downloaded archive to $ZIP"
-          DOWNLOAD_TMP=""
-          DOWNLOAD_OK=1
+    DOWNLOAD_FAILURES=()
+    SAME_ERROR=""
+    SAME_ERROR_RUN=0
+    STOP_REASON=""
+    ATTEMPT_TOTAL=0
+    for LAYER_INDEX in "${!LAYER_URLS[@]}"; do
+      ASSET_URL="${LAYER_URLS[$LAYER_INDEX]}"
+      LAYER_NAME="${LAYER_KINDS[$LAYER_INDEX]}"
+      for ATTEMPT in 1 2; do
+        ATTEMPT_TOTAL=$((ATTEMPT_TOTAL + 1))
+        CURL_STATUS=0
+        if curl -fL --max-time 600 -o "$DOWNLOAD_TMP" "$ASSET_URL"; then
+          if python3 -m zipfile -t "$DOWNLOAD_TMP" >/dev/null 2>&1; then
+            mv -f "$DOWNLOAD_TMP" "$ZIP" || fail "could not promote downloaded archive to $ZIP"
+            DOWNLOAD_TMP=""
+            DOWNLOAD_OK=1
+            say "archive came from layer=$LAYER_NAME"
+            break
+          fi
+          ERROR_SIGNATURE="$LAYER_NAME:invalid_zip"
+          say "layer=$LAYER_NAME attempt $ATTEMPT/2 returned an invalid ZIP"
+        else
+          CURL_STATUS=$?
+          ERROR_SIGNATURE="$LAYER_NAME:curl_$CURL_STATUS"
+          say "layer=$LAYER_NAME attempt $ATTEMPT/2 failed (curl exit $CURL_STATUS)"
+        fi
+        DOWNLOAD_FAILURES+=("$ERROR_SIGNATURE")
+        if [ "$ERROR_SIGNATURE" = "$SAME_ERROR" ]; then
+          SAME_ERROR_RUN=$((SAME_ERROR_RUN + 1))
+        else
+          SAME_ERROR="$ERROR_SIGNATURE"
+          SAME_ERROR_RUN=1
+        fi
+        if [ "$SAME_ERROR_RUN" -ge "$INSTALL_MAX_SAME_ERROR" ]; then
+          STOP_REASON="$ERROR_SIGNATURE repeated $SAME_ERROR_RUN times"
           break
         fi
-        say "download attempt $ATTEMPT/3 returned an invalid ZIP"
-      else
-        CURL_STATUS=$?
-        say "download attempt $ATTEMPT/3 failed (curl exit $CURL_STATUS)"
-        case "$CURL_STATUS" in
-          18|56) ;;
-          *) fail "download request failed (curl exit $CURL_STATUS): $ASSET_URL" ;;
-        esac
+        if [ "$CURL_STATUS" != 0 ] && [ "$CURL_STATUS" != 18 ] && [ "$CURL_STATUS" != 56 ]; then
+          break
+        fi
+        # Escalating pause, so a failing feed is not hammered at a fixed one-second rate.
+        LADDER_INDEX=$((ATTEMPT_TOTAL - 1))
+        if [ "$LADDER_INDEX" -ge "${#INSTALL_RETRY_LADDER[@]}" ]; then
+          LADDER_INDEX=$((${#INSTALL_RETRY_LADDER[@]} - 1))
+        fi
+        sleep "${INSTALL_RETRY_LADDER[$LADDER_INDEX]}"
+      done
+      if [ "$DOWNLOAD_OK" = 1 ] || [ -n "$STOP_REASON" ]; then
+        break
       fi
-      if [ "$ATTEMPT" -lt 3 ]; then sleep 1; fi
     done
-    [ "$DOWNLOAD_OK" = 1 ] || fail "could not download a complete valid archive after 3 attempts: $ASSET_URL"
+    if [ "$DOWNLOAD_OK" != 1 ]; then
+      if [ -n "$STOP_REASON" ]; then
+        fail "stopped after the same failure repeated: $STOP_REASON; layers tried: ${DOWNLOAD_FAILURES[*]:-none}"
+      fi
+      fail "no layer could deliver a complete valid archive: ${DOWNLOAD_FAILURES[*]:-none tried}"
+    fi
     trap - EXIT
   fi
   [ -f "$ZIP" ] || fail "archive not found: $ZIP"

@@ -2,18 +2,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import tarfile
 import tempfile
 from pathlib import Path
 
-from prepare_runtime import copy_prepared_tree
+from prepare_runtime import copy_prepared_tree, headless_deb_arch, headless_archive_name
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGING = ROOT / ".runtime" / "desktop-candidate"
 VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["node"]
-OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / VERSION / "headless" / "linux-x64"
-ARCHIVE_NAME = f"Tether-node-runtime-{VERSION}-linux-x64.tar.gz"
+# The target comes from the command line so one script builds both Linux shapes;
+# the name, the manifest `platform` and the deb arch all come from the same table
+# the installer verifies against.
+TARGET = os.environ.get("TETHER_HEADLESS_TARGET", "linux-x64")
+headless_deb_arch(TARGET)  # refuse an unknown target before writing a mislabeled archive
+OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / VERSION / "headless" / TARGET
+ARCHIVE_NAME = headless_archive_name(VERSION, TARGET)
 
 
 def main() -> int:
@@ -89,7 +95,7 @@ def main() -> int:
         runtime_manifest = {
             "schema": 1,
             "version": VERSION,
-            "platform": "linux-x64",
+            "platform": TARGET,
             "entry": "bin/tether-node",
             "python": "resources/tether-runtime/tether-python",
             "resources": "resources/tether-runtime",

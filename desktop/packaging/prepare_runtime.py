@@ -25,6 +25,26 @@ REMOTE_MANIFEST = Path(__file__).with_name("remote-desktop-assets.json")
 DSH_MANIFEST = Path(__file__).with_name("dsh-assets.json")
 LICENSE_DIR = Path(__file__).with_name("licenses")
 TARGETS = {"windows-x64", "linux-x64", "macos-x64", "macos-arm64"}
+# The headless Node is built per Linux target. One table drives the tar.gz name,
+# the .deb name, the runtime-manifest `platform` string, nfpm's `arch` and the
+# deb metadata, because the builder that writes them and the installer that
+# verifies them have to agree or an arm64 package is rejected by its own check.
+HEADLESS_TARGETS = {"linux-x64": "amd64", "linux-arm64": "arm64"}
+
+
+def headless_deb_arch(target: str) -> str:
+    try:
+        return HEADLESS_TARGETS[target]
+    except KeyError:
+        raise ValueError(f"unknown headless target: {target}") from None
+
+
+def headless_archive_name(version: str, target: str) -> str:
+    return f"Tether-node-runtime-{version}-{target}.tar.gz"
+
+
+def headless_deb_name(version: str, target: str) -> str:
+    return f"Tether-node-runtime-{version}-{target}.deb"
 PNPM_VERSION = "11.28.5"
 MESHCENTRAL_TIMESTAMP_SOURCE_SHA256 = "19de2c8d87e8bbd12b1a7b46fe0dfa4a78c3c46a70464814b1f106af1d07eb26"
 MESHCENTRAL_TIMESTAMP_PATCHED_SHA256 = "5abee591a3c5e1d8864b4e14df3832be7e11089ce60a3b39b9d31dc9614839ba"
