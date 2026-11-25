@@ -45,3 +45,5 @@
 - 2026-11-12：候选 metadata 提升 APP/Node 至 0.5.3，plugin 保持 0.2.93；未重建依赖、未发布。
 
 - 2026-11-12：修复 Codeg clean CI patch 漏掉的 `src/stores/tab-store.ts`：加入 `forceAgentSelection` 类型、draft 状态保存/恢复、选 Agent 消费与会话绑定清理；clean forward 与 canonical reverse 检查通过。
+
+- 2026-11-25：撤销自己的编辑**只许文本级 revert（逐段改回原句），禁止 `git checkout -- <file>` / `git restore`**——`tether/updates.py` 的全部未提交工作（多源 prefetch、`served_by`、`source_attempts`、`withdrawn`、`_record_rejections`，2557→3125 行）就曾被这么一条命令抹掉过一次，因为它按 HEAD 还原整个文件，分不清「我刚写坏的那一段」和「别人还没提交的成果」；本次靠 `.scratch/handoff-20261125/uncommitted-code.patch` 抽出的单文件补丁 `git apply` 才捞回，恢复前先留了 `.scratch/updates-restore-20261125/before/updates.py` 快照。同轮补回 `blocked_reason`/`blocked_by`：`check()` 与 `_error()` 共用 `_block_report()` 出同一对字段（无拒绝记录时留空，策略拒优先于网络噪声，首选源优先于回退源），并写进 `latest-<component>.json`、由 `status()` 读回，杜绝全源被拒时 `update_available=false` 被读成「已是最新」的静默降级。

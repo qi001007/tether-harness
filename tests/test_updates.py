@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import shutil
 import sqlite3
 import stat
 import subprocess
@@ -385,18 +387,20 @@ def test_check_manifest_cache_singleflights_and_prepare_fetches_fresh_manifest(
     manifest_url = install_manifest(artifact_server, "app", make_zip("app", version="0.2.1"),
                                     version="0.2.1")
     manager = UpdateManager(root, "app", manifest_url=manifest_url, state_dir=tmp_path / "state")
-    original_fetch = manager._fetch
+    original_fetch = manager._fetch_manifest
     fetched_manifests: list[str] = []
     fetched_lock = threading.Lock()
 
-    def counted_fetch(url: str, limit: int, *, timeout: float = 15.0, progress=None) -> bytes:
+    def counted_fetch(url: str, *, timeout: float = 15.0):
         if url == manifest_url:
             with fetched_lock:
                 fetched_manifests.append(url)
             time.sleep(0.05)
-        return original_fetch(url, limit, timeout=timeout, progress=progress)
+        return original_fetch(url, timeout=timeout)
 
-    monkeypatch.setattr(manager, "_fetch", counted_fetch)
+    # Seam moved when manifest reads grew a withdrawal header; the invariant being
+    # asserted is unchanged: five concurrent checks still cost one fetch.
+    monkeypatch.setattr(manager, "_fetch_manifest", counted_fetch)
     with ThreadPoolExecutor(max_workers=5) as pool:
         checked = list(pool.map(lambda _index: manager.check(), range(5)))
     assert all(item["ok"] and item["latest_version"] == "0.2.1" for item in checked)
@@ -1812,9 +1816,9 @@ def _signed_manifest(server: ArtifactServer, component: str, archive: bytes, *, 
 
 
 def _strict_manager(root: Path, url: str, state: Path, **kwargs) -> UpdateManager:
+    kwargs.setdefault("fallback_manifest_urls", [])
     return UpdateManager(root, "app", manifest_url=url, state_dir=state,
-                         allow_unsigned=False, public_key_hex=_TEST_PUBLIC_HEX,
-                         fallback_manifest_urls=[], **kwargs)
+                         allow_unsigned=False, public_key_hex=_TEST_PUBLIC_HEX, **kwargs)
 
 
 def test_signed_manifest_round_trip_and_tamper_detection(artifact_server: ArtifactServer, tmp_path: Path) -> None:
@@ -1936,21 +1940,31 @@ def test_manifest_disk_cache_is_used_when_the_network_fails(artifact_server: Art
     assert cached["stale"] is True
 
 
-def test_hub_artifact_preferred_then_mirror_then_manifest_url(
+def test_artifact_source_order_comes_from_the_hub_policy(
         artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
+    """The default is origin-first so a fleet does not burn the small Hub's uplink.
+
+    A policy pushed in the manifest can still put the mirror first, which is what
+    a device behind a filtered network needs. Reordering is allowed; dropping a
+    layer is not, so a mirror-only device keeps updating.
+    """
     archive = make_zip("app", version="0.2.1")
     sha = hashlib.sha256(archive).hexdigest()
     manifest_url = artifact_server.base + "/releases/manifest"
     hub_url = artifact_server.base + f"/releases/artifacts/{sha}"
     mirror_url = artifact_server.base + f"/mirror/{sha}"
+    official_url = artifact_server.base + "/official.zip"
 
-    def prepare_with_sources(suffix: str, available: set[str], mirror: str | None = None) -> tuple[dict, list[str]]:
+    def prepare_with_sources(suffix: str, available: set[str], mirror: str | None = None,
+                             policy: list[str] | None = None) -> tuple[dict, list[str]]:
         root = tmp_path / suffix / "install"
         seed_version(root)
         _signed_manifest(artifact_server, "app", archive)
         manifest = json.loads(artifact_server.files.pop("/manifest.json"))
         for item in manifest["components"].values():
-            item["url"] = artifact_server.base + "/official.zip"
+            item["url"] = official_url
+        if policy is not None:
+            manifest["artifact_sources"] = policy
         manifest["signature"] = _base64.b64encode(_TEST_KEY.sign(_canonical_bytes(manifest))).decode("ascii")
         artifact_server.files["/releases/manifest"] = json.dumps(manifest).encode()
         for path in ("/official.zip", f"/releases/artifacts/{sha}", f"/mirror/{sha}"):
@@ -1963,29 +1977,47 @@ def test_hub_artifact_preferred_then_mirror_then_manifest_url(
             monkeypatch.delenv("TETHER_UPDATE_ARTIFACT_MIRROR", raising=False)
         manager = _strict_manager(root, manifest_url, tmp_path / suffix / "state")
         requests: list[str] = []
-        fetch = manager._fetch
+        stream = manager._stream_once
 
-        def record_fetch(url: str, limit: int, *, timeout: float = 15.0, progress=None) -> bytes:
+        def record_stream(url: str, part, **kwargs):
             requests.append(url)
-            return fetch(url, limit, timeout=timeout, progress=progress)
+            return stream(url, part, **kwargs)
 
-        manager._fetch = record_fetch
+        manager._stream_once = record_stream
         return manager.prepare(), requests
 
-    prepared, requests = prepare_with_sources("official", {"/official.zip"}, "/mirror")
-    assert prepared["ok"] is True, prepared
-    artifact_requests = [url for url in requests if url != manifest_url]
-    assert artifact_requests == [hub_url, mirror_url, artifact_server.base + "/official.zip"]
+    def artifacts_of(requests: list[str]) -> list[str]:
+        return [url for url in requests if url != manifest_url]
 
-    prepared, requests = prepare_with_sources("hub", {f"/releases/artifacts/{sha}"}, "/mirror")
+    prepared, requests = prepare_with_sources("origin", {"/official.zip"})
     assert prepared["ok"] is True, prepared
-    artifact_requests = [url for url in requests if url != manifest_url]
-    assert artifact_requests == [hub_url]
+    assert artifacts_of(requests) == [official_url]
+    assert prepared["served_by"] == "origin"
 
-    prepared, requests = prepare_with_sources("mirror", {f"/mirror/{sha}"}, "/mirror")
+    prepared, requests = prepare_with_sources("hub_only", {f"/releases/artifacts/{sha}"})
     assert prepared["ok"] is True, prepared
-    artifact_requests = [url for url in requests if url != manifest_url]
-    assert artifact_requests == [hub_url, mirror_url]
+    assert artifacts_of(requests) == [official_url, hub_url]
+    assert prepared["served_by"] == "hub_mirror"
+
+    prepared, requests = prepare_with_sources("env", {f"/releases/artifacts/{sha}"}, "/mirror")
+    assert prepared["ok"] is True, prepared
+    assert artifacts_of(requests) == [mirror_url, official_url, hub_url]
+
+    prepared, requests = prepare_with_sources("policy", {f"/releases/artifacts/{sha}"},
+                                              "/mirror", policy=["hub_mirror", "origin"])
+    assert prepared["ok"] is True, prepared
+    assert artifacts_of(requests) == [hub_url]
+    assert prepared["served_by"] == "hub_mirror"
+
+
+def test_invalid_artifact_source_policy_is_rejected(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"))
+    _resign(artifact_server, lambda m: m.update({"artifact_sources": ["cdn_unknown"]}))
+    manager = _strict_manager(root, url, tmp_path / "state")
+
+    assert manager.check(force=True)["error_code"] == "invalid_manifest"
 
 
 def test_restart_cleared_requires_a_different_live_host_pid():
@@ -2160,3 +2192,580 @@ def test_latest_manifest_url_resolves_through_the_github_api(monkeypatch):
     updates._LATEST_RESOLVE_CACHE.pop(url, None)
     assert _resolve_latest_manifest_url(url) == "https://github.com/o/r/releases/download/v9.9.9/x.json"
     assert _resolve_latest_manifest_url("https://example.test/x.json") == "https://example.test/x.json"
+
+
+class FlakyArtifactServer:
+    """Serves Range requests and can cut the first response partway through."""
+
+    def __init__(self) -> None:
+        self.files: dict[str, bytes] = {}
+        self.cut_after: int | None = None
+        self.range_headers: list[str] = []
+        self.hang_paths: set[str] = set()
+        self.hang_seconds = 6.0
+        owner = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                payload = owner.files.get(self.path)
+                owner.range_headers.append(self.headers.get("Range") or "")
+                if self.path in owner.hang_paths:
+                    time.sleep(owner.hang_seconds)
+                if payload is None:
+                    self.send_error(404)
+                    return
+                match = re.fullmatch(r"bytes=(\d+)-", self.headers.get("Range") or "")
+                start = int(match.group(1)) if match else 0
+                body = payload[start:]
+                cut = owner.cut_after if self.path.endswith(".zip") else None
+                if cut is not None:
+                    owner.cut_after = None
+                if start:
+                    self.send_response(206)
+                    self.send_header("Content-Range", f"bytes {start}-{len(payload) - 1}/{len(payload)}")
+                else:
+                    self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                if cut is not None:
+                    # Announce the whole remainder, then drop the connection mid-body.
+                    self.wfile.write(body[:cut])
+                    self.close_connection = True
+                    return
+                self.wfile.write(body)
+
+            def log_message(self, _format: str, *_args) -> None:
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base = f"http://127.0.0.1:{self.server.server_port}"
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=3)
+
+
+@pytest.fixture
+def flaky_server():
+    server = FlakyArtifactServer()
+    yield server
+    server.close()
+
+
+def _large_app_archive() -> bytes:
+    return make_zip("app", version="0.2.1", extra={"tether/big.bin": os.urandom(3_000_000)})
+
+
+def test_download_resumes_after_a_cut_connection(flaky_server, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    archive = _large_app_archive()
+    url = _signed_manifest(flaky_server, "app", archive)
+    flaky_server.cut_after = len(archive) // 3
+    manager = _strict_manager(root, url, tmp_path / "state")
+
+    prepared = manager.prepare()
+    assert prepared["ok"] is True, prepared
+    assert manager._download_dir().joinpath(hashlib.sha256(archive).hexdigest()).read_bytes() == archive
+    assert any(header.startswith("bytes=") for header in flaky_server.range_headers)
+
+
+def test_verified_artifact_is_reused_without_a_second_download(flaky_server, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    archive = _large_app_archive()
+    sha = hashlib.sha256(archive).hexdigest()
+    url = _signed_manifest(flaky_server, "app", archive)
+    manager = _strict_manager(root, url, tmp_path / "state")
+
+    assert manager.prefetch()["ok"] is True
+    del flaky_server.files["/app.zip"]
+
+    assert manager.prepare()["ok"] is True
+    assert (manager._download_dir() / sha).is_file()
+
+
+def test_disk_space_shortage_stops_download_before_first_byte(flaky_server, tmp_path: Path, monkeypatch) -> None:
+    import tether.updates as updates
+
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(flaky_server, "app", _large_app_archive())
+    manager = _strict_manager(root, url, tmp_path / "state")
+    usage = type(shutil.disk_usage(tmp_path))
+    monkeypatch.setattr(updates.shutil, "disk_usage", lambda _path: usage(10**12, 10**12, 1024))
+
+    result = manager.prepare()
+    assert result["error_code"] == "insufficient_disk_space"
+    assert not list(manager._download_dir().glob("*.part"))
+
+
+def test_wrong_artifact_body_is_not_kept_for_resume(flaky_server, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    archive = _large_app_archive()
+    url = _signed_manifest(flaky_server, "app", archive)
+    flaky_server.files["/app.zip"] = bytes(len(archive))
+    manager = _strict_manager(root, url, tmp_path / "state")
+
+    assert manager.prepare()["error_code"] == "hash_mismatch"
+    assert not list(manager._download_dir().glob("*.part"))
+
+
+def test_prefetch_skips_when_the_component_is_already_latest(flaky_server, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(flaky_server, "app", make_zip("app", version="0.2.0"), version="0.2.0")
+    manager = _strict_manager(root, url, tmp_path / "state")
+
+    assert manager.prefetch()["skipped"] == "no_update"
+    assert not manager._download_dir().exists()
+
+
+def test_hub_manifest_is_ordered_before_the_github_origin(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("TETHER_UPDATE_MANIFEST_URL", raising=False)
+    monkeypatch.setenv("TETHER_CONTROLLER_URL", "https://hub.test")
+    manager = UpdateManager(tmp_path / "install", "node", fallback_manifest_urls=[])
+
+    assert manager._manifest_urls == ["https://hub.test/releases/manifest", DEFAULT_MANIFEST_URL]
+    assert manager.manifest_url == "https://hub.test/releases/manifest"
+
+
+def test_hub_manifest_wins_even_when_the_origin_answers_first(tmp_path: Path) -> None:
+    import tether.updates as updates
+
+    hub, origin = FlakyArtifactServer(), FlakyArtifactServer()
+    try:
+        root = tmp_path / "install"
+        seed_version(root)
+        archive = make_zip("app", version="0.2.1")
+        origin_url = _signed_manifest(origin, "app", archive)
+        hub_url = _signed_manifest(hub, "app", archive)
+        hub.hang_paths.add("/manifest.json")
+        hub.hang_seconds = 1.2
+        manager = _strict_manager(root, hub_url, tmp_path / "state", fallback_manifest_urls=[origin_url])
+
+        started = time.monotonic()
+        manifest = manager._load_manifest(force=True)
+        assert manifest["components"]["app"]["version"] == "0.2.1"
+        assert manager._last_source == hub_url
+        assert time.monotonic() - started < updates.MANIFEST_SOURCE_TIMEOUT
+    finally:
+        hub.close()
+        origin.close()
+
+
+def test_one_hanging_source_does_not_block_discovery(tmp_path: Path) -> None:
+    hub, origin = FlakyArtifactServer(), FlakyArtifactServer()
+    try:
+        root = tmp_path / "install"
+        seed_version(root)
+        archive = make_zip("app", version="0.2.1")
+        origin_url = _signed_manifest(origin, "app", archive)
+        _signed_manifest(hub, "app", archive)
+        hub.hang_paths.add("/manifest.json")
+        manager = _strict_manager(root, hub.base + "/manifest.json", tmp_path / "state",
+                                  fallback_manifest_urls=[origin_url])
+
+        started = time.monotonic()
+        manifest = manager._load_manifest(force=True)
+        elapsed = time.monotonic() - started
+
+        assert manifest["components"]["app"]["version"] == "0.2.1"
+        assert manager._last_source == origin_url
+        assert elapsed < 4.0, f"serial fallback cost {elapsed:.1f}s"
+    finally:
+        hub.close()
+        origin.close()
+
+
+def _resign(server: ArtifactServer, mutate) -> str:
+    manifest = json.loads(server.files["/manifest.json"])
+    manifest.pop("signature", None)
+    mutate(manifest)
+    manifest["signature"] = _base64.b64encode(
+        _TEST_KEY.sign(_canonical_bytes(manifest))).decode("ascii")
+    server.files["/manifest.json"] = json.dumps(manifest).encode()
+    return server.base + "/manifest.json"
+
+
+def test_withdrawn_version_is_not_advertised_or_prepared(flaky_server, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    archive = make_zip("app", version="0.2.1")
+    _signed_manifest(flaky_server, "app", archive)
+    url = _resign(flaky_server, lambda m: m.update({"withdrawn": {"app": ["0.2.1"]}}))
+    manager = _strict_manager(root, url, tmp_path / "state")
+
+    checked = manager.check(force=True)
+    assert checked["ok"] is True
+    assert checked["withdrawn"] is True
+    assert checked["update_available"] is False
+    assert checked["latest_version"] == "0.2.1"
+    assert manager.prepare()["error_code"] == "update_withdrawn"
+    assert manager.prefetch()["error_code"] == "update_withdrawn"
+
+
+def test_withdrawn_field_shape_is_validated(flaky_server, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(flaky_server, "app", make_zip("app", version="0.2.1"))
+    _resign(flaky_server, lambda m: m.update({"withdrawn": {"desktop": ["0.2.1"]}}))
+    manager = _strict_manager(root, url, tmp_path / "state")
+
+    assert manager.check(force=True)["error_code"] == "invalid_manifest"
+
+
+def test_other_components_still_update_when_only_app_is_withdrawn(flaky_server, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.2.1"))
+    _resign(flaky_server, lambda m: m.update({"withdrawn": {"app": ["0.2.1"]}}))
+    manager = UpdateManager(root, "node", manifest_url=url, state_dir=tmp_path / "state",
+                            allow_unsigned=False, public_key_hex=_TEST_PUBLIC_HEX,
+                            fallback_manifest_urls=[])
+
+    checked = manager.check(force=True)
+    assert checked["withdrawn"] is False
+    assert checked["update_available"] is True
+
+
+def test_cancel_stops_an_inflight_download_at_the_next_block(flaky_server, tmp_path: Path) -> None:
+    """Cancel applies to a running pull; a new prepare starts from a clean slate."""
+    root = tmp_path / "install"
+    seed_version(root)
+    archive = _large_app_archive()
+    sha = hashlib.sha256(archive).hexdigest()
+    url = _signed_manifest(flaky_server, "app", archive)
+    manager = _strict_manager(root, url, tmp_path / "state")
+    manifest = manager._load_manifest(force=True)
+    item = manifest["components"]["app"]
+
+    def progress(_received: int, _expected) -> None:
+        manager.cancel()
+
+    with pytest.raises(UpdateError) as raised:
+        manager._download_artifact(item, limit=180 * 1024 * 1024, manifest=manifest, progress=progress)
+
+    assert raised.value.code == "cancelled"
+    partial = manager._download_dir() / (sha + ".part")
+    assert partial.is_file() and 0 < partial.stat().st_size < len(archive)
+    assert not (manager._download_dir() / sha).exists()
+
+    manager._cancel.clear()
+    assert manager.prepare()["ok"] is True, "a stale cancel flag must not poison the next prepare"
+
+
+def test_prefetch_honours_the_hub_window_and_spreads_devices(flaky_server, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(flaky_server, "app", make_zip("app", version="0.2.1"))
+    now = 1_800_000_000.0
+    _resign(flaky_server, lambda m: [item.update({"not_before": now + 3600}) for item in m["components"].values()])
+
+    offsets = set()
+    for device in ("node-a", "node-b", "node-c", "node-d", "node-e"):
+        manager = UpdateManager(root, "app", manifest_url=url, state_dir=tmp_path / device,
+                                device=device, allow_unsigned=False, public_key_hex=_TEST_PUBLIC_HEX,
+                                fallback_manifest_urls=[])
+        result = manager.prefetch(now=now)
+        assert result["skipped"] == "scheduled"
+        assert result["scheduled_for"] >= now + 3600
+        offsets.add(result["scheduled_for"])
+        assert not manager._download_dir().exists()
+
+    assert len(offsets) > 1, "every device would start on the same second"
+    assert max(offsets) - min(offsets) <= 1800
+
+
+def test_default_source_plan_never_puts_the_hub_first(tmp_path: Path, monkeypatch) -> None:
+    """J17.1 default state: a fleet must not take its bytes from the small Hub server."""
+    monkeypatch.delenv("TETHER_UPDATE_ARTIFACT_MIRROR", raising=False)
+    manager = UpdateManager(tmp_path / "install", "node",
+                            manifest_url="https://hub.test/releases/manifest",
+                            state_dir=tmp_path / "state", fallback_manifest_urls=[])
+    manager._last_source = "https://hub.test/releases/manifest"
+    item = {"url": "https://github.com/o/r/releases/download/v1/tether-node-1.zip",
+            "sha256": "a" * 64, "size": 10}
+
+    plan = manager._artifact_sources(item, {"components": {"node": item}})
+
+    assert [kind for kind, _url in plan][0] == "origin"
+    assert "hub_mirror" in [kind for kind, _url in plan]
+
+def test_unreachable_hub_still_falls_through_to_the_origin(
+        flaky_server, tmp_path: Path, monkeypatch) -> None:
+    """Only semantic rejections stop the fallback; a dead Hub must not strand devices."""
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    root = tmp_path / "install"
+    seed_version(root)
+    hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"), version="0.5.14")
+    origin = FlakyArtifactServer()
+    try:
+        origin_url = _signed_manifest(origin, "node", make_zip("node", version="0.5.15"), version="0.5.15")
+        flaky_server.hang_paths.add("/manifest.json")
+        manager = _strict_manager(root, hub_url, tmp_path / "state", fallback_manifest_urls=[origin_url])
+
+        checked = manager.check(force=True)
+
+        assert checked["ok"] is True, checked
+        assert checked["latest_version"] == "0.5.15"
+        assert checked["manifest_source"] == origin_url
+    finally:
+        origin.close()
+
+
+def test_a_policy_rejected_primary_source_is_reported_but_not_fatal(
+        flaky_server, tmp_path: Path, monkeypatch) -> None:
+    """受滤网与旧通道设备仍要能降级拿到东西，但降级发生过必须看得见。"""
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    root = tmp_path / "install"
+    seed_version(root)
+    hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
+                               version="0.5.14", channel="preview")
+    origin = FlakyArtifactServer()
+    try:
+        origin_url = _signed_manifest(origin, "node", make_zip("node", version="0.4.11"),
+                                      version="0.4.11", channel="stable")
+        manager = _strict_manager(root, hub_url, tmp_path / "state", fallback_manifest_urls=[origin_url])
+
+        checked = manager.check(force=True)
+
+        assert checked["ok"] is True, checked
+        assert checked["latest_version"] == "0.4.11"
+        assert {"source": hub_url, "code": "channel_not_selected"} in checked["source_rejections"]
+        assert checked["policy_rejected_primary"] is True
+    finally:
+        origin.close()
+
+
+def test_a_transport_failure_does_not_look_like_a_policy_rejection(
+        flaky_server, tmp_path: Path, monkeypatch) -> None:
+    """字段一旦被网络噪声污染就没人再信它：Hub 只是没答上时不能报策略拒绝。"""
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    root = tmp_path / "install"
+    seed_version(root)
+    hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"), version="0.5.14")
+    origin = FlakyArtifactServer()
+    try:
+        origin_url = _signed_manifest(origin, "node", make_zip("node", version="0.5.15"), version="0.5.15")
+        flaky_server.hang_paths.add("/manifest.json")
+        manager = _strict_manager(root, hub_url, tmp_path / "state", fallback_manifest_urls=[origin_url])
+
+        checked = manager.check(force=True)
+
+        assert checked["ok"] is True, checked
+        assert checked["policy_rejected_primary"] is False
+        # Revised on purpose: source_rejections now carries every feed's outcome so
+        # an operator can see each reason, while policy_rejected_primary stays driven
+        # by policy codes only. Asserting the list is empty here was my earlier,
+        # weaker contract; the noise-proof assertion is the boolean above.
+        assert checked["source_rejections"] == [{"source": hub_url, "code": "download_failed"}]
+        assert checked["manifest_source"] == origin_url
+    finally:
+        origin.close()
+
+
+def test_a_policy_downgrade_survives_a_restart_through_the_persisted_record(
+        flaky_server, tmp_path: Path, monkeypatch) -> None:
+    """运维看的是重启后的那台机器，不是内存：字段必须落在 latest-<component>.json 里，
+    并且由一个全新实例回读出来，不能只在当次 check() 的返回值里活着。"""
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    root = tmp_path / "install"
+    seed_version(root)
+    hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
+                               version="0.5.14", channel="preview")
+    origin = FlakyArtifactServer()
+    try:
+        origin_url = _signed_manifest(origin, "node", make_zip("node", version="0.4.11"),
+                                      version="0.4.11", channel="stable")
+        state = tmp_path / "state"
+        checked = _strict_manager(root, hub_url, state,
+                                  fallback_manifest_urls=[origin_url]).check(force=True)
+        persisted = json.loads((state / "latest-app.json").read_text(encoding="utf-8"))
+        # 全新实例：只靠磁盘上那份记录，内存里的竞速结果已经不存在了。
+        reopened = _strict_manager(root, hub_url, state,
+                                   fallback_manifest_urls=[origin_url]).status()
+
+        assert checked["ok"] is True and checked["latest_version"] == "0.4.11"
+        assert persisted["policy_rejected_primary"] is True
+        assert {"source": hub_url, "code": "channel_not_selected"} in persisted["source_rejections"]
+        assert reopened["policy_rejected_primary"] is True
+        assert {"source": hub_url, "code": "channel_not_selected"} in reopened["source_rejections"]
+    finally:
+        origin.close()
+
+
+def test_every_source_refusing_still_records_why_each_one_refused(
+        flaky_server, tmp_path: Path, monkeypatch) -> None:
+    """「一个新版也看不到」恰恰全发生在所有源都被策略挡住时，那正是运维最需要
+    知道谁拒的、为何拒的一刻。失败路径不能只留一个 manifest_unavailable。"""
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    root = tmp_path / "install"
+    seed_version(root)
+    hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
+                               version="0.5.14", channel="preview")
+    origin = FlakyArtifactServer()
+    try:
+        origin_url = _signed_manifest(origin, "node", make_zip("node", version="0.5.15"),
+                                      version="0.5.15", channel="preview")
+        state = tmp_path / "state"
+        checked = _strict_manager(root, hub_url, state,
+                                  fallback_manifest_urls=[origin_url]).check(force=True)
+        persisted = json.loads((state / "latest-app.json").read_text(encoding="utf-8"))
+        reopened = _strict_manager(root, hub_url, state,
+                                   fallback_manifest_urls=[origin_url]).status()
+
+        assert checked["ok"] is False and checked["error_code"] == "channel_not_selected", checked
+        codes = {item["code"] for item in persisted["source_rejections"]}
+        sources = {item["source"] for item in persisted["source_rejections"]}
+        assert codes == {"channel_not_selected"}
+        assert sources == {hub_url, origin_url}
+        assert persisted["policy_rejected_primary"] is True
+        assert reopened["policy_rejected_primary"] is True
+        assert {item["source"] for item in reopened["source_rejections"]} == {hub_url, origin_url}
+    finally:
+        origin.close()
+
+
+def test_a_restarted_node_reads_back_each_feeds_own_reason(
+        flaky_server, tmp_path: Path, monkeypatch) -> None:
+    """混合故障现场：一个源被策略拒、一个源根本没答上，且没有任何陈旧清单可兜底。
+
+    上一版这条测试是假绿：第二次 check() 全源被拒时落到了磁盘陈旧清单，走的是成功
+    路径写盘，删掉落盘步骤它照样通过。这里改用全新 state，逼它真走失败路径。
+    """
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    root = tmp_path / "install"
+    seed_version(root)
+    hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
+                               version="0.5.14", channel="preview")
+    origin = FlakyArtifactServer()
+    try:
+        origin_url = _signed_manifest(origin, "node", make_zip("node", version="0.5.15"), version="0.5.15")
+        origin.hang_paths.add("/manifest.json")
+        cold = tmp_path / "cold-state"
+        checked = _strict_manager(root, hub_url, cold,
+                                  fallback_manifest_urls=[origin_url]).check(force=True)
+        reopened = _strict_manager(root, hub_url, cold,
+                                   fallback_manifest_urls=[origin_url]).status()
+
+        assert checked["ok"] is False, checked
+        reasons = {item["source"]: item["code"] for item in reopened["source_rejections"]}
+        assert reasons == {hub_url: "channel_not_selected", origin_url: "download_failed"}
+        assert reopened["policy_rejected_primary"] is True
+        assert reopened["ok"] is True
+    finally:
+        origin.close()
+
+
+def test_a_policy_blocked_device_says_why_instead_of_looking_up_to_date(
+        flaky_server, tmp_path: Path, monkeypatch) -> None:
+    """releases/latest 回答 0.4.11 时，调用方必须能读出「被通道挡住」，不是「已是最新」。"""
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    root = tmp_path / "install"
+    root.mkdir(parents=True)
+    # 现场是设备已经在 0.5.14：只有这时源站的 0.4.11 才会既「没有更新」又是被通道
+    # 挡住的。用 seed_version 的 0.2.0 会让 0.4.11 真的更新，测不到这个区别。
+    (root / "version.json").write_text(json.dumps({"schema": 1, "components": {
+        "app": "0.5.14", "plugin": "0.2.93", "node": "0.5.14"}}), encoding="utf-8")
+    hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
+                               version="0.5.14", channel="preview")
+    origin = FlakyArtifactServer()
+    try:
+        origin_url = _signed_manifest(origin, "node", make_zip("node", version="0.4.11"),
+                                      version="0.4.11", channel="stable")
+        checked = _strict_manager(root, hub_url, tmp_path / "state",
+                                  fallback_manifest_urls=[origin_url]).check(force=True)
+
+        assert checked["ok"] is True and checked["update_available"] is False
+        assert checked["blocked_reason"] == "channel_not_selected", checked
+        assert checked["blocked_by"] == hub_url
+    finally:
+        origin.close()
+
+
+def test_a_genuinely_up_to_date_device_reports_no_block(tmp_path: Path) -> None:
+    """反向：真的没更新时不得冒出 blocked_reason，否则这个字段很快没人信。"""
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(flaky_server_unused := FlakyArtifactServer(), "node",
+                           make_zip("node", version="0.2.0"), version="0.2.0")
+    try:
+        checked = _strict_manager(root, url, tmp_path / "state").check(force=True)
+
+        assert checked["ok"] is True
+        assert checked["blocked_reason"] == ""
+        assert checked["blocked_by"] == ""
+    finally:
+        flaky_server_unused.close()
+
+
+def test_an_all_refused_check_names_the_block_and_survives_a_restart(
+        flaky_server, tmp_path: Path, monkeypatch) -> None:
+    """一个源都没答上时，update_available=false 是「没查到」，不是「已是最新」。
+
+    判据分三段：失败出口当场带这对字段 → 字段落进 latest-app.json → 换新实例
+    （等价于节点重启）后 status() 还读得回来。status() 不重新取清单，不落盘就永远看不见。
+    """
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    root = tmp_path / "install"
+    root.mkdir(parents=True)
+    # 现场是设备已经在 0.5.14，不是 seed_version 的 0.2.0：本条测的是「查不到」，
+    # 种子版本必须让设备确实没有可装的更新，否则判据会把错误前提当成通过。
+    (root / "version.json").write_text(json.dumps({"schema": 1, "components": {
+        "app": "0.5.14", "plugin": "0.2.93", "node": "0.5.14"}}), encoding="utf-8")
+    hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
+                               version="0.5.14", channel="preview")
+    origin = FlakyArtifactServer()
+    try:
+        origin_url = _signed_manifest(origin, "node", make_zip("node", version="0.5.15"),
+                                      version="0.5.15", channel="preview")
+        cold = tmp_path / "cold-state"
+        checked = _strict_manager(root, hub_url, cold,
+                                  fallback_manifest_urls=[origin_url]).check(force=True)
+        persisted = json.loads((cold / "latest-app.json").read_text(encoding="utf-8"))
+        reopened = _strict_manager(root, hub_url, cold,
+                                   fallback_manifest_urls=[origin_url]).status()
+
+        assert checked["ok"] is False and checked["error_code"] == "channel_not_selected", checked
+        assert checked["blocked_reason"] == "channel_not_selected", checked
+        assert checked["blocked_by"] == hub_url
+        assert persisted["blocked_reason"] == "channel_not_selected", persisted
+        assert persisted["blocked_by"] == hub_url
+        assert reopened["ok"] is True and reopened["update_available"] is False
+        assert reopened["latest_version"] is None
+        assert reopened["blocked_reason"] == "channel_not_selected", reopened
+        assert reopened["blocked_by"] == hub_url
+    finally:
+        origin.close()
+
+
+def test_the_block_pair_clears_once_the_feed_answers_again(
+        flaky_server, tmp_path: Path, monkeypatch) -> None:
+    """反向：同一次检查先被通道挡住、放行后字段必须清空，否则它变成第二句谎话。"""
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    root = tmp_path / "install"
+    root.mkdir(parents=True)
+    (root / "version.json").write_text(json.dumps({"schema": 1, "components": {
+        "app": "0.5.14", "plugin": "0.2.93", "node": "0.5.14"}}), encoding="utf-8")
+    archive = make_zip("node", version="0.5.14")
+    url = _signed_manifest(flaky_server, "node", archive, version="0.5.14", channel="preview")
+    state = tmp_path / "state"
+    blocked = _strict_manager(root, url, state).check(force=True)
+    assert blocked["ok"] is False, blocked
+    assert blocked["blocked_reason"] == "channel_not_selected", blocked
+
+    # 同一个 URL 换成已放行的 stable 通道重签，再查一次：必须走成功路径且不留残值。
+    _signed_manifest(flaky_server, "node", archive, version="0.5.14", channel="stable")
+    cleared = _strict_manager(root, url, state).check(force=True)
+    persisted = json.loads((state / "latest-app.json").read_text(encoding="utf-8"))
+    reopened = _strict_manager(root, url, state).status()
+
+    assert cleared["ok"] is True and cleared["update_available"] is False, cleared
+    assert cleared["blocked_reason"] == "" and cleared["blocked_by"] == "", cleared
+    assert persisted["blocked_reason"] == "" and persisted["blocked_by"] == "", persisted
+    assert reopened["blocked_reason"] == "" and reopened["blocked_by"] == "", reopened

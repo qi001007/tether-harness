@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import copy
+import http.client
 import socket
 import subprocess
 import sys
@@ -23,7 +24,9 @@ import urllib.parse
 import urllib.request
 import uuid
 import zipfile
-from concurrent.futures import Future, TimeoutError as FutureTimeout
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
+from concurrent.futures import wait as futures_wait
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
@@ -67,7 +70,7 @@ def _resolve_latest_manifest_url(url: str) -> str:
         request = urllib.request.Request(
             f"https://api.github.com/repos/{owner}/{repo}/releases/latest",
             headers={"Accept": "application/vnd.github+json", "User-Agent": "Tether-Updater"})
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=MANIFEST_SOURCE_TIMEOUT) as response:
             data = json.loads(response.read(MAX_MANIFEST_BYTES))
         tag = data.get("tag_name")
         if isinstance(tag, str) and re.fullmatch(r"v\d+\.\d+\.\d+", tag):
@@ -89,11 +92,33 @@ PLUGIN_HOT_RELOAD_GRACE = 8.0
 MANIFEST_CHECK_CACHE_TTL = 60.0
 MANIFEST_DISK_CACHE_TTL = 600.0
 MANIFEST_DISK_MAX_AGE = 7 * 24 * 3600.0
-MANIFEST_CHECK_TIMEOUT = 15.0
-ARTIFACT_CHECK_TIMEOUT = 60.0
+# Discovery is raced, not queued: the update page needs the first signed manifest
+# in seconds, so no single source may hold the whole check behind its own timeout.
+MANIFEST_SOURCE_TIMEOUT = 3.0
+MANIFEST_RACE_TIMEOUT = 4.5
+# Artifacts stream to disk. A node capped at 384 MiB has to be able to pull a
+# 900 MiB Debian package, so the budget is per stalled read, never per download.
+DOWNLOAD_BLOCK_BYTES = 256 * 1024
+DOWNLOAD_READ_TIMEOUT = 20.0
+DOWNLOAD_ATTEMPTS = 4
+DOWNLOAD_BACKOFF_SECONDS = (0.5, 2.0, 5.0)
+DOWNLOAD_HEADROOM_BYTES = 512 * 1024 * 1024
+# A release aimed at a fleet must not start a hundred pulls on the same second.
+# Unless the Hub narrows the window, each device offsets by hash(device_id) inside
+# this span.
+PREFETCH_JITTER_SECONDS = 1800.0
+ARTIFACT_SOURCE_KINDS = ("origin", "hub_mirror", "explicit_mirror", "lan_mirror")
+# A source that answered and then refused us on release policy is a different
+# fact from a source that never replied. Only the first is worth showing: if
+# network noise landed in here, people would stop reading the field.
+TRANSPORT_REJECTION_CODES = frozenset({
+    "download_failed", "manifest_missing", "manifest_unavailable",
+    "insecure_url", "insecure_redirect",
+})
 _manifest_cache_lock = threading.Lock()
 _manifest_check_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _manifest_check_flights: dict[str, Future[dict[str, Any]]] = {}
+_download_locks: dict[str, threading.Lock] = {}
 
 PLUGIN_PACKAGE_MAP = {
     "dsh-plugin-tether": "tether-dsh-plugin",
@@ -216,6 +241,9 @@ class UpdateError(Exception):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+        # Which configured feed produced this refusal. Without it a policy
+        # rejection and a dead mirror look identical in every downstream report.
+        self.source = ""
 
 
 def _semver(value: Any) -> tuple[int, int, int, tuple[str, ...]]:
@@ -399,6 +427,64 @@ def _rollout_allows(item: dict[str, Any], component: str, version: str, device: 
     return bucket < percent
 
 
+def _is_withdrawn(manifest: dict[str, Any], component: str, version: str) -> bool:
+    """Whether the release feed marks this package as withdrawn.
+
+    The list reaches us either inside a signed manifest or merged in afterwards from
+    the Hub's withdrawal header, never from a table baked into one APP build: a
+    device still on an older release has no such table and would keep offering the
+    pulled package.
+    """
+    listed = manifest.get("withdrawn")
+    if not isinstance(listed, dict):
+        return False
+    try:
+        base = _semver(version)[:3]
+        return any(_semver(value)[:3] == base for value in listed.get(component) or [])
+    except UpdateError:
+        return False
+
+
+def parse_withdrawn_header(value: str | None) -> dict[str, list[str]]:
+    """Decode the Hub's `X-Tether-Withdrawn: app:0.5.14;node:` ledger.
+
+    The ledger is a header rather than a manifest field because canonical_bytes()
+    signs every key except `signature`: an injected field would change the signed
+    bytes and every client would answer signature_invalid.
+    """
+    table: dict[str, list[str]] = {}
+    for group in str(value or "").split(";"):
+        if not group or ":" not in group:
+            continue
+        component, _, versions = group.partition(":")
+        component = component.strip()
+        if component not in COMPONENTS:
+            continue
+        entries = [entry.strip() for entry in versions.split(",") if entry.strip()]
+        if entries:
+            table.setdefault(component, []).extend(entries)
+    return table
+
+
+def merge_withdrawn(manifest: dict[str, Any], table: dict[str, list[str]]) -> dict[str, Any]:
+    """Fold the header ledger into a manifest that has already been verified.
+
+    Upstream-declared entries are kept: the header is an additional authority, not a
+    replacement, so a Hub that has not been told about a withdrawal cannot undo one
+    the release owner signed.
+    """
+    if not table:
+        return manifest
+    merged = dict(manifest)
+    existing = merged.get("withdrawn")
+    combined: dict[str, list[str]] = ({str(key): list(value) for key, value in existing.items()}
+                                      if isinstance(existing, dict) else {})
+    for component, versions in table.items():
+        combined[component] = sorted(set(combined.get(component, [])) | set(versions))
+    merged["withdrawn"] = combined
+    return merged
+
+
 def _safe_device(value: str | None) -> str:
     raw = value if isinstance(value, str) and value.strip() else os.environ.get("TETHER_DEVICE", "")
     if not raw:
@@ -566,6 +652,49 @@ def _is_loopback(host: str | None) -> bool:
     return normalized == "localhost" or normalized == "::1" or normalized.startswith("127.")
 
 
+def _range_start(value: str | None) -> int | None:
+    """Read the first byte index out of a ``Content-Range: bytes 100-200/201`` header."""
+    match = re.fullmatch(r"bytes\s+(\d+)-\d+/\d+", str(value or "").strip())
+    return int(match.group(1)) if match else None
+
+
+def hub_manifest_url(controller_url: str | None) -> str:
+    """Derive the self-hosted Hub manifest from a controller origin.
+
+    The Hub mirrors and re-verifies release artifacts, so it is the fast path;
+    GitHub is only the upstream origin and stays last in the candidate list.
+    """
+    value = str(controller_url or "").strip()
+    if not value:
+        return ""
+    try:
+        parts = urllib.parse.urlsplit(value)
+    except ValueError:
+        return ""
+    host = (parts.hostname or "").lower()
+    if not host or host in {"127.0.0.1", "::1", "localhost"}:
+        return ""
+    if parts.scheme not in {"http", "https", "ws", "wss"}:
+        return ""
+    scheme = "https" if parts.scheme in {"wss", "https"} else "http"
+    return f"{scheme}://{parts.netloc}/releases/manifest"
+
+
+def debian_architecture(machine: str | None = None) -> str | None:
+    """Map a host machine name to the Debian architecture used in package names.
+
+    One mapping for the whole updater: the manifest validator, the deb artifact
+    selector and the dpkg-owned update path must not each keep their own table,
+    or an arm64 device gets a package built for one name and verified against
+    another.
+    """
+    if sys.platform != "linux" and machine is None:
+        return None
+    value = (machine if machine is not None else platform.machine()).lower()
+    return {"x86_64": "amd64", "amd64": "amd64",
+            "aarch64": "arm64", "arm64": "arm64"}.get(value)
+
+
 class UpdateManager:
     """Check, stage, and apply allowlisted component updates from a trusted manifest."""
 
@@ -600,12 +729,22 @@ class UpdateManager:
         self.app_binding_required = bool(app_binding_required)
         self.app_credential = app_credential
         explicit_url = manifest_url is not None
-        self.manifest_url = manifest_url or os.environ.get("TETHER_UPDATE_MANIFEST_URL") or DEFAULT_MANIFEST_URL
-        self.controller_url = controller_url or os.environ.get("TETHER_CONTROLLER_URL") or self.manifest_url
+        configured = str(manifest_url or os.environ.get("TETHER_UPDATE_MANIFEST_URL") or "").strip()
+        controller = str(controller_url or os.environ.get("TETHER_CONTROLLER_URL") or "").strip()
+        candidates: list[str] = []
+        if configured:
+            candidates.append(configured)
+        else:
+            # With no feed pinned by hand, the Hub this device is paired to answers
+            # from its own cache; GitHub needs an extra api.github.com hop first.
+            candidates.append(hub_manifest_url(controller))
+        candidates.append(configured or DEFAULT_MANIFEST_URL)
+        candidates.extend(fallback_manifest_urls if fallback_manifest_urls is not None
+                          else ([DEFAULT_MANIFEST_URL] if configured else []))
+        self.manifest_url = next((url for url in candidates if isinstance(url, str) and url), DEFAULT_MANIFEST_URL)
+        self.controller_url = controller or self.manifest_url
         self._manifest_urls = []
-        urls = [self.manifest_url]
-        urls.extend([DEFAULT_MANIFEST_URL] if fallback_manifest_urls is None else fallback_manifest_urls)
-        for url in urls:
+        for url in candidates:
             if isinstance(url, str) and url and url not in self._manifest_urls:
                 self._manifest_urls.append(url)
         self._allow_loopback_http = explicit_url and self._is_loopback_http_url(self.manifest_url)
@@ -618,7 +757,10 @@ class UpdateManager:
         if self.channel not in {"stable", "beta", "preview"}:
             self.channel = "stable"
         self._disk_manifest_path = self.state_dir / "manifest-cache.json"
+        self._cancel = threading.Event()
         self._last_source = ""
+        self._source_rejections: list[dict[str, str]] = []
+        self._policy_rejected_primary = False
         self._last_stale = False
         self._last_checked_at = 0.0
         self._checkout_cache: tuple[float, dict[str, Any]] | None = None
@@ -640,11 +782,7 @@ class UpdateManager:
 
     @staticmethod
     def _debian_architecture() -> str | None:
-        if sys.platform != "linux":
-            return None
-        machine = platform.machine().lower()
-        return {"x86_64": "amd64", "amd64": "amd64",
-                "aarch64": "arm64", "arm64": "arm64"}.get(machine)
+        return debian_architecture()
 
     def _node_debian_artifact(self, item: dict[str, Any]) -> dict[str, Any]:
         architecture = self._debian_architecture()
@@ -710,13 +848,310 @@ class UpdateManager:
             raise UpdateError("download_failed") from None
         except UpdateError:
             raise
-        except (OSError, urllib.error.URLError, TimeoutError):
+        except (OSError, urllib.error.URLError, TimeoutError, http.client.HTTPException):
             raise UpdateError("download_failed") from None
 
-    def _read_manifest(self, url: str | None = None, *, timeout: float = MANIFEST_CHECK_TIMEOUT) -> dict[str, Any]:
+    def _download_dir(self) -> Path:
+        return self.state_dir / "downloads"
+
+    @staticmethod
+    def _artifact_key(sha256: Any) -> str:
+        if not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
+            raise UpdateError("invalid_manifest")
+        return sha256
+
+    def _artifact_sources(self, item: dict[str, Any],
+                          manifest: dict[str, Any] | None = None) -> list[tuple[str, str]]:
+        """Ordered (layer, url) pairs the bytes may come from.
+
+        The order is a Hub-pushed policy, not a client constant: a public user
+        must not spend the small Hub server's uplink, while a device behind a
+        filtered network needs the mirror first. The policy may reorder the known
+        layers but never removes one, so a device that can only reach the mirror
+        still updates. Default is origin first, mirror as fallback.
+        """
+        sha256 = item["sha256"]
+        candidates: dict[str, str] = {"origin": str(item.get("url") or "")}
+        source = self._last_source
+        if isinstance(source, str) and source.endswith("/releases/manifest"):
+            candidates["hub_mirror"] = source[: -len("/manifest")] + "/artifacts/" + sha256
+        override = os.environ.get("TETHER_UPDATE_ARTIFACT_MIRROR", "").strip()
+        if override:
+            candidates["explicit_mirror"] = override.rstrip("/") + "/" + sha256
+        policy = (manifest or {}).get("artifact_sources")
+        if not isinstance(policy, list):
+            policy = ["explicit_mirror", "origin", "hub_mirror"] if override else ["origin", "hub_mirror"]
+        ordered = [kind for kind in policy if kind in candidates]
+        ordered += [kind for kind in candidates if kind not in ordered]
+        return [(kind, candidates[kind]) for kind in dict.fromkeys(ordered) if candidates[kind]]
+
+    def _artifact_urls(self, item: dict[str, Any],
+                       manifest: dict[str, Any] | None = None) -> list[str]:
+        return [url for _kind, url in self._artifact_sources(item, manifest)]
+
+    def _cached_artifact(self, key: str, size: int) -> Path | None:
+        """Return a previously verified artifact, trusting only its own stamp."""
+        path = self._download_dir() / key
+        try:
+            if path.is_symlink() or path.stat().st_size != size:
+                return None
+            stamp = _json_object(path.with_name(key + ".verified").read_bytes())
+        except (OSError, UpdateError):
+            return None
+        if stamp.get("sha256") != key or stamp.get("size") != size:
+            return None
+        return path
+
+    def _require_disk_space(self, needed: int) -> None:
+        directory = self._download_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        try:
+            free = shutil.disk_usage(directory).free
+        except OSError:
+            return
+        if free < needed + DOWNLOAD_HEADROOM_BYTES:
+            raise UpdateError("insufficient_disk_space")
+
+    def _stream_once(self, url: str, part: Path, *, size: int, limit: int,
+                     progress: Callable[[int, int | None], None] | None) -> tuple[int, str]:
+        """Append ``url`` into ``part`` honouring Range; return (bytes, sha256).
+
+        The timeout bounds a single stalled read, so a slow mirror costs one
+        attempt instead of the whole download budget.
+        """
+        if not self._url_allowed(url):
+            raise UpdateError("insecure_url")
+        offset = part.stat().st_size if part.is_file() else 0
+        digest = hashlib.sha256()
+        if offset:
+            with part.open("rb") as existing:
+                for block in iter(lambda: existing.read(DOWNLOAD_BLOCK_BYTES), b""):
+                    digest.update(block)
+        headers = {"User-Agent": "Tether-Updater/" + UPDATER_VERSION}
+        if offset:
+            headers["Range"] = f"bytes={offset}-"
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with self._opener(url).open(request, timeout=DOWNLOAD_READ_TIMEOUT) as response:
+                if not self._url_allowed(response.geturl()):
+                    raise UpdateError("insecure_redirect")
+                status = getattr(response, "status", 200) or 200
+                resumed = offset > 0 and status == 206
+                if offset and not resumed:
+                    offset = 0
+                    digest = hashlib.sha256()
+                elif resumed and _range_start(response.headers.get("Content-Range")) != offset:
+                    raise UpdateError("download_resume_mismatch")
+                total = offset
+                with part.open("ab" if resumed else "wb") as handle:
+                    while True:
+                        if self._cancel.is_set():
+                            raise UpdateError("cancelled")
+                        chunk = response.read(DOWNLOAD_BLOCK_BYTES)
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        if total > limit:
+                            raise UpdateError("download_too_large")
+                        handle.write(chunk)
+                        digest.update(chunk)
+                        if progress is not None:
+                            progress(total, size)
+                return total, digest.hexdigest()
+        except urllib.error.HTTPError:
+            raise UpdateError("download_failed") from None
+        except UpdateError:
+            raise
+        except (OSError, urllib.error.URLError, TimeoutError, http.client.HTTPException):
+            raise UpdateError("download_failed") from None
+
+    def _download_lock(self, key: str) -> threading.Lock:
+        with _manifest_cache_lock:
+            lock = _download_locks.get(key)
+            if lock is None:
+                lock = _download_locks[key] = threading.Lock()
+            return lock
+
+    def cancel(self) -> dict[str, Any]:
+        """Ask an in-flight download or prepare to stop at the next block."""
+        self._cancel.set()
+        return {"ok": True, "component": self.component, "cancelled": True, "error": ""}
+
+    def _download_artifact(self, item: dict[str, Any], *, limit: int,
+                           manifest: dict[str, Any] | None = None,
+                           progress: Callable[[int, int | None], None] | None = None) -> dict[str, Any]:
+        """Fetch one artifact to disk, resuming across retries and reusing the cache.
+
+        Nothing here holds the archive in memory: the Linux node package is
+        hundreds of megabytes and the smallest target node runs under 384 MiB.
+        The returned record says which bandwidth layer served the bytes, because
+        "did this fleet just burn the Hub's uplink" has to be answerable from the
+        job itself instead of reconstructed from logs.
+        """
+        key = self._artifact_key(item.get("sha256"))
+        size = item["size"]
+        cached = self._cached_artifact(key, size)
+        if cached is not None:
+            if progress is not None:
+                progress(size, size)
+            return {"path": cached, "served_by": "cache", "attempts": []}
+        directory = self._download_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        # One partial file per digest, so a retry resumes what the last attempt
+        # already proved correct instead of starting the package over.
+        with self._download_lock(key):
+            cached = self._cached_artifact(key, size)
+            if cached is not None:
+                if progress is not None:
+                    progress(size, size)
+                return {"path": cached, "served_by": "cache", "attempts": []}
+            self._require_disk_space(size)
+            part = directory / (key + ".part")
+            if part.is_file() and part.stat().st_size > size:
+                part.unlink()
+            sources = self._artifact_sources(item, manifest)
+            attempts: list[dict[str, Any]] = []
+            errors: list[UpdateError] = []
+            for attempt in range(DOWNLOAD_ATTEMPTS):
+                if self._cancel.is_set():
+                    raise UpdateError("cancelled")
+                for kind, url in sources:
+                    if self._cancel.is_set():
+                        raise UpdateError("cancelled")
+                    try:
+                        total, digest = self._stream_once(url, part, size=size, limit=limit, progress=progress)
+                        if total != size:
+                            # The peer closed early. What is on disk is still a valid
+                            # prefix, so keep it and let the next attempt resume from it.
+                            raise UpdateError("download_failed")
+                        if digest != key:
+                            raise UpdateError("hash_mismatch")
+                    except UpdateError as exc:
+                        if exc.code == "cancelled":
+                            raise
+                        if exc.code == "hash_mismatch":
+                            part.unlink(missing_ok=True)
+                        attempts.append({"attempt": attempt + 1, "source": kind,
+                                         "error": exc.code, "bytes": part.stat().st_size if part.is_file() else 0})
+                        errors.append(exc)
+                        continue
+                    artifact = directory / key
+                    os.replace(part, artifact)
+                    self._write_atomic(artifact.with_name(key + ".verified"), json.dumps({
+                        "sha256": key, "size": size, "verified_at": time.time(),
+                    }).encode())
+                    return {"path": artifact, "served_by": kind, "attempts": attempts}
+                if attempt + 1 < DOWNLOAD_ATTEMPTS:
+                    time.sleep(DOWNLOAD_BACKOFF_SECONDS[min(attempt, len(DOWNLOAD_BACKOFF_SECONDS) - 1)])
+            if errors:
+                raise errors[-1]
+            raise UpdateError("download_failed")
+
+    def _prefetch_due(self, item: dict[str, Any], now: float) -> tuple[bool, float]:
+        """Whether this device may start pulling bytes yet.
+
+        A release pushed to a hundred nodes at once would otherwise have a
+        hundred simultaneous pulls on the same second. The Hub supplies the
+        window; the per-device offset comes from the device id so the batch
+        spreads itself without needing a central scheduler.
+        """
+        not_before = item.get("not_before")
+        start = float(not_before) if isinstance(not_before, (int, float)) else 0.0
+        window = item.get("prefetch_window")
+        span = float(window) if isinstance(window, (int, float)) and window else PREFETCH_JITTER_SECONDS
+        offset = int.from_bytes(hashlib.sha256(self.device.encode()).digest()[:4], "big") % max(1, int(span))
+        due = start + offset
+        return now >= due, due
+
+    def prefetch(self, now: float | None = None) -> dict[str, Any]:
+        """Download and verify the newest package without staging or applying it.
+
+        The update page calls this as soon as a newer version is discovered, so
+        pressing 更新 later does not put the download in the user's way. Outside
+        the Hub-pushed window it reports when it will be due and does nothing.
+        """
+        try:
+            self._cancel.clear()
+            clock = time.time() if now is None else float(now)
+            manifest = self._load_manifest(force=True)
+            item, debian_package = self._selected_artifacts(manifest)
+            component_version = self._versions()[self.component]
+            target = debian_package or item
+            base = {"ok": True, "component": self.component, "version": item["version"],
+                    "error": "", "error_code": "",
+                    "source_rejections": list(self._source_rejections),
+                    "policy_rejected_primary": self._policy_rejected_primary}
+            if not _is_newer(item["version"], component_version):
+                return {**base, "skipped": "no_update", "size": 0}
+            if not _rollout_allows(item, self.component, item["version"], self.device):
+                return {**base, "skipped": "rollout_paused", "size": 0}
+            if _is_withdrawn(manifest, self.component, item["version"]):
+                return {**base, "ok": False, "error": "update_withdrawn", "error_code": "update_withdrawn"}
+            due, scheduled_for = self._prefetch_due(item, clock)
+            if not due:
+                return {**base, "skipped": "scheduled", "size": 0,
+                        "scheduled_for": int(scheduled_for), "retry_in_s": int(scheduled_for - clock)}
+            limit = MAX_DEB_BYTES if debian_package is not None else MAX_ARCHIVE_BYTES
+            served = self._download_artifact(target, limit=limit, manifest=manifest)
+            return {**base, "size": target["size"], "sha256": target["sha256"],
+                    "artifact_path": str(served["path"]), "served_by": served["served_by"],
+                    "source_attempts": served["attempts"]}
+        except UpdateError as exc:
+            return {"ok": False, "component": self.component, "error": exc.code, "error_code": exc.code}
+        except OSError:
+            return {"ok": False, "component": self.component, "error": "prefetch_failed",
+                    "error_code": "prefetch_failed"}
+
+    def _stage_artifact_copy(self, source: Path, target: Path) -> None:
+        """Put a cached artifact where the prepared record expects it, without a copy when possible."""
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            target.unlink()
+        try:
+            os.link(source, target)
+        except OSError:
+            shutil.copyfile(source, target)
+
+    def _selected_artifacts(self, manifest: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        item = manifest["components"][self.component]
+        debian_package = None
+        if (self.component == "node"
+                and os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower() == "deb_package_manager"):
+            debian_package = self._node_debian_artifact(item)
+        return item, debian_package
+
+    def _fetch_manifest(self, url: str, *, timeout: float) -> tuple[bytes, str]:
+        """Fetch a manifest body plus its withdrawal header.
+
+        Kept separate from _fetch() because the manifest is the one small response
+        whose headers carry release policy the body cannot hold without breaking the
+        signature.
+        """
+        if not self._url_allowed(url):
+            raise UpdateError("insecure_url")
+        request = urllib.request.Request(url, headers={"User-Agent": "Tether-Updater/" + UPDATER_VERSION})
+        try:
+            with self._opener(url).open(request, timeout=timeout) as response:
+                if not self._url_allowed(response.geturl()):
+                    raise UpdateError("insecure_redirect")
+                body = response.read(MAX_MANIFEST_BYTES + 1)
+                if len(body) > MAX_MANIFEST_BYTES:
+                    raise UpdateError("download_too_large")
+                return body, str(response.headers.get("X-Tether-Withdrawn") or "")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                raise UpdateError("manifest_missing") from None
+            raise UpdateError("download_failed") from None
+        except UpdateError:
+            raise
+        except (OSError, urllib.error.URLError, TimeoutError, http.client.HTTPException):
+            raise UpdateError("download_failed") from None
+
+    def _read_manifest(self, url: str | None = None, *, timeout: float = MANIFEST_SOURCE_TIMEOUT) -> dict[str, Any]:
+        """Fetch and validate one source. The caller owns which source answered."""
         source = url or self.manifest_url
-        manifest = _json_object(self._fetch(_resolve_latest_manifest_url(source), MAX_MANIFEST_BYTES, timeout=timeout))
-        self._last_source = source
+        body, withdrawn_header = self._fetch_manifest(_resolve_latest_manifest_url(source), timeout=timeout)
+        manifest = _json_object(body)
         if type(manifest.get("schema")) is not int or manifest.get("schema") != 1:
             raise UpdateError("unsupported_manifest")
         channel = manifest.get("channel", "stable")
@@ -771,15 +1206,34 @@ class UpdateManager:
                         raise UpdateError("invalid_manifest")
                     if not isinstance(package.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", package["sha256"]):
                         raise UpdateError("invalid_manifest")
+        withdrawn = manifest.get("withdrawn")
+        if withdrawn is not None:
+            if not isinstance(withdrawn, dict):
+                raise UpdateError("invalid_manifest")
+            for name, versions in withdrawn.items():
+                if name not in COMPONENTS or not isinstance(versions, list):
+                    raise UpdateError("invalid_manifest")
+                for value in versions:
+                    _semver(value)
+        sources = manifest.get("artifact_sources")
+        if sources is not None:
+            if (not isinstance(sources, list) or not sources
+                    or any(not isinstance(kind, str) or kind not in ARTIFACT_SOURCE_KINDS for kind in sources)):
+                raise UpdateError("invalid_manifest")
+        for name in COMPONENTS:
+            item = manifest["components"][name]
+            for key in ("not_before", "prefetch_window"):
+                if key in item and (type(item[key]) not in (int, float) or item[key] < 0):
+                    raise UpdateError("invalid_manifest")
         try:
             verify_signature(manifest, self._public_key_hex)
         except ReleaseSignatureError as exc:
             dev_loopback = not self._allow_unsigned_explicit and self._is_loopback_http_url(source)
             if not (exc.code == "signature_missing" and (self._allow_unsigned or dev_loopback)):
                 raise UpdateError(exc.code) from None
-        self._last_source = source
-        self._last_stale = False
-        return manifest
+        # Merge only after verification: the header is transport, not signed content,
+        # and folding it in earlier would make a forged header look authenticated.
+        return merge_withdrawn(manifest, parse_withdrawn_header(withdrawn_header))
 
     def _load_disk_manifest(self, max_age: float) -> dict[str, Any] | None:
         try:
@@ -812,11 +1266,81 @@ class UpdateManager:
         except OSError:
             pass
 
+    def _disk_manifest_source(self) -> str:
+        """The origin URL stored beside a cached manifest, so an offline start still
+        resolves artifacts through the Hub mirror it was pinned from."""
+        try:
+            record = _json_object(self._disk_manifest_path.read_bytes())
+        except (OSError, UpdateError):
+            return ""
+        source = record.get("source")
+        return source if isinstance(source, str) else ""
+
+    def _race_manifest_sources(self) -> tuple[dict[str, Any] | None, str, list[UpdateError]]:
+        """Ask every configured source at once and keep the first signed answer.
+
+        The list is ordered Hub-mirror first, GitHub last. Waiting for the
+        preferred source while a fallback is already in hand costs at most one
+        source timeout, which keeps the mirror authoritative without letting a
+        slow GitHub answer decide how long 刷新 takes.
+        """
+        urls = list(self._manifest_urls)
+        errors: list[UpdateError] = []
+        if not urls:
+            return None, "", errors
+        if len(urls) == 1:
+            try:
+                return (self._read_manifest(urls[0], timeout=MANIFEST_SOURCE_TIMEOUT), urls[0], errors)
+            except UpdateError as exc:
+                exc.source = urls[0]
+                return None, "", [exc]
+        preferred = urls[0]
+        pool = ThreadPoolExecutor(max_workers=min(3, len(urls)), thread_name_prefix="tether-manifest")
+        futures = {pool.submit(self._read_manifest, url, timeout=MANIFEST_SOURCE_TIMEOUT): url for url in urls}
+        fallback: tuple[dict[str, Any], str] | None = None
+        preferred_settled = False
+        try:
+            pending = set(futures)
+            deadline = time.monotonic() + MANIFEST_RACE_TIMEOUT
+            while pending and (not preferred_settled or fallback is None):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                done, pending = futures_wait(pending, timeout=remaining, return_when=FIRST_COMPLETED)
+                if not done:
+                    break
+                for future in done:
+                    url = futures[future]
+                    try:
+                        result = future.result()
+                    except UpdateError as exc:
+                        exc.source = url
+                        errors.append(exc)
+                        if url == preferred:
+                            preferred_settled = True
+                        continue
+                    except Exception:
+                        errors.append(UpdateError("download_failed"))
+                        if url == preferred:
+                            preferred_settled = True
+                        continue
+                    if url == preferred:
+                        return result, url, errors
+                    if fallback is None:
+                        fallback = (result, url)
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+        if fallback is not None:
+            return fallback[0], fallback[1], errors
+        return None, "", errors
+
     def _load_manifest(self, *, use_check_cache: bool = False, force: bool = False) -> dict[str, Any]:
+        self._source_rejections = []
+        self._policy_rejected_primary = False
         if not force and use_check_cache:
             cached = self._load_disk_manifest(MANIFEST_DISK_CACHE_TTL)
             if cached is not None:
-                self._last_source = "disk-cache"
+                self._last_source = self._disk_manifest_source() or "disk-cache"
                 self._last_stale = False
                 return cached
         now = time.monotonic()
@@ -836,22 +1360,28 @@ class UpdateManager:
         assert flight is not None
         if not leader and use_check_cache and not force:
             try:
-                return copy.deepcopy(flight.result(timeout=MANIFEST_CHECK_TIMEOUT + 0.5))
+                return copy.deepcopy(flight.result(timeout=MANIFEST_RACE_TIMEOUT + 0.5))
             except FutureTimeout:
                 raise UpdateError("download_failed") from None
         errors: list[UpdateError] = []
         manifest: dict[str, Any] | None = None
         try:
-            for url in self._manifest_urls:
-                try:
-                    manifest = self._read_manifest(url, timeout=MANIFEST_CHECK_TIMEOUT)
-                    break
-                except UpdateError as exc:
-                    errors.append(exc)
+            manifest, source, errors = self._race_manifest_sources()
+            # Record every feed's outcome before anything below can raise: "not a
+            # single new version" happens precisely when all feeds refused, and that
+            # is the moment an operator asks who refused and for what reason. The
+            # boolean stays driven by policy refusals only, so a timeout on one feed
+            # cannot make a healthy fleet look policy-blocked.
+            self._source_rejections = [{"source": error.source, "code": error.code}
+                                       for error in errors]
+            preferred = self._manifest_urls[0] if self._manifest_urls else ""
+            self._policy_rejected_primary = bool(preferred) and any(
+                item["source"] == preferred and item["code"] not in TRANSPORT_REJECTION_CODES
+                for item in self._source_rejections)
             if manifest is None:
                 stale = self._load_disk_manifest(MANIFEST_DISK_MAX_AGE)
                 if stale is not None:
-                    self._last_source = "disk-cache"
+                    source = self._disk_manifest_source() or "disk-cache"
                     self._last_stale = True
                     manifest = stale
             if manifest is None:
@@ -862,10 +1392,8 @@ class UpdateManager:
                     if match is not None:
                         raise match
                 raise UpdateError("manifest_unavailable")
-            for url in self._manifest_urls:
-                if url == self._last_source:
-                    self._save_disk_manifest(manifest, url)
-                    break
+            self._last_source = source
+            self._save_disk_manifest(manifest, source)
             with _manifest_cache_lock:
                 _manifest_check_cache[self.manifest_url] = (
                     time.monotonic() + MANIFEST_CHECK_CACHE_TTL, copy.deepcopy(manifest))
@@ -1149,17 +1677,29 @@ class UpdateManager:
             if self.component == "app" and restart_required and version == installed == applied_target:
                 newer = True
             allowed = _rollout_allows(remote, self.component, version, self.device)
-            update_available = newer and allowed
+            withdrawn = _is_withdrawn(manifest, self.component, version)
+            update_available = newer and allowed and not withdrawn
             checked_at = time.time()
             rollout = _rollout_item(remote)
             self._last_checked_at = checked_at
+            # Same pair the failure exit emits, so whichever way check() leaves, a
+            # caller reading only update_available can still tell "current" from
+            # "refused" without learning a new field on the error path.
+            block = self._block_report()
             try:
                 self.state_dir.mkdir(parents=True, exist_ok=True)
                 self._write_atomic(
                     self.state_dir / f"latest-{self.component}.json",
                     (json.dumps({"schema": 1, "component": self.component, "version": version,
                                  "update_available": update_available, "rollout_paused": newer and not allowed,
-                                 "checked_at": checked_at, "source": self._last_source}, indent=2) + "\n").encode("utf-8"),
+                                 "withdrawn": withdrawn,
+                                 "checked_at": checked_at, "source": self._last_source,
+                                 # Persisted so an operator reading this file after a
+                                 # restart still sees that the Hub refused on policy
+                                 # rather than being unreachable.
+                                 "source_rejections": self._source_rejections,
+                                 **block,
+                                 "policy_rejected_primary": self._policy_rejected_primary}, indent=2) + "\n").encode("utf-8"),
                 )
             except OSError:
                 pass
@@ -1167,8 +1707,12 @@ class UpdateManager:
                       "installed_version": installed if self.component == "app" else None,
                       "latest_version": version, "update_available": update_available,
                       "rollout_paused": newer and not allowed,
+                      "withdrawn": withdrawn,
                       "rollout_percent": rollout["percent"] if rollout else 100,
                       "checked_at": checked_at, "stale": self._last_stale,
+                      "source_rejections": list(self._source_rejections),
+                      **block,
+                      "policy_rejected_primary": self._policy_rejected_primary,
                       "manifest_source": self._last_source, "device": self.device,
                       "checkout": self._checkout_info(), "error": ""}
             if debian_package is not None:
@@ -1251,8 +1795,70 @@ class UpdateManager:
         except Exception:
             return {"ok": True, "busy": True, "reason": "activity_unknown"}
 
+    def _block_report(self, *, definitive: bool = True) -> dict[str, str]:
+        """Build the one pair that says why there is nothing to install, used by
+        both exit paths so a caller never has to guess.
+
+        ``update_available: false`` alone reads as "already current", which is
+        exactly the lie a refused feed must not be allowed to tell. The pair splits
+        the two cases: ``blocked_reason`` carries the refusal's own code and
+        ``blocked_by`` the feed that gave it, and both stay empty when nobody
+        refused. The preferred source wins over a fallback's noise, because the
+        channel policy that blocks this device is the one an operator has to fix.
+
+        Network noise stays out of the pair while some feed still answered, the same
+        rule ``policy_rejected_primary`` follows — otherwise the field collects
+        timeouts and people stop trusting it. When no feed answered at all
+        (``definitive=False``, the ``_error`` path) that noise *is* the whole reason
+        there is no answer, so it gets named instead of a bare error code.
+        """
+        if not self._source_rejections:
+            return {"blocked_reason": "", "blocked_by": ""}
+        candidates = [item for item in self._source_rejections
+                      if item["code"] not in TRANSPORT_REJECTION_CODES]
+        if not candidates:
+            if definitive:
+                return {"blocked_reason": "", "blocked_by": ""}
+            candidates = list(self._source_rejections)
+        preferred = self._manifest_urls[0] if self._manifest_urls else ""
+        pick = next((item for item in candidates if item["source"] == preferred), None)
+        pick = pick or candidates[0]
+        return {"blocked_reason": str(pick["code"]), "blocked_by": str(pick["source"])}
+
+    def _record_rejections(self) -> None:
+        """Persist which feeds refused and why, including when none supplied a version.
+
+        status() never re-fetches, so a Node that restarts after an all-refused check
+        would otherwise report a bare manifest_unavailable and lose the only useful
+        diagnostic. No version is written here: an refused feed must not turn into an
+        advertised update.
+        """
+        if not self._source_rejections:
+            return
+        try:
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            self._write_atomic(self.state_dir / f"latest-{self.component}.json", (json.dumps({
+                "schema": 1, "component": self.component, "update_available": False,
+                "checked_at": time.time(), "source": self._last_source,
+                "source_rejections": self._source_rejections,
+                # The block pair is persisted too: status() never re-fetches, so this
+                # file is the only way a restarted Node can still tell "refused" apart
+                # from "you are on the latest version".
+                **self._block_report(definitive=False),
+                "policy_rejected_primary": self._policy_rejected_primary}, indent=2) + "\n").encode("utf-8"))
+        except OSError:
+            pass
+
     def _error(self, code: str) -> dict[str, Any]:
+        # Every failure leaves through here, so this is where the per-feed reasons
+        # become visible: an operator facing "no new version at all" needs more than
+        # one error code. The record carries no version, so a refused feed can never
+        # be read back as an advertised update.
+        self._record_rejections()
         return {"ok": False, "component": self.component, "error_code": code,
+                "source_rejections": list(self._source_rejections),
+                **self._block_report(definitive=False),
+                "policy_rejected_primary": self._policy_rejected_primary,
                 "error": ERROR_MESSAGES.get(code, "更新操作失败。")}
 
     def _progress_path(self) -> Path:
@@ -1478,8 +2084,8 @@ class UpdateManager:
                 raise UpdateError("unsafe_target")
         return resolved
 
-    def _validate_archive(self, data: bytes, item: dict[str, Any], prepared_root: Path) -> list[tuple[Path, Path, str]]:
-        if len(data) != item["size"] or hashlib.sha256(data).hexdigest() != item["sha256"]:
+    def _validate_archive(self, archive_path: Path, item: dict[str, Any], prepared_root: Path) -> list[tuple[Path, Path, str]]:
+        if archive_path.stat().st_size != item["size"]:
             raise UpdateError("hash_mismatch")
         expected_prefix = f"tether-{self.component}-{item['version']}"
         staged: list[tuple[Path, Path, str]] = []
@@ -1487,7 +2093,7 @@ class UpdateManager:
         total_unpacked = 0
         version_found = False
         try:
-            archive = zipfile.ZipFile(io.BytesIO(data))
+            archive = zipfile.ZipFile(archive_path)
         except (zipfile.BadZipFile, OSError):
             raise UpdateError("invalid_archive") from None
         with archive:
@@ -1600,28 +2206,12 @@ class UpdateManager:
     def _fetch_artifact(self, item: dict[str, Any],
                         progress: Callable[[int, int | None], None] | None = None,
                         *, max_bytes: int = MAX_ARCHIVE_BYTES) -> bytes:
-        urls: list[str] = []
-        source = self._last_source
-        if isinstance(source, str) and source.endswith("/releases/manifest"):
-            urls.append(source[: -len("/manifest")] + "/artifacts/" + item["sha256"])
-        override = os.environ.get("TETHER_UPDATE_ARTIFACT_MIRROR", "").strip()
-        if override:
-            urls.append(override.rstrip("/") + "/" + item["sha256"])
-        urls.append(item["url"])
-        errors: list[UpdateError] = []
-        for url in dict.fromkeys(urls):
-            try:
-                return self._fetch(url, max_bytes, timeout=ARTIFACT_CHECK_TIMEOUT,
-                                   progress=progress)
-            except UpdateError as exc:
-                errors.append(exc)
-        if errors:
-            raise errors[-1]
-        raise UpdateError("download_failed")
+        return self._download_artifact(item, limit=max_bytes, progress=progress)["path"].read_bytes()
 
     def prepare(self) -> dict[str, Any]:
         prepared_root: Path | None = None
         lock_fd = None
+        self._cancel.clear()
         try:
             lock = self._lock()
             if lock is None:
@@ -1635,12 +2225,8 @@ class UpdateManager:
                 self._check_plugin_targets()
             current = self._versions()[self.component]
             manifest = self._load_manifest(force=True)
-            item = manifest["components"][self.component]
+            item, debian_package = self._selected_artifacts(manifest)
             target_version = item["version"]
-            debian_package = None
-            debian_bytes = None
-            if self.component == "node" and os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower() == "deb_package_manager":
-                debian_package = self._node_debian_artifact(item)
             restart_required, applied_target = self._app_restart_state()
             same_version_retry = (self.component == "app" and restart_required
                                   and target_version == current == applied_target)
@@ -1648,6 +2234,8 @@ class UpdateManager:
                 return self._error("no_update")
             if not _rollout_allows(item, self.component, target_version, self.device):
                 return self._error("rollout_paused")
+            if _is_withdrawn(manifest, self.component, target_version):
+                return self._error("update_withdrawn")
             self._write_progress("downloading", 0, target_version)
             last_reported = -1
 
@@ -1660,21 +2248,21 @@ class UpdateManager:
                                          f"{received}/{expected}" if expected else str(received))
 
             if debian_package is None:
-                archive_bytes = self._fetch_artifact(item, download_progress)
+                served = self._download_artifact(item, limit=MAX_ARCHIVE_BYTES,
+                                                 manifest=manifest, progress=download_progress)
             else:
-                debian_bytes = self._fetch_artifact(debian_package, download_progress, max_bytes=MAX_DEB_BYTES)
-                if (len(debian_bytes) != debian_package["size"]
-                        or hashlib.sha256(debian_bytes).hexdigest() != debian_package["sha256"]):
-                    raise UpdateError("artifact_hash_mismatch")
-                archive_bytes = b""
+                served = self._download_artifact(debian_package, limit=MAX_DEB_BYTES,
+                                                 manifest=manifest, progress=download_progress)
+            archive_path = served["path"]
             self._write_progress("preparing", 65, target_version)
             prepared_id = uuid.uuid4().hex
             self.state_dir.mkdir(parents=True, exist_ok=True)
             prepared_root = self.state_dir / "prepared" / prepared_id
             prepared_root.mkdir(parents=True, exist_ok=False)
-            staged = [] if debian_package is not None else self._validate_archive(archive_bytes, item, prepared_root)
+            staged = ([] if debian_package is not None
+                      else self._validate_archive(archive_path, item, prepared_root))
             if debian_package is not None:
-                self._write_atomic(prepared_root / "tether-node.deb", debian_bytes or b"")
+                self._stage_artifact_copy(archive_path, prepared_root / "tether-node.deb")
             self._check_dependencies(staged)
             self._write_progress("preparing", 90, target_version)
             record = {
@@ -1682,6 +2270,7 @@ class UpdateManager:
                 "to_version": target_version, "same_version_retry": same_version_retry,
                 "sha256": item["sha256"], "size": item["size"],
                 "debian_package": debian_package,
+                "served_by": served["served_by"], "source_attempts": served["attempts"],
                 "profile": self.profile if self.component == "plugin" else None,
                 "files": [{"path": entry[2], "sha256": _sha256_path(entry[0]),
                            "size": entry[0].stat().st_size,
@@ -1694,6 +2283,8 @@ class UpdateManager:
                     "from_version": current, "to_version": target_version,
                     "size": debian_package["size"] if debian_package else item["size"],
                     "sha256": debian_package["sha256"] if debian_package else item["sha256"],
+                    "served_by": served["served_by"],
+                    "source_attempts": served["attempts"],
                     **({"update_method": "deb_package_manager",
                        "package": debian_package["package"],
                        "architecture": debian_package["architecture"]}
@@ -1712,8 +2303,10 @@ class UpdateManager:
         except Exception:
             if prepared_root is not None:
                 shutil.rmtree(prepared_root, ignore_errors=True)
-            self._write_progress("failed", 0, "download_failed")
-            return self._error("download_failed")
+            # Never dress an internal bug up as a network failure: the page would
+            # offer 重试 forever on a defect that retrying cannot clear.
+            self._write_progress("failed", 0, "update_internal_error")
+            return self._error("update_internal_error")
         finally:
             if lock_fd is not None:
                 self._unlock(lock_fd)
@@ -2513,7 +3106,11 @@ class UpdateManager:
             latest_version = ""
             checked_at = 0.0
             latest_source = ""
+            source_rejections: list[dict[str, str]] = []
+            policy_rejected_primary = False
             rollout_paused = False
+            blocked_reason = ""
+            blocked_by = ""
             try:
                 latest = _json_object((self.state_dir / f"latest-{self.component}.json").read_bytes())
                 if latest.get("component") == self.component and isinstance(latest.get("version"), str):
@@ -2522,6 +3119,23 @@ class UpdateManager:
                     checked_at = float(latest.get("checked_at") or 0)
                     latest_source = str(latest.get("source") or "")
                     rollout_paused = latest.get("rollout_paused") is True
+                # Read the refusals regardless of a version: the all-refused record
+                # deliberately carries no version, and that is the case where an
+                # operator most needs each feed's own reason after a restart.
+                if latest.get("component") == self.component:
+                    recorded = latest.get("source_rejections")
+                    source_rejections = ([{"source": str(item.get("source") or ""),
+                                           "code": str(item.get("code") or "")}
+                                          for item in recorded if isinstance(item, dict)]
+                                         if isinstance(recorded, list) else [])
+                    policy_rejected_primary = latest.get("policy_rejected_primary") is True
+                    # status() never re-fetches, so the pair it hands back has to come
+                    # from the record check()/_error() wrote. Without this a Node that
+                    # restarts after an all-refused check is back to looking current.
+                    blocked_reason = str(latest.get("blocked_reason") or "")
+                    blocked_by = str(latest.get("blocked_by") or "")
+                    latest_source = str(latest.get("source") or "") or latest_source
+                    checked_at = float(latest.get("checked_at") or 0) or checked_at
             except (OSError, UpdateError, TypeError, ValueError):
                 pass
             if prepared:
@@ -2535,6 +3149,9 @@ class UpdateManager:
                       "latest_version": latest_version or None,
                       "update_available": bool(newer and not rollout_paused),
                       "checked_at": checked_at or None, "manifest_source": latest_source,
+                      "source_rejections": source_rejections,
+                      "blocked_reason": blocked_reason, "blocked_by": blocked_by,
+                      "policy_rejected_primary": policy_rejected_primary,
                       "rollout_paused": rollout_paused, "device": self.device,
                       "prepared": prepared, "restart_required": restart_required,
                       "installed_latest": installed_latest, "checkout": self._checkout_info(),
