@@ -259,7 +259,10 @@ prepare_upgrade_temp_done:
   Pop $1
   Pop $0
 FunctionEnd
+; TetherPurgeLegacyEntries and its cleanup macro are declared after this block so
+; that the uninstaller pass sees them too; the installer calls it from customInit.
 !macro customInit
+  Call TetherPurgeLegacyEntries
   !insertmacro TetherCanonicalizeRegistration SHELL_CONTEXT 1 0
   Call PrepareUpgradeTemp
   InitPluginsDir
@@ -283,3 +286,29 @@ FunctionEnd
   FunctionEnd
 !macroend
 !endif
+
+; Names written by the retired desktop-entry paths (desktop/install-app.ps1 and
+; the old runtime self-heal). Entry creation belongs to the installer alone, so
+; both install and uninstall remove these unconditionally; a machine that only
+; receives an in-place APP update gets the same cleanup from ensureAppShortcuts().
+!macro DeleteTetherLegacyEntries FOLDER
+  Delete "${FOLDER}\Tether APP.lnk"
+  Delete "${FOLDER}\Tether APP.cmd"
+  Delete "${FOLDER}\Tether-App.cmd"
+!macroend
+
+Function TetherPurgeLegacyEntries
+  SetShellVarContext current
+  !insertmacro DeleteTetherLegacyEntries "$DESKTOP"
+  !insertmacro DeleteTetherLegacyEntries "$PROGRAMS"
+  ; A per-machine install puts entries in the all-users shell folders; deleting a
+  ; protected public entry from a standard-user uninstall simply fails silently.
+  SetShellVarContext all
+  !insertmacro DeleteTetherLegacyEntries "$DESKTOP"
+  !insertmacro DeleteTetherLegacyEntries "$PROGRAMS"
+  SetShellVarContext current
+FunctionEnd
+
+!macro customUnInstall
+  Call TetherPurgeLegacyEntries
+!macroend

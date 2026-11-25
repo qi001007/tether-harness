@@ -77,6 +77,9 @@ nsis:
   allowElevation: true
   allowToChangeInstallationDirectory: true
   include: desktop/packaging/nsis/migration.nsh
+  # Pinned so a productName change cannot silently rename the user's desktop entry
+  # and leave the previous name behind. Must equal SHORTCUT_NAME in main.js.
+  shortcutName: Tether
   createDesktopShortcut: true
   createStartMenuShortcut: true
   runAfterFinish: true

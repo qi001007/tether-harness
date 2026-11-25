@@ -68,17 +68,23 @@ if (-not (Test-Path $PythonVenv)) {
 }
 
 $icon = Join-Path $Repo "assets\tether-app-s.ico"
-if (-not (Test-Path $icon)) { $icon = $Electron }
+if (-not (Test-Path $icon)) { throw "brand icon missing at $icon; refusing to ship a generic-icon entry" }
 $shell = New-Object -ComObject WScript.Shell
+# Every install path writes the same single entry name. "Tether APP.lnk" was this
+# script's own historical name and it sat next to the NSIS entry as a second icon.
 foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
   if (-not $folder) { continue }
-  $lnk = $shell.CreateShortcut((Join-Path $folder "Tether APP.lnk"))
+  foreach ($legacy in @('Tether APP.lnk', 'Tether-App.cmd', 'Tether APP.cmd')) {
+    $stale = Join-Path $folder $legacy
+    if (Test-Path -LiteralPath $stale) { Remove-Item -LiteralPath $stale -Force }
+  }
+  $lnk = $shell.CreateShortcut((Join-Path $folder "Tether.lnk"))
   $lnk.TargetPath = $Electron
   $lnk.Arguments = '"' + $AppDir + '"'
   $lnk.WorkingDirectory = $AppDir
   $lnk.IconLocation = "$icon,0"
-  $lnk.Description = "Tether APP"
+  $lnk.Description = "Tether"
   $lnk.Save()
 }
-Write-Host "[tether] Installed. Open 'Tether APP' from the Desktop or Start Menu."
+Write-Host "[tether] Installed. Open 'Tether' from the Desktop or Start Menu."
 Write-Host "[tether] No DSH profile was changed."
