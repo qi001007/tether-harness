@@ -303,12 +303,62 @@ test('local DSH bootstrap hands authenticated_url to the workbench partition wit
     'the guest must consume authenticated_url inside the target wb partition')
   assert.equal(state.workbench.allowGuest(opened.partition, opened.nativeEndpoint), true,
     'the 303 landing may re-enter the exact tether_native page in the same partition')
-  assert.equal(state.workbench.allowGuest(opened.partition, 'http://127.0.0.1:50669/'), false)
+  assert.equal(state.workbench.allowGuest(opened.partition, 'http://127.0.0.1:50669/login'), true,
+    'same-origin DSH login routes stay allowed in the local workbench partition')
+  assert.equal(state.workbench.allowGuest(opened.partition, 'http://127.0.0.1:50669/tether-connect?ticket=x'), false)
+  assert.equal(state.workbench.allowGuest(opened.partition, 'http://127.0.0.1:59999/'), false)
 
   const second = await state.workbench.openDshSurface('local-1')
   assert.equal(second.partition, opened.partition, 'local DSH uses the stable actor/target partition')
 
   await state.workbench.close('local-1', 'dsh-native', second.grantId)
-  assert.equal(state.sessionCalls.cleared, 2, 'reopen and close must both clear the local DSH credentials')
+  assert.equal(state.sessionCalls.cleared, 2, 'reopen and close clear gateway cookies on fallback mock session')
   assert.equal(state.sessionCalls.closed, 2)
+})
+
+test('DSH close removes only __Host-tether_ gateway cookies and preserves dsh-auth login cookies', async () => {
+  const removed = []
+  const cookieJar = [
+    { name: '__Host-tether_gw', domain: '127.0.0.1', path: '/', secure: false, value: 'gw-1' },
+    { name: 'dsh-auth-session', domain: '127.0.0.1', path: '/', secure: false, value: 'keep-me' }
+  ]
+  let fullCleared = 0
+  const session = {
+    cookies: {
+      get: async () => [...cookieJar],
+      remove: async (url, name) => { removed.push([url, name]) }
+    },
+    closeAllConnections: async () => {},
+    setProxy: async () => {},
+    clearStorageData: async () => { fullCleared += 1 }
+  }
+  const token = 'b'.repeat(43)
+  const workbench = createNativeWorkbench({
+    controllerUrl: 'https://hub.example',
+    loginSession: { fetch: async () => { throw new Error('must not call Hub') } },
+    getServiceSession: () => session,
+    createBootstrapContents: () => { throw new Error('unused') },
+    getActorId: async () => 'owner-1',
+    getLocalDeviceId: async () => 'local-1',
+    getSourceRoute: async () => { throw new Error('unused') },
+    getLocalNodeApiBase: () => 'http://127.0.0.1:18894',
+    localApiSession: {
+      fetch: async () => ({
+        ok: true, status: 200,
+        json: async () => ({
+          available: true, origin: 'http://127.0.0.1:50669', pid: 9400, profile: 'desktop',
+          authenticated_url: 'http://127.0.0.1:50669/?token=' + token
+        })
+      })
+    }
+  })
+  const opened = await workbench.openDshSurface('local-1')
+  await workbench.close('local-1', 'dsh-native', opened.grantId)
+  assert.deepEqual(removed, [['http://127.0.0.1/', '__Host-tether_gw']], 'only gateway cookie is removed on close')
+  assert.equal(fullCleared, 0, 'close must not wipe full storage or dsh-auth cookies')
+
+  const reopened = await workbench.openDshSurface('local-1')
+  assert.equal(reopened.partition, opened.partition, 'reopen reuses the exact same stable DSH partition')
+  await workbench.clearActor('owner-1')
+  assert.equal(fullCleared, 1, 'explicit logout via clearActor still wipes full partition storage')
 })

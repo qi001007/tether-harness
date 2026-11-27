@@ -70,4 +70,36 @@ function createExactEndpointNavigationGuard(endpoint, initialUrl) {
   }
 }
 
-module.exports = { createDshWebNavigationGuard, createExactEndpointNavigationGuard, dshViewUrlAllowed }
+function createSameOriginNavigationGuard(endpoint, initialUrl) {
+  let expectedOrigin
+  try {
+    const parsed = new URL(String(endpoint || ''))
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('invalid scheme')
+    expectedOrigin = parsed.origin
+  } catch (_) { throw new TypeError('invalid origin endpoint') }
+  const precommit = (value) => value === '' || value === 'about:blank'
+  const allowed = (value) => {
+    try {
+      const parsed = new URL(String(value || ''))
+      if (parsed.origin !== expectedOrigin || parsed.username || parsed.password) return false
+      if (parsed.pathname === '/tether-connect') return false
+      return true
+    } catch (_) { return false }
+  }
+  let committed = allowed(initialUrl)
+  if (!committed && !precommit(String(initialUrl || ''))) throw new TypeError('invalid initial guest URL')
+  const topLevel = (value, allowPrecommit) => {
+    const text = String(value || '')
+    if (!committed && allowPrecommit && precommit(text)) return true
+    if (!allowed(text)) return false
+    committed = true
+    return true
+  }
+  return {
+    navigate(value) { return topLevel(value, true) },
+    didStart(value, isMainFrame) { return isMainFrame === false || topLevel(value, true) },
+    redirect(value, isMainFrame) { return isMainFrame === false || topLevel(value, false) }
+  }
+}
+
+module.exports = { createDshWebNavigationGuard, createExactEndpointNavigationGuard, createSameOriginNavigationGuard, dshViewUrlAllowed }

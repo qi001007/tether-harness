@@ -188,7 +188,7 @@ test('remote DSH surface uses a targetId-only native ticket exchange and blocks 
   assert.match(shared, /safeDshNativeEndpoint\(guest\.getURL\(\)\)/)
   const attachedGuest = main.slice(main.indexOf("mainWindow.webContents.on('did-attach-webview'"), main.indexOf("mainWindow.on('closed'"))
   assert.ok(attachedGuest.indexOf('nativeWorkbench.guestPolicy(contents)') < attachedGuest.indexOf("contents.on('will-navigate'"))
-  assert.match(attachedGuest, /createExactEndpointNavigationGuard\(workbenchPolicy\.endpoint, contents\.getURL\(\)\)/)
+  assert.match(attachedGuest, /createSameOriginNavigationGuard\(workbenchPolicy\.endpoint, contents\.getURL\(\)\)/)
 })
 
 test('renderer accepts only the exact token-free native DSH endpoint', () => {
@@ -244,7 +244,9 @@ test('hidden bootstrap navigation receives the ticket but public result and mana
   assert.deepEqual(calls.logs, [])
   assert.deepEqual(calls.cookieFilters, [{}])
   assert.equal(workbench.allowGuest(opened.partition, opened.endpoint), true)
-  assert.equal(workbench.allowGuest(opened.partition, 'https://g25800.hub.example.com/'), false)
+  assert.equal(workbench.allowGuest(opened.partition, 'https://g25800.hub.example.com/login'), true)
+  assert.equal(workbench.allowGuest(opened.partition, 'https://g25800.hub.example.com/tether-connect?ticket=one-time-secret'), false)
+  assert.equal(workbench.allowGuest(opened.partition, 'https://attacker.example/'), false)
   let loadCalls = 0
   const attachedGuest = {
     session: serviceSession,

@@ -293,8 +293,9 @@ async function verifyMeshCertificate(endpoint, caPem, proxy, expectedLeaf) {
   return current
 }
 
-function installCertificatePin(serviceSession, endpoint, caPem, proxy) {
+function installCertificatePin(serviceSession, endpoint, caPem, proxy, initialPinnedLeaf = '') {
   const expectedHost = endpoint.hostname.toLowerCase()
+  let pinnedLeaf = String(initialPinnedLeaf || '').toLowerCase()
   serviceSession.setCertificateVerifyProc((request, callback) => {
     try {
       if (String(request.hostname || '').toLowerCase() !== expectedHost) {
@@ -306,7 +307,14 @@ function installCertificatePin(serviceSession, endpoint, caPem, proxy) {
         return
       }
       const actual = sha256(new X509Certificate(request.certificate.data).raw)
-      void verifyMeshCertificate(endpoint, caPem, proxy, actual).then(() => callback(0), () => callback(-2))
+      if (pinnedLeaf && actual === pinnedLeaf) {
+        callback(0)
+        return
+      }
+      void verifyMeshCertificate(endpoint, caPem, proxy, actual).then((verifiedLeaf) => {
+        pinnedLeaf = verifiedLeaf || actual
+        callback(0)
+      }, () => callback(-2))
     } catch (_) {
       callback(-2)
     }
@@ -353,6 +361,29 @@ async function resetServiceSession(serviceSession) {
   if (typeof serviceSession.setProxy === 'function') await serviceSession.setProxy({ mode: 'direct' })
 }
 
+async function clearGatewayCookiesOnly(serviceSession) {
+  if (!serviceSession) return
+  if (serviceSession.cookies && typeof serviceSession.cookies.get === 'function'
+      && typeof serviceSession.cookies.remove === 'function') {
+    const cookies = await serviceSession.cookies.get({})
+    if (Array.isArray(cookies)) {
+      await Promise.allSettled(cookies
+        .filter((cookie) => cookie && typeof cookie.name === 'string' && cookie.name.startsWith('__Host-tether_'))
+        .map((cookie) => {
+          const host = String(cookie.domain || '').replace(/^\./, '')
+          if (!host) return Promise.resolve()
+          const proto = cookie.secure ? 'https://' : 'http://'
+          const cookiePath = cookie.path && String(cookie.path).startsWith('/') ? cookie.path : '/'
+          return serviceSession.cookies.remove(proto + host + cookiePath, cookie.name)
+        }))
+    }
+    return
+  }
+  if (typeof serviceSession.clearStorageData === 'function') {
+    await serviceSession.clearStorageData({ storages: ['cookies'] })
+  }
+}
+
 function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession, createBootstrapContents, getActorId, getLocalDeviceId, getSourceRoute, getLocalCodegRuntime = () => null, getLocalNodeApiBase = () => '', localApiSession = null, logSafe = () => {} }) {
   if (!controllerUrl || !loginSession || typeof loginSession.fetch !== 'function'
       || typeof getServiceSession !== 'function' || typeof createBootstrapContents !== 'function' || typeof getActorId !== 'function'
@@ -366,6 +397,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   const operationIds = new Map()
   const actorGenerations = new Map()
   const incompatibleCatalogs = new Map()
+  const recentCatalogs = new Map()
+  const RECENT_CATALOG_TTL_MS = 10_000
   const managedSessions = new WeakSet()
   const clearingActors = new Set()
   const revocationFailures = new Set()
@@ -373,6 +406,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   const RENEW_WINDOW_MS = 20 * 60 * 1000
   const UI_ACTIVE_WINDOW_MS = 30 * 60 * 1000
   const tupleKey = (actorId, targetId, serviceId) => [actorId, targetId, serviceId].join('\u0000')
+  const stableDshPartition = (actorId, targetId, generation) =>
+    'persist:tether-wb-' + sha256(tupleKey(actorId, targetId, 'dsh') + '\u0000' + generation).slice(0, 40)
 
   async function nodeApiEndpoint(targetId, operation) {
     const localDeviceId = await getLocalDeviceId()
@@ -412,7 +447,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     const key = tupleKey(actorId, targetId, serviceId)
     const descriptor = localDshSurfaceBootstrap(await localDshSurfaceDescriptor(targetId))
     if (!descriptor) throw new Error('本机 DSH surface 描述符无效。')
-    const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation + '\u0000dsh-surface').slice(0, 40)
+    const partition = stableDshPartition(actorId, targetId, generation)
     const serviceSession = getServiceSession(partition)
     if (!serviceSession || !serviceSession.cookies || typeof serviceSession.cookies.get !== 'function') {
       throw new Error('Electron 服务隔离会话不可用。')
@@ -461,7 +496,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         || ticketUrl.hash || ticketUrl.port || !gatewayMatch || Number(gatewayMatch[1]) > 65535
         || ticketUrl.pathname !== '/tether-connect' || ticketEntries.length !== 1 || ticketEntries[0][0] !== 'ticket'
         || !ticketEntries[0][1]) throw new Error('Hub 返回了无效的 DSH gateway。')
-    const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation + '\u0000dsh-surface').slice(0, 40)
+    const partition = stableDshPartition(actorId, targetId, generation)
     const serviceSession = getServiceSession(partition)
     if (!serviceSession || !serviceSession.cookies || typeof serviceSession.cookies.get !== 'function') {
       throw new Error('Electron 服务隔离会话不可用。')
@@ -533,10 +568,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     } catch (_) {
       logSafe('dsh-bootstrap-failed-' + bootstrapStage, { targetId, serviceId: 'dsh-native' })
       destroyBootstrap()
-      try { await resetServiceSession(serviceSession) } catch (_) { /* continue clearing stored credentials */ }
-      await Promise.allSettled([
-        typeof serviceSession.clearStorageData === 'function' ? serviceSession.clearStorageData() : Promise.resolve()
-      ])
+      try { await resetServiceSession(serviceSession) } catch (_) { /* continue clearing gateway cookies */ }
+      await Promise.allSettled([clearGatewayCookiesOnly(serviceSession)])
       throw new Error('DSH gateway 票据兑换失败。')
     } finally {
       destroyBootstrap()
@@ -554,7 +587,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     return cached
   }
 
-  async function catalog(targetId, { signal } = {}) {
+  async function catalog(targetId, { signal, bypassCache = false } = {}) {
     if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
     const actorId = await getActorId(targetId)
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
@@ -562,10 +595,15 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     const generation = actorGenerations.get(actorId) || 0
     const cached = legacyCatalogEntry(actorId, targetId)
     if (cached) return cached.value
+    if (!bypassCache) {
+      const recent = recentCatalogs.get(cacheKey)
+      if (recent && recent.generation === generation && recent.expiresAt > Date.now()) return recent.value
+    }
     let result
     try {
       result = await nodeCall(targetId, 'service_catalog', {}, { signal })
     } catch (error) {
+      recentCatalogs.delete(cacheKey)
       if (!error || error.code !== 'bad_op') throw error
       if ((actorGenerations.get(actorId) || 0) !== generation) throw new Error('工作台账号已切换，请重新打开服务。')
       const reason = '目标节点版本过旧，请升级节点后重试。'
@@ -589,11 +627,13 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (!result || result.protocol !== 1 || result.target_id !== targetId || !Array.isArray(result.services)) {
       throw new Error('Controller 返回了无效的服务目录。')
     }
-    return { protocol: 1, target_id: targetId, services: result.services.map((service) => ({
+    const normalized = { protocol: 1, target_id: targetId, services: result.services.map((service) => ({
       id: service.id, state: service.state, reason: service.reason || '',
       agent_busy: service.agent_busy === true, view_only_reason: service.view_only_reason || '',
       updated_at: service.updated_at || null
     })) }
+    recentCatalogs.set(cacheKey, { generation, value: normalized, expiresAt: Date.now() + RECENT_CATALOG_TTL_MS })
+    return normalized
   }
 
   async function open(targetId, serviceId, prefetchedCatalog = null) {
@@ -703,7 +743,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
           if (startupController.signal.aborted || Date.now() >= startupDeadline) {
             throw new Error('目标服务启动等待超时，请稍后重试。')
           }
-          const currentCatalog = await catalog(targetId, { signal: startupController.signal })
+          const currentCatalog = await catalog(targetId, { signal: startupController.signal, bypassCache: true })
           if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
           const status = currentCatalog.services.find((service) => service.id === serviceId)
           if (!status) throw new Error('目标服务目录中没有该服务。')
@@ -735,7 +775,9 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     }
     if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
     const verified = verifyEndpoint(descriptor, targetId, serviceId)
-    const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation).slice(0, 40)
+    const partition = serviceId === 'dsh'
+      ? stableDshPartition(actorId, targetId, generation)
+      : 'persist:tether-wb-' + sha256(key + '\u0000' + generation).slice(0, 40)
     const serviceSession = getServiceSession(partition)
     openedSession = serviceSession
     if (!serviceSession || typeof serviceSession.fetch !== 'function') throw new Error('Electron 服务隔离会话不可用。')
@@ -743,8 +785,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     const sourceRoute = validateSourceRoute(await getSourceRoute(verified.networkId, sourceDeviceId), verified.networkId, sourceDeviceId)
     if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
     await configureSocksProxy(serviceSession, sourceRoute)
-    await verifyMeshCertificate(verified.origin, verified.caPem, sourceRoute)
-    installCertificatePin(serviceSession, verified.origin, verified.caPem, sourceRoute)
+    const pinnedLeaf = await verifyMeshCertificate(verified.origin, verified.caPem, sourceRoute)
+    installCertificatePin(serviceSession, verified.origin, verified.caPem, sourceRoute, pinnedLeaf)
     if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
     const response = await serviceSession.fetch(verified.bootstrapUrl.toString(), {
       method: 'POST',
@@ -777,11 +819,9 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         if (openedSession) {
           try {
             await resetServiceSession(openedSession)
-            // Credentials are wiped, but the partition's HTTP cache is kept:
-            // the partition is stable per actor/target/service and re-downloading
-            // the multi-megabyte workspace bundle through the mesh on every
-            // retry is what made opens slow.
-            if (typeof openedSession.clearStorageData === 'function') await openedSession.clearStorageData()
+            // Keep DSH login cookies and the partition's HTTP cache intact on transient
+            // open failures; only remove gateway bootstrap cookies. Full clear happens on sign-out.
+            await clearGatewayCookiesOnly(openedSession)
           } catch (_) { /* no session data may survive */ }
         }
         if (serviceId === 'dsh' && error.code === 'mesh_dial_unreachable'
@@ -1061,8 +1101,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (record.dshSurface === true) {
       let committedUrl
       try { committedUrl = new URL(currentUrl) } catch (_) { throw new Error('工作台 guest 与活动授权不匹配。') }
-      if (!record.endpoint || (committedUrl.href !== record.endpoint.href
-          && !(record.localSurface === true && record.bootstrapUrl && committedUrl.href === record.bootstrapUrl.href))) {
+      if (!record.endpoint || committedUrl.origin !== record.endpoint.origin) {
         throw new Error('工作台 guest 与活动授权不匹配。')
       }
       return record
@@ -1110,10 +1149,11 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (record.legacy === true) {
       active.delete(tupleKey(actorId, targetId, serviceId))
       incompatibleCatalogs.delete(tupleKey(actorId, targetId, 'catalog'))
+      recentCatalogs.delete(tupleKey(actorId, targetId, 'catalog'))
       await resetServiceSession(record.serviceSession)
-      // Keep the stable partition's HTTP cache so reopening the same
-      // workspace does not ship the bundle through the mesh again.
-      if (typeof record.serviceSession.clearStorageData === 'function') await record.serviceSession.clearStorageData()
+      // Preserve DSH login state and HTTP cache across panel close; only remove
+      // gateway bootstrap cookies. Explicit logout (clearActor) wipes full storage.
+      await clearGatewayCookiesOnly(record.serviceSession)
       logSafe('native-workbench-close-legacy', { targetId, serviceId })
       return { targetId, serviceId, state: 'closed' }
     }
@@ -1125,7 +1165,9 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     }
     active.delete(tupleKey(actorId, targetId, serviceId))
     incompatibleCatalogs.delete(tupleKey(actorId, targetId, 'catalog'))
+    recentCatalogs.delete(tupleKey(actorId, targetId, 'catalog'))
     await resetServiceSession(record.serviceSession)
+    await clearGatewayCookiesOnly(record.serviceSession)
     logSafe('native-workbench-close', { targetId, serviceId })
     return { targetId, serviceId, state: 'closed' }
   }
@@ -1353,12 +1395,12 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     for (const record of active.values()) {
       if (record.partition !== partition || record.endpoint.origin !== parsed.origin) continue
       if (record.dshSurface === true) {
+        if (parsed.pathname === '/tether-connect') return false
         if (record.localSurface === true) {
           const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname.toLowerCase())
           return parsed.protocol === 'http:' && loopback && !parsed.username && !parsed.password
-            && (parsed.href === record.endpoint.href || parsed.href === record.bootstrapUrl.href)
         }
-        return parsed.protocol === 'https:' && !parsed.username && !parsed.password && parsed.href === record.endpoint.href
+        return parsed.protocol === 'https:' && !parsed.username && !parsed.password
       }
       if (record.legacy === true) return parsed.protocol === 'http:' && !parsed.username && !parsed.password
       return parsed.protocol === 'https:'
@@ -1404,6 +1446,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     }))
     const errors = results.flat()
     for (const key of incompatibleCatalogs.keys()) if (key.startsWith(actorId + '\u0000')) incompatibleCatalogs.delete(key)
+    for (const key of recentCatalogs.keys()) if (key.startsWith(actorId + '\u0000')) recentCatalogs.delete(key)
     for (const key of operationIds.keys()) if (key.startsWith(actorId + '\u0000')) operationIds.delete(key)
     if (revocationFailures.has(actorId)) errors.push('revoke_failed')
     revocationFailures.delete(actorId)

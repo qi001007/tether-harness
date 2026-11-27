@@ -26,10 +26,14 @@ test('a DSH guest attached at about:blank may establish one allowed LAN origin',
   assert.match(main, /navigation\.redirect\(target, isMainFrame\)/)
 })
 
-test('dsh-native guest policy is installed before handlers and uses its exact endpoint guard', () => {
+test('dsh-native guest policy is installed before handlers and uses same-origin guard blocking ticket replay', () => {
   const attached = main.slice(main.indexOf("mainWindow.webContents.on('did-attach-webview'"), main.indexOf("mainWindow.on('closed'"))
   assert.ok(attached.indexOf('nativeWorkbench.guestPolicy(contents)') < attached.indexOf("contents.on('will-navigate'"))
-  assert.match(attached, /workbenchPolicy\.serviceId === 'dsh-native'[\s\S]*?createExactEndpointNavigationGuard\(workbenchPolicy\.endpoint, contents\.getURL\(\)\)/)
+  assert.match(attached, /workbenchPolicy\.serviceId === 'dsh-native'[\s\S]*?createSameOriginNavigationGuard\(workbenchPolicy\.endpoint, contents\.getURL\(\)\)/)
+  const guard = dshWebNavigation.createSameOriginNavigationGuard('https://g25800.hub.example.com/?tether_native=1', 'about:blank')
+  assert.equal(guard.navigate('https://g25800.hub.example.com/login'), true)
+  assert.equal(guard.navigate('https://g25800.hub.example.com/tether-connect?ticket=abc'), false)
+  assert.equal(guard.navigate('https://attacker.example/login'), false)
 })
 
 test('dsh-native exact guard permits only its authorized top-level endpoint', () => {

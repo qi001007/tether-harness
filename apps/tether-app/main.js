@@ -118,7 +118,16 @@ if (!candidateMode && fs.existsSync(hubConfigFile)) {
     if (cfg.nodeToken) env.TETHER_NODE_TOKEN = cfg.nodeToken
     if (cfg.userToken) env.TETHER_USER_TOKEN = cfg.userToken
     if (cfg.device) env.TETHER_DEVICE = cfg.device
-    if (cfg.nodeMode === 'external') env.TETHER_NODE_MODE = cfg.nodeMode
+    if (cfg.nodeMode === 'external') {
+      env.TETHER_NODE_MODE = cfg.nodeMode
+      const ext = cfg.externalNode || cfg.managedNode
+      if (ext && !env.TETHER_CONSOLE_PORT && Number.isInteger(ext.consolePort) && ext.consolePort > 0) {
+        env.TETHER_CONSOLE_PORT = String(ext.consolePort)
+      }
+      if (ext && !env.TETHER_LOCAL_API_TOKEN && typeof ext.localApiToken === 'string' && ext.localApiToken.length >= 32) {
+        env.TETHER_LOCAL_API_TOKEN = ext.localApiToken
+      }
+    }
     if (packaged && cfg.nodeMode === 'managed' && cfg.managedNode) {
       managedNode = cfg.managedNode
       env.TETHER_NODE_MODE = 'managed'
@@ -153,7 +162,7 @@ function withShotTimeout(promise, stage, timeoutMs) {
   ])
 }
 
-const { createDshWebNavigationGuard, createExactEndpointNavigationGuard, dshViewUrlAllowed } = require('./dsh-web-navigation.js')
+const { createDshWebNavigationGuard, createExactEndpointNavigationGuard, createSameOriginNavigationGuard, dshViewUrlAllowed } = require('./dsh-web-navigation.js')
 
 const BROWSER_WEBVIEW_PARTITION = 'persist:tether-browser'
 
@@ -632,8 +641,7 @@ async function createWindow() {
       }
     }
     const navigation = workbenchPolicy.managed && workbenchPolicy.serviceId === 'dsh-native'
-      && !workbenchPolicy.localSurface
-      ? createExactEndpointNavigationGuard(workbenchPolicy.endpoint, contents.getURL())
+      ? createSameOriginNavigationGuard(workbenchPolicy.endpoint, contents.getURL())
       : createDshWebNavigationGuard(contents.getURL())
     contents.setWindowOpenHandler(({ url }) => {
       if (browserView) {
@@ -652,7 +660,8 @@ async function createWindow() {
       try { host = new URL(String(target)).host } catch (_) { /* malformed navigation */ }
       log('blocked webview navigation host=' + host)
     })
-    contents.on('did-start-navigation', (_event, target, _isInPlace, isMainFrame) => {
+    contents.on('did-start-navigation', (_event, target, isInPlace, isMainFrame) => {
+      if (isInPlace) return
       if (navigation.didStart(target, isMainFrame)) return
       contents.stop()
       let host = ''
