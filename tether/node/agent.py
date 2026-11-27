@@ -488,6 +488,11 @@ class Node:
                 pass
             await asyncio.sleep(600)
 
+    @staticmethod
+    async def _wait_for_reconnect(delay: float) -> float:
+        await asyncio.sleep(random.uniform(0.8 * delay, delay))
+        return min(delay * 2, 60.0)
+
     async def run(self) -> None:
         if self.direct is not None and not self._direct_started:
             try:
@@ -509,14 +514,15 @@ class Node:
                 await self._session()
                 backoff = 0.1
             except Exception as exc:  # noqa: BLE001 - reconnect forever
+                if self.connected:
+                    backoff = 0.1
                 log(f"[ws] disconnected: {type(exc).__name__}: {exc}")
             self.connected = False
             if self.restart_requested:
                 return
             # A phone waking from sleep or a brief network blip should reconnect
-            # immediately; repeated failures still back off to a two-second cap.
-            await asyncio.sleep(backoff * (0.8 + random.random() * 0.4))
-            backoff = min(backoff * 2, 2.0)
+            # immediately; sustained outages spread retries across a one-minute window.
+            backoff = await self._wait_for_reconnect(backoff)
 
     async def _session(self) -> None:
         ssl_context = None
@@ -627,8 +633,7 @@ class Node:
                 if owned:
                     await asyncio.gather(*owned, return_exceptions=True)
             if self.ws is control:
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, 2.0)
+                delay = await self._wait_for_reconnect(delay)
 
     async def _drop_later(self) -> None:
         await asyncio.sleep(self.drop_after or 0)

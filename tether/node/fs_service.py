@@ -86,6 +86,8 @@ TEXT_SUFFIXES = {
     ".sql", ".env", ".gitignore", ".cs", ".php", ".rb", ".swift", ".kt", ".lua", ".r", ".pl", ".tex",
     ".vue", ".svelte", ".dart", ".gradle", ".dockerfile", ".cmake", ".makefile",
 }
+LINUX_SYSTEM_ROOTS = ("/etc", "/boot", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/root",
+                      "/sys", "/proc", "/dev", "/run")
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 OFFICE_KINDS = {".doc": "word", ".docx": "word", ".ppt": "powerpoint", ".pptx": "powerpoint"}
@@ -351,6 +353,10 @@ class Policy:
             home / ".config",
             home / "AppData",
         ]
+        if sys.platform.startswith("linux"):
+            denied.extend(Path(root) for root in LINUX_SYSTEM_ROOTS)
+            if p == Path("/"):
+                return "protected system path: /"
         for root in denied:
             if _inside(p, root):
                 return f"protected system path: {root}"
@@ -1346,6 +1352,7 @@ class FsService:
     def _op_transfer_cancel(self, args: dict[str, Any]) -> dict[str, Any]:
         if not self._croc_context and args.get("path"):
             p, part, transfer = self._transfer_part(args)
+            self._write_guard(p, "delete")
             try:
                 part.unlink(missing_ok=True)
             except OSError:
@@ -2155,7 +2162,10 @@ class FsService:
         transfer = str(args.get("transfer_id") or "")
         if not TRANSFER_ID_RE.fullmatch(transfer):
             raise FsError("transfer_id must be 8-32 lowercase hex characters", "bad_args")
-        return p, p.with_name(p.name + ".tether-part." + transfer), transfer
+        part = p.with_name(p.name + ".tether-part." + transfer)
+        if part.is_symlink():
+            raise FsError("partial transfer must be a regular file", "bad_path")
+        return p, part, transfer
 
     def _op_write_chunk(self, args: dict[str, Any]) -> dict[str, Any]:
         p, part, transfer = self._transfer_part(args)
@@ -2187,8 +2197,8 @@ class FsService:
         if expected_version is not None and expected_version != "absent" and (
                 not isinstance(expected_version, str) or len(expected_version) != 64):
             raise FsError("expected_version must be a SHA-256 digest", "bad_args")
+        self._write_guard(p, "write", bytes=total)
         if offset == 0:
-            self._write_guard(p, "write", bytes=total)
             if p.exists() and not overwrite:
                 raise FsError("file exists", "exists")
             if expected_version == "absent" and p.exists():
@@ -2200,7 +2210,6 @@ class FsService:
             if part.exists() and args.get("resume") is not True:
                 part.unlink()
         else:
-            self._write_guard(p, "write", bytes=total)
             if not part.exists() or part.stat().st_size != offset:
                 raise FsError("partial transfer offset does not match", "offset_mismatch")
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -2253,7 +2262,7 @@ class FsService:
         p.parent.mkdir(parents=True, exist_ok=True)
         if part.exists():
             part.unlink()
-        return _StreamWriter(self, p, part, part.open("wb"), total, transfer,
+        return _StreamWriter(self, p, part, part.open("xb"), total, transfer,
                              expected_version=expected_version, discard_on_abort=discard_on_abort)
 
     def _op_mkdir(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -2307,6 +2316,9 @@ class FsService:
         if not p.exists():
             raise FsError("not found", "not_found")
         trash = self.workspaces_root / ".tether-trash"
+        reason = self.policy._system_deny_write(trash.resolve())
+        if reason:
+            raise FsError(reason, "denied")
         trash.mkdir(parents=True, exist_ok=True)
         target = trash / f"{time.strftime('%Y%m%d-%H%M%S')}-{p.name}"
         if target.exists():

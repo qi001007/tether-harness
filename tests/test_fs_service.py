@@ -113,6 +113,58 @@ def test_full_mode_writes_outside_but_still_protects_system_and_credentials(env,
     assert caught.value.code == "denied"
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux filesystem policy")
+@pytest.mark.parametrize("mode", ["locked", "readonly", "full"])
+def test_linux_protected_roots_take_precedence_over_granted_roots(env, mode):
+    svc = env["svc"]
+    svc.policy.update({"mode": mode, "allowed_roots": ["/"]})
+    for root in ("/", "/etc", "/boot", "/usr", "/bin", "/sbin", "/lib", "/lib64",
+                 "/root", "/sys", "/proc", "/dev", "/run"):
+        for path in (Path(root), Path(root) / "tether-test" if root != "/" else Path("/")):
+            allowed, reason = svc.policy.can_write(path, op="write")
+            assert not allowed and "protected system path" in reason, path
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux system directories and symlinks")
+def test_linux_mutations_reject_protected_destinations_and_symlinks(env, tmp_path, monkeypatch):
+    from tether.node import fs_service
+
+    svc = env["svc"]
+    protected = tmp_path / "system"
+    protected.mkdir()
+    target = protected / "config"
+    target.write_bytes(b"original")
+    workspace = env["workspace"]
+    alias = workspace / "alias"
+    alias.symlink_to(protected, target_is_directory=True)
+    outside = workspace / "allowed"
+    outside.write_bytes(b"source")
+    part = target.with_name("config.tether-part.deadbeef")
+    part.write_bytes(b"partial")
+    monkeypatch.setattr(fs_service, "LINUX_SYSTEM_ROOTS", (str(protected),))
+    svc.policy.update({"mode": "full"})
+    for op, args in [
+        ("write", {"path": str(alias / "config"), "text": "changed"}),
+        ("mkdir", {"path": str(alias / "newdir")}),
+        ("rename", {"path": str(alias / "config"), "dest": str(workspace / "moved")}),
+        ("rename", {"path": str(outside), "dest": str(alias / "newfile")}),
+        ("delete", {"path": str(alias / "config")}),
+        ("copy", {"path": str(outside), "dest": str(alias / "newfile")}),
+        ("write_chunk", {"path": str(target), "transfer_id": "deadbeef", "offset": 0,
+                         "total": 1, "base64": "YQ==", "overwrite": True}),
+        ("transfer_cancel", {"path": str(target), "transfer_id": "deadbeef"}),
+    ]:
+        with pytest.raises(FsError, match="protected system path"):
+            svc.dispatch(op, args)
+    upload = workspace / "upload"
+    (workspace / "upload.tether-part.deadbeef").symlink_to(protected / "newfile")
+    with pytest.raises(FsError, match="partial transfer"):
+        svc.open_write_stream(str(upload), "deadbeef", 1, False)
+    assert target.read_bytes() == b"original" and part.read_bytes() == b"partial"
+    assert outside.read_bytes() == b"source"
+    assert sorted(p.name for p in protected.iterdir()) == ["config", "config.tether-part.deadbeef"]
+
+
 def test_chunked_transfer_resumes_and_finalizes_atomically(env) -> None:
     svc: FsService = env["svc"]
     folder = env["root"] / "transfer"

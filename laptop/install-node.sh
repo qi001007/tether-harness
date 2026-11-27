@@ -2,6 +2,8 @@
 # One-shot Tether Node installer for Linux and macOS.
 set -euo pipefail
 
+install_node() {
+local -a original_args=("$@")
 VERSION="${TETHER_NODE_VERSION:-latest}"
 PREFIX="${TETHER_NODE_PREFIX:-$HOME/.local/share/tether-node}"
 HUB_URL="${TETHER_HUB_URL:-https://8-220-198-26.sslip.io}"
@@ -17,6 +19,7 @@ CHECK_ONLY=0
 INSTALL_ONLY=0
 USER_TOKEN="${TETHER_USER_TOKEN:-}"
 SYSTEMD=0
+SERVICE_USER=tether
 NO_SYSTEMD=0
 BASE_URL="${TETHER_ASSET_BASE:-}"
 # The origin layer is overridable so a regional CDN can stand in for github.com and
@@ -43,6 +46,7 @@ Usage: install-node.sh [options]
   --user-token TOKEN One-time account token used for first enrollment
   --base-url URL     Release mirror base (default: GitHub releases)
   --systemd          Install as a systemd service (requires root)
+  --user NAME        Existing non-root service user (default: create or use tether)
   --no-systemd       Do not install a service, even when running as root
   --workspaces-root  Root for remote projects (default: PREFIX/workspace)
   --allowed-roots    Comma-separated writable roots for the file API
@@ -65,8 +69,9 @@ while [ $# -gt 0 ]; do
     --prefix) PREFIX="$2"; shift 2 ;;
     --user-token) USER_TOKEN="$2"; shift 2 ;;
     --base-url) BASE_URL="$2"; shift 2 ;;
-    --systemd) SYSTEMD=1; shift ;;
-    --no-systemd) NO_SYSTEMD=1; shift ;;
+    --systemd) SYSTEMD=1; NO_SYSTEMD=0; shift ;;
+    --user) SERVICE_USER="$2"; shift 2 ;;
+    --no-systemd) NO_SYSTEMD=1; SYSTEMD=0; shift ;;
     --workspaces-root) WORKSPACES_ROOT="$2"; shift 2 ;;
     --allowed-roots) ALLOWED_ROOTS="$2"; shift 2 ;;
     --check) CHECK_ONLY=1; shift ;;
@@ -116,6 +121,194 @@ if [ "$SYSTEMD" = 1 ]; then
 fi
 [ -n "$WORKSPACES_ROOT" ] || WORKSPACES_ROOT="$PREFIX/workspace"
 
+command -v python3 >/dev/null 2>&1 || fail "python3 is required"
+python3 - <<'PY' || exit 1
+import sys
+if sys.version_info < (3, 10):
+    raise SystemExit("Tether Node requires Python 3.10 or newer; found " + sys.version.split()[0])
+print("python " + sys.version.split()[0])
+PY
+
+if [ "$CHECK_ONLY" = 1 ]; then
+  command -v curl >/dev/null 2>&1 || say "warning: curl is missing (needed only for --archive-free install)"
+  python3 -m venv --help >/dev/null 2>&1 || say "warning: python3-venv is missing (install python3-venv)"
+  say "check passed; install target: $PREFIX"
+  exit 0
+fi
+
+if [ -z "$USER_TOKEN" ] && [ -z "$TOKEN" ] && [ "$INSTALL_ONLY" != 1 ] && [ "$ROLLBACK" != 1 ]; then
+  if [ -r /dev/tty ]; then
+    exec 3</dev/tty
+    printf 'Tether 账号邮箱: ' >&2
+    IFS= read -r EMAIL <&3
+    printf '密码: ' >&2
+    IFS= read -rs PASSWORD <&3
+    printf '\n' >&2
+    exec 3<&-
+    [ -n "$EMAIL" ] && [ -n "$PASSWORD" ] || fail "邮箱或密码为空"
+    USER_TOKEN=$(TETHER_EMAIL="$EMAIL" TETHER_PASSWORD="$PASSWORD" python3 - "$HUB_URL" <<'PY'
+import json
+import os
+import sys
+import urllib.request
+
+url = sys.argv[1].rstrip('/') + '/api/auth/login'
+body = json.dumps({'email': os.environ.get('TETHER_EMAIL', ''),
+                   'password': os.environ.get('TETHER_PASSWORD', '')}).encode()
+request = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/json'})
+try:
+    with urllib.request.urlopen(request, timeout=30) as response:
+        print(json.load(response).get('token', ''))
+except Exception as error:
+    print(str(error), file=sys.stderr)
+PY
+    ) || fail "登录失败：请检查账号密码或网络"
+    [ -n "$USER_TOKEN" ] || fail "登录失败：没有拿到账号令牌"
+    say "登录成功，正在注册设备…"
+  else
+    fail "非交互安装需要设置 TETHER_USER_TOKEN（一次性登录令牌）"
+  fi
+fi
+
+if [ "$SYSTEMD" = 1 ]; then
+  [[ "$SERVICE_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]] || fail "invalid service user"
+  [ "$PREFIX" = "$(realpath -m -- "$PREFIX")" ] || fail "use an absolute service prefix without symlinks"
+  case "$PREFIX/" in
+    /etc/*|/boot/*|/usr/*|/bin/*|/sbin/*|/lib/*|/lib64/*|/root/*|/sys/*|/proc/*|/dev/*|/run/*)
+      fail "cannot install a service in a protected system directory" ;;
+  esac
+  case "$PREFIX" in
+    /var/lib|/var/log|/var/cache|/var/spool|/var/tmp) fail "choose a dedicated service directory" ;;
+    /*/*) ;;
+    *) fail "choose a dedicated service directory" ;;
+  esac
+  MIGRATE_PREFIX=0
+  if [ -d "$PREFIX" ] && [ -n "$(ls -A -- "$PREFIX")" ]; then
+    if [ -f "$PREFIX/tether-node" ] && [ -f "$PREFIX/node.env" ] &&
+      grep -Fxq -- "TETHER_NODE_PREFIX=$PREFIX" "$PREFIX/node.env"; then
+      MIGRATE_PREFIX=1
+    elif ! id "$SERVICE_USER" >/dev/null 2>&1 || [ "$(stat -c %u -- "$PREFIX")" != "$(id -u "$SERVICE_USER")" ]; then
+      fail "choose an empty prefix or the existing Tether installation"
+    fi
+  fi
+  if ! id "$SERVICE_USER" >/dev/null 2>&1; then
+    [ "$SERVICE_USER" = tether ] || fail "service user does not exist: $SERVICE_USER"
+    useradd --system --user-group --create-home --home-dir /var/lib/tether-node --shell /usr/sbin/nologin tether
+  fi
+  [ "$(id -u "$SERVICE_USER")" != 0 ] || fail "the service requires a non-root user"
+  # sudo callers can supply a package kept under /root or another private directory.
+  if [ -n "$ARCHIVE" ] || [ -n "$RUNTIME_ARCHIVE" ]; then
+    local input=${RUNTIME_ARCHIVE:-$ARCHIVE} option=--archive
+    if [ -n "$RUNTIME_ARCHIVE" ]; then option=--runtime-archive; fi
+    [ -f "$input" ] || fail "archive not found: $input"
+    if ! runuser -u "$SERVICE_USER" -- test -r "$input"; then
+      STAGE_DIR="$(mktemp -d /tmp/tether-install.XXXXXXXX)"
+      STAGED_ARCHIVE="$STAGE_DIR/$(basename -- "$input")"
+      trap 'rm -f -- "$STAGED_ARCHIVE"; rmdir -- "$STAGE_DIR"' EXIT
+      install -m 0400 -o "$SERVICE_USER" -- "$input" "$STAGED_ARCHIVE"
+      chmod 0711 "$STAGE_DIR"
+      original_args+=("$option" "$STAGED_ARCHIVE")
+    fi
+  fi
+  ENV_FILE="$PREFIX/node.env"
+  LAUNCHER="$PREFIX/tether-node"
+  UNIT_FILE=/etc/systemd/system/tether-node.service
+  install_unit() {
+    local staged_unit
+    staged_unit="$(mktemp "$UNIT_FILE.XXXXXX")"
+    cat > "$staged_unit" <<EOF
+[Unit]
+Description=Tether Node (remote maintenance)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+UMask=0077
+NoNewPrivileges=true
+WorkingDirectory=$PREFIX
+EnvironmentFile=$ENV_FILE
+ExecStart=$LAUNCHER
+Restart=always
+RestartSec=3
+MemoryHigh=220M
+MemoryMax=384M
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    chmod 0644 "$staged_unit"
+    mv -f -- "$staged_unit" "$UNIT_FILE"
+    systemctl daemon-reload
+    [ "$(systemctl show -p User --value tether-node)" = "$SERVICE_USER" ] ||
+      fail "systemd did not load the requested service user"
+  }
+  LEGACY_ROOT=0
+  LEGACY_ACTIVE=0
+  if [ "$(systemctl show -p LoadState --value tether-node)" = loaded ]; then
+    case "$(systemctl show -p User --value tether-node)" in
+      ''|root|0)
+        LEGACY_ROOT=1
+        if systemctl is-active --quiet tether-node; then
+          systemctl stop tether-node
+          LEGACY_ACTIVE=1
+        fi
+        # Retire the old root ExecStart before its launcher or venv changes owners.
+        install_unit ;;
+    esac
+  fi
+  if [ ! -d "$PREFIX" ]; then
+    install -d -m 0750 -o "$SERVICE_USER" "$PREFIX"
+  elif [ "$LEGACY_ROOT" = 1 ] || ! runuser -u "$SERVICE_USER" -- test -w "$PREFIX"; then
+    if [ "$MIGRATE_PREFIX" = 1 ]; then
+      # Migrate the previous root service's private state and updateable install.
+      find "$PREFIX" -xdev -user root -exec chown -h "$SERVICE_USER" -- {} +
+    else
+      chown "$SERVICE_USER" -- "$PREFIX"
+    fi
+  fi
+  if [ "$WORKSPACES_ROOT" != "$PREFIX/workspace" ] && [ ! -d "$WORKSPACES_ROOT" ]; then
+    install -d -m 0750 -o "$SERVICE_USER" "$WORKSPACES_ROOT"
+  fi
+
+  # Install, upgrade and roll back under the same identity as the running Node.
+  # Passing the parsed script on stdin also supports curl | bash installations.
+  {
+    declare -f install_node
+    printf '%s\n' 'install_node "$@"'
+  } | TETHER_SERVICE_INSTALL=1 TETHER_USER_TOKEN="$USER_TOKEN" runuser -u "$SERVICE_USER" -- bash -seu -o pipefail -- \
+       "${original_args[@]}" --prefix "$PREFIX" --no-systemd --install-only || {
+    if [ "$LEGACY_ACTIVE" = 1 ] && [ "$MIGRATE_PREFIX" = 1 ]; then systemctl start tether-node; fi
+    fail "service payload installation failed"
+  }
+  if [ "$LEGACY_ROOT" = 0 ]; then install_unit; fi
+  if [ "$ROLLBACK" = 1 ]; then systemctl restart tether-node; return; fi
+  systemctl enable tether-node >/dev/null 2>&1
+  if [ "$INSTALL_ONLY" = 1 ]; then return; fi
+  systemctl restart tether-node
+  sleep 3
+  systemctl is-active --quiet tether-node || fail "tether-node did not stay active"
+  if [ -n "$USER_TOKEN" ]; then
+    for _ in $(seq 1 30); do
+      [ -f "$PREFIX/device-token.json" ] && break
+      sleep 1
+    done
+    if [ -f "$PREFIX/device-token.json" ]; then
+      runuser -u "$SERVICE_USER" -- sed -i '/^TETHER_USER_TOKEN=/d' "$ENV_FILE"
+      systemctl restart tether-node
+      sleep 2
+      say "enrolled:  device token saved; one-time login token removed"
+    else
+      say "warning: device token not saved yet; see: journalctl -u tether-node -n 50"
+    fi
+  fi
+  say "done:      device $DEVICE is installed and running"
+  say "manage:    systemctl status tether-node"
+  return
+fi
+
 if [ "$ROLLBACK" = 1 ]; then
   CURRENT="$PREFIX/current"
   PREVIOUS="$PREFIX/previous"
@@ -129,23 +322,7 @@ if [ "$ROLLBACK" = 1 ]; then
   ln -s "$CURRENT_TARGET" "$TEMP_PREVIOUS"
   mv -Tf "$TEMP_PREVIOUS" "$PREVIOUS"
   mv -Tf "$TEMP_LINK" "$CURRENT"
-  if [ "$SYSTEMD" = 1 ]; then systemctl restart tether-node; fi
   say "runtime rolled back to: $PREVIOUS_TARGET"
-  exit 0
-fi
-
-command -v python3 >/dev/null 2>&1 || fail "python3 is required"
-python3 - <<'PY' || exit 1
-import sys
-if sys.version_info < (3, 10):
-    raise SystemExit("Tether Node requires Python 3.10 or newer; found " + sys.version.split()[0])
-print("python " + sys.version.split()[0])
-PY
-
-if [ "$CHECK_ONLY" = 1 ]; then
-  command -v curl >/dev/null 2>&1 || say "warning: curl is missing (needed only for --archive-free install)"
-  python3 -m venv --help >/dev/null 2>&1 || say "warning: python3-venv is missing (install python3-venv)"
-  say "check passed; install target: $PREFIX"
   exit 0
 fi
 
@@ -237,6 +414,7 @@ if [ -n "$RUNTIME_ARCHIVE" ]; then
 import json
 import os
 import posixpath
+import platform
 import re
 import shutil
 import sys
@@ -261,7 +439,8 @@ with tarfile.open(archive, "r:gz") as bundle:
         raise SystemExit("runtime manifest is not a regular file")
     manifest = json.load(manifest_file)
     version = manifest.get("version")
-    if (manifest.get("schema") != 1 or manifest.get("platform") != "linux-x64"
+    target_platform = {"x86_64": "linux-x64", "aarch64": "linux-arm64", "arm64": "linux-arm64"}.get(platform.machine().lower())
+    if (not target_platform or manifest.get("schema") != 1 or manifest.get("platform") != target_platform
             or manifest.get("entry") != "bin/tether-node"
             or manifest.get("python") != "resources/tether-runtime/tether-python"
             or not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
@@ -323,8 +502,10 @@ with tarfile.open(archive, "r:gz") as bundle:
         root / "bin/tether-node", root / "resources/tether-runtime/tether-python",
         root / "tether-source/tether/node/agent.py", root / "resources/tether-runtime/components/caddy",
         root / "resources/tether-runtime/components/easytier", root / "resources/tether-runtime/components/rclone",
-        root / "resources/tether-runtime/components/sftpgo", root / "resources/tether-runtime/components/dsh",
+        root / "resources/tether-runtime/components/sftpgo",
     ]
+    if target_platform == "linux-x64":
+        required.append(root / "resources/tether-runtime/components/dsh")
     if any(not path.exists() for path in required):
         raise SystemExit("runtime archive is missing required Node or native components")
     (root / "bin/tether-node").chmod(0o755)
@@ -355,7 +536,7 @@ else
   [ -z "$RUNTIME_SHA256" ] || fail "--runtime-sha256 requires --runtime-archive"
 fi
 
-mkdir -p "$PREFIX" "$HOME/.local/bin"
+mkdir -p "$PREFIX"
 if [ "$RUNTIME_MODE" != 1 ]; then
   ZIP="$ARCHIVE"
   if [ -z "$ZIP" ]; then
@@ -444,40 +625,6 @@ if [ "$RUNTIME_MODE" != 1 ]; then
   [ -f "$ROOT/pyproject.toml" ] || fail "unexpected archive layout: $ROOT/pyproject.toml is missing"
 fi
 
-if [ -z "$USER_TOKEN" ] && [ "$INSTALL_ONLY" != 1 ]; then
-  if [ -r /dev/tty ]; then
-    exec 3</dev/tty
-    printf 'Tether 账号邮箱: ' >&2
-    IFS= read -r EMAIL <&3
-    printf '密码: ' >&2
-    IFS= read -rs PASSWORD <&3
-    printf '\n' >&2
-    exec 3<&-
-    [ -n "$EMAIL" ] && [ -n "$PASSWORD" ] || fail "邮箱或密码为空"
-    USER_TOKEN=$(TETHER_EMAIL="$EMAIL" TETHER_PASSWORD="$PASSWORD" python3 - "$HUB_URL" <<'PY'
-import json
-import os
-import sys
-import urllib.request
-
-url = sys.argv[1].rstrip('/') + '/api/auth/login'
-body = json.dumps({'email': os.environ.get('TETHER_EMAIL', ''),
-                   'password': os.environ.get('TETHER_PASSWORD', '')}).encode()
-request = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/json'})
-try:
-    with urllib.request.urlopen(request, timeout=30) as response:
-        print(json.load(response).get('token', ''))
-except Exception as error:
-    print(str(error), file=sys.stderr)
-PY
-    ) || fail "登录失败：请检查账号密码或网络"
-    [ -n "$USER_TOKEN" ] || fail "登录失败：没有拿到账号令牌"
-    say "登录成功，正在注册设备…"
-  else
-    fail "非交互安装需要设置 TETHER_USER_TOKEN（一次性登录令牌）"
-  fi
-fi
-
 if [ "$RUNTIME_MODE" != 1 ]; then
   say "creating venv and installing dependencies..."
   python3 -m venv "$PREFIX/venv"
@@ -531,7 +678,10 @@ exec "$VENV_PY" -m tether.node.agent \\
 EOF
 fi
 chmod +x "$LAUNCHER"
-ln -sf "$LAUNCHER" "$HOME/.local/bin/tether-node"
+if [ "${TETHER_SERVICE_INSTALL:-0}" != 1 ]; then
+  mkdir -p "$HOME/.local/bin"
+  ln -sf "$LAUNCHER" "$HOME/.local/bin/tether-node"
+fi
 
 say "installed: $LAUNCHER"
 say "env:       $ENV_FILE (mode 600)"
@@ -539,61 +689,17 @@ if [ "$RUNTIME_MODE" = 1 ]; then
   say "runtime:   $PREFIX/current -> releases/$VERSION"
   say "rollback:  sudo bash laptop/install-node.sh --prefix $PREFIX --rollback --systemd"
 fi
-if [ "$SYSTEMD" = 1 ]; then
-  mkdir -p "$WORKSPACES_ROOT"
-  if [ ! -f "$PREFIX/policy.json" ]; then
-    python3 - "$ALLOWED_ROOTS" "$WORKSPACES_ROOT" "$PREFIX/workspace" "$PREFIX/policy.json" <<'PY'
+mkdir -p "$WORKSPACES_ROOT"
+if [ ! -f "$PREFIX/policy.json" ]; then
+  python3 - "$ALLOWED_ROOTS" "$WORKSPACES_ROOT" "$PREFIX/workspace" "$PREFIX/policy.json" <<'PY'
 import json
 import sys
 extra = [part.strip() for part in sys.argv[1].split(',') if part.strip()]
 roots = list(dict.fromkeys([sys.argv[2], sys.argv[3], *extra]))
 with open(sys.argv[4], 'w', encoding='utf-8') as handle:
-    json.dump({'mode': 'full', 'allowed_roots': roots}, handle, ensure_ascii=False)
+    json.dump({'mode': 'readonly', 'allowed_roots': roots}, handle, ensure_ascii=False)
 PY
-    chmod 600 "$PREFIX/policy.json"
-  fi
-  cat > /etc/systemd/system/tether-node.service <<EOF
-[Unit]
-Description=Tether Node (remote maintenance)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=$PREFIX
-EnvironmentFile=$ENV_FILE
-ExecStart=$LAUNCHER
-Restart=always
-RestartSec=3
-MemoryHigh=220M
-MemoryMax=384M
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  systemctl daemon-reload
-  systemctl enable tether-node >/dev/null 2>&1
-  systemctl restart tether-node
-  sleep 3
-  systemctl is-active --quiet tether-node || fail "tether-node did not stay active"
-  if [ -n "$USER_TOKEN" ]; then
-    for _ in $(seq 1 30); do
-      [ -f "$PREFIX/device-token.json" ] && break
-      sleep 1
-    done
-    if [ -f "$PREFIX/device-token.json" ]; then
-      sed -i '/^TETHER_USER_TOKEN=/d' "$ENV_FILE"
-      systemctl restart tether-node
-      sleep 2
-      say "enrolled:  device token saved; one-time login token removed"
-    else
-      say "warning: device token not saved yet; see: journalctl -u tether-node -n 50"
-    fi
-  fi
-  say "done:      device $DEVICE is installed and running"
-  say "manage:    systemctl status tether-node"
-  exit 0
+  chmod 600 "$PREFIX/policy.json"
 fi
 if [ "$INSTALL_ONLY" = 1 ]; then
   say "install-only requested; start later with: $LAUNCHER"
@@ -601,3 +707,6 @@ else
   say "starting Tether Node..."
   exec "$LAUNCHER"
 fi
+}
+
+install_node "$@"

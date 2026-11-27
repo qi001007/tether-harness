@@ -1188,6 +1188,37 @@ def test_node_reconnect_loop_stops_after_successful_apply(tmp_path, monkeypatch)
     node.store.db.close()
 
 
+def test_reconnect_backoff_caps_at_one_minute_and_resets_after_a_session(monkeypatch):
+    from types import SimpleNamespace
+
+    delays = []
+
+    async def record_delay(seconds):
+        delays.append(seconds)
+
+    async def warm():
+        pass
+
+    async def session():
+        if len(delays) < 12:
+            raise TimeoutError("handshake timed out")
+        if len(delays) == 12:
+            node.connected = True
+            raise ConnectionError("registered connection dropped")
+        node.restart_requested = True
+
+    node = SimpleNamespace(direct=None, connected=False, apps=SimpleNamespace(ensure=lambda: None),
+                           _warm_updates=warm, _session=session, _wait_for_reconnect=Node._wait_for_reconnect,
+                           _block_until=0, restart_requested=False)
+    monkeypatch.setattr(agent.random, "uniform", lambda low, high: (low + high) / 2)
+    monkeypatch.setattr(agent.asyncio, "sleep", record_delay)
+    asyncio.run(Node.run(node))
+    assert 0 < delays[0] <= 0.1
+    assert delays[1] == 2 * delays[0]
+    assert delays[10:12] == [54, 54]
+    assert delays[-1] == delays[0]
+
+
 def test_unmanaged_restart_preserves_original_python_command(monkeypatch):
     class ExecRequested(Exception):
         pass
@@ -1318,7 +1349,7 @@ class _ManifestFeed:
 def test_update_result_carries_the_source_rejections_to_the_hub(tmp_path, monkeypatch) -> None:
     """Hub 要能拼出「这台为何看不到新版」，前提是节点把字段真的放进信封，
     而不是只在 UpdateManager 的返回值里存在。"""
-    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
     node = _node(tmp_path, monkeypatch)
     root = tmp_path / "runtime"
     root.mkdir()

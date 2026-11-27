@@ -7,6 +7,8 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 import threading
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -211,3 +213,91 @@ def test_default_latest_resolution_uses_the_published_release_manifest() -> None
     assert 'LAYER_MANIFEST_BASES+=("${ORIGIN_BASE}/latest/download")' in source
     assert 'LAYER_ASSET_BASES+=("${ORIGIN_BASE}")' in source
     assert 'for ATTEMPT in 1 2 3' not in source, "single-address triple retry must not come back"
+
+@pytest.mark.skipif(sys.platform != "linux", reason="uses Linux users and systemd unit conventions")
+@pytest.mark.parametrize(("service_user", "legacy_root"), [("nobody", False), ("nobody", True), ("tether", False)])
+def test_system_install_builds_and_runs_the_payload_as_an_unprivileged_user(service_user, legacy_root):
+    import platform
+    import pwd
+
+    if os.geteuid() != 0 or not shutil.which("runuser"):
+        pytest.skip("requires a root Linux test process with runuser")
+    if service_user == "tether" and os.environ.get("TETHER_TEST_DISPOSABLE_LINUX") != "1":
+        pytest.skip("default account creation needs a disposable Linux host")
+    target = {"x86_64": "linux-x64", "aarch64": "linux-arm64"}.get(platform.machine())
+    if not target:
+        pytest.skip("unsupported runtime architecture")
+    source = (Path(__file__).resolve().parents[1] / "laptop/install-node.sh").read_text(encoding="utf-8")
+    # Keep the unit and fake systemctl inside the fixture. runuser, filesystem ownership
+    # and the runtime entry itself run normally, without touching any machine service.
+    with tempfile.TemporaryDirectory(dir="/tmp") as temporary:
+        fixture = Path(temporary)
+        fixture.chmod(0o755)
+        unit = fixture / "tether-node.service"
+        script = fixture / "install-node.sh"
+        script.write_text(source.replace("/etc/systemd/system/tether-node.service", str(unit)))
+        systemctl = fixture / "systemctl"
+        systemctl.write_text(f"""#!/bin/sh
+echo "$*" >> '{fixture}/systemctl.log'
+case "$1:$3" in
+  show:LoadState) if [ -f '{unit}' ]; then echo loaded; else echo not-found; fi ;;
+  show:User) sed -n 's/^User=//p' '{unit}' ;;
+  is-active:*) test -f '{unit}' ;;
+esac
+""")
+        systemctl.chmod(0o755)
+        version = "1.2.3"
+        tree = fixture / ("tether-node-runtime-" + version)
+        (tree / "bin").mkdir(parents=True)
+        entry = tree / "bin/tether-node"
+        entry.write_text('#!/bin/sh\nid -u > "$TETHER_NODE_PREFIX/help-uid"\n')
+        entry.chmod(0o755)
+        (tree / "runtime-manifest.json").write_text(json.dumps({"schema": 1, "platform": target,
+            "version": version, "entry": "bin/tether-node", "python": "resources/tether-runtime/tether-python"}))
+        runtime = tree / "resources/tether-runtime"
+        for component in ("caddy", "easytier", "rclone", "sftpgo", "dsh"):
+            (runtime / "components" / component).mkdir(parents=True)
+        (runtime / "tether-python").write_text("fixture")
+        agent_file = tree / "tether-source/tether/node/agent.py"
+        agent_file.parent.mkdir(parents=True)
+        agent_file.write_text("")
+        private = fixture / "private"
+        private.mkdir(mode=0o700)
+        archive = private / "runtime.tar.gz"
+        with tarfile.open(archive, "w:gz") as bundle:
+            bundle.add(tree, arcname=tree.name)
+        prefix = fixture / "prefix"
+        if legacy_root:
+            prefix.mkdir()
+            (prefix / "node.env").write_text(f"TETHER_NODE_PREFIX={prefix}\n")
+            (prefix / "tether-node").touch()
+            for name in ("venv", "tether-node-0.1", "state"):
+                directory = prefix / name
+                directory.mkdir()
+                (directory / "data").touch()
+            unit.write_text("[Service]\nUser=root\n")
+        env = {**os.environ, "PATH": str(fixture) + ":" + os.environ["PATH"]}
+        command = ["bash", str(script), "--systemd", "--install-only",
+                   "--runtime-archive", str(archive), "--runtime-sha256",
+                   hashlib.sha256(archive.read_bytes()).hexdigest(), "--prefix", str(prefix)]
+        if service_user != "tether":
+            command.extend(["--user", service_user])
+        unsafe = subprocess.run([*command, "--prefix", "/etc"], env=env, capture_output=True, text=True)
+        assert unsafe.returncode != 0 and "protected" in unsafe.stderr
+        assert not (fixture / "systemctl.log").exists()
+        if not legacy_root:
+            bad = subprocess.run([*command, "--runtime-sha256", "0" * 64], env=env, capture_output=True, text=True)
+            assert bad.returncode != 0 and not unit.exists()
+        result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, result.stdout + result.stderr
+        account = pwd.getpwnam(service_user)
+        assert f"User={account.pw_name}\n" in unit.read_text()
+        assert (prefix / "help-uid").read_text().strip() == str(account.pw_uid) != "0"
+        assert (prefix / "node.env").stat().st_uid == account.pw_uid
+        if legacy_root:
+            assert "stop tether-node" in (fixture / "systemctl.log").read_text()
+            for name in ("venv", "tether-node-0.1", "state"):
+                assert (prefix / name / "data").stat().st_uid == account.pw_uid
+        assert (prefix / "policy.json").stat().st_mode & 0o777 == 0o600
+        assert json.loads((prefix / "policy.json").read_text()) == {
+            "mode": "readonly", "allowed_roots": [str(prefix / "workspace")]}
