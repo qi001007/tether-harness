@@ -35,6 +35,8 @@ from .sftp_service_port import SHARED_PORT_VERSION, SFTP_SERVICE_PORT
 
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+RCLONE_SIZE_RE = re.compile(r"^\d+(?:\.\d+)?(?:[KMGTP]i?B?)?$", re.IGNORECASE)
+RCLONE_STREAMS_RE = re.compile(r"^[1-9]\d{0,2}$")
 TERMINAL = {"completed", "cancelled", "failed", "interrupted"}
 RECEIVE_PROBE_BYTES = 128 * 1024
 RECEIVE_PROBE_SECONDS = 8
@@ -1540,7 +1542,7 @@ class RcloneJobs:
             socks_proxy = "%s:%d" % self._socks_proxy(str(endpoint.get("network_id") or ""))
         content = ("[transfer]\ntype = sftp\n" + f"host = {host}\nuser = {endpoint['username']}\nport = {port}\n" +
                    f"key_file = {key_file}\nknown_hosts_file = {known_hosts}\nsocks_proxy = {socks_proxy}\n" +
-                   "shell_type = none\nconnections = 9\n")
+                   "shell_type = none\nconnections = 9\nchunk_size = 255k\nconcurrency = 64\n")
         config.write_text(content, encoding="utf-8")
         try:
             os.chmod(known_hosts, stat.S_IRUSR | stat.S_IWUSR)
@@ -1566,9 +1568,19 @@ class RcloneJobs:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         username, password = "tether", secrets.token_urlsafe(32)
+        def tuning(name: str, default: str, pattern: re.Pattern[str]) -> str:
+            value = str(os.environ.get(name) or default).strip()
+            if not pattern.fullmatch(value):
+                raise TransferJobError("invalid_transfer_tuning", f"{name} has an unsafe value")
+            return value
+        cutoff = tuning("RCLONE_MULTI_THREAD_CUTOFF", "16Mi", RCLONE_SIZE_RE)
+        streams = tuning("RCLONE_MULTI_THREAD_STREAMS", "4", RCLONE_STREAMS_RE)
+        chunk_size = tuning("RCLONE_MULTI_THREAD_CHUNK_SIZE", "8Mi", RCLONE_SIZE_RE)
         process = subprocess.Popen([self._binary, "rcd", "--config", str(config), "--rc-addr", f"127.0.0.1:{port}",
                                     "--rc-user", username, "--rc-pass", password,
-                                    "--transfers", "4", "--checkers", "4"],
+                                    "--transfers", "4", "--checkers", "4",
+                                    "--multi-thread-cutoff", cutoff, "--multi-thread-streams", streams,
+                                    "--multi-thread-chunk-size", chunk_size],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         self._rc[operation_id] = {"process": process, "url": f"http://127.0.0.1:{port}/",

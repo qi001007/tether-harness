@@ -249,7 +249,7 @@ class Policy:
         self.workspaces_root = workspaces_root
         self.data = self._load()
         self.data.setdefault("allowed_roots", [str(self.workspaces_root), str(self.node_workspace)])
-        self.data.setdefault("mode", "readonly")
+        self.data.setdefault("mode", "default")
         self._save()
 
     def _load(self) -> dict[str, Any]:
@@ -271,8 +271,8 @@ class Policy:
 
     def update(self, body: dict[str, Any]) -> dict[str, Any]:
         mode = body.get("mode")
-        if mode not in (None, "readonly", "locked", "full"):
-            raise FsError("mode must be readonly, locked or full", "bad_policy")
+        if mode not in (None, "default", "custom", "readonly", "locked", "full"):
+            raise FsError("mode must be default, custom, readonly, locked or full", "bad_policy")
         if mode:
             self.data["mode"] = mode
         roots = body.get("allowed_roots")
@@ -370,10 +370,16 @@ class Policy:
         reason = self._system_deny_write(p)
         if reason:
             return False, reason
-        if self.data.get("mode") == "locked":
+        mode = self.data.get("mode") or "default"
+        if mode == "locked":
             return False, "writes disabled (locked policy)"
-        if self.data.get("mode") == "full":
+        if mode == "full":
             return True, "full-disk mode"
+        if mode == "default" and sys.platform.startswith("win"):
+            system = os.environ.get("SystemDrive", "C:").rstrip("\\/").upper()
+            drive = (getattr(p, "drive", "") or "").rstrip("\\/").upper()
+            if drive and drive != system:
+                return True, "default policy: non-system drive is writable"
         for root in self.writable_roots():
             try:
                 root = root.resolve()

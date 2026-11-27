@@ -147,6 +147,24 @@ def test_restore_refuses_unverified_pid_without_replacing_it(managed_mesh) -> No
     assert starts == []
 
 
+def test_relay_data_fallback_is_enabled_by_default(managed_mesh) -> None:
+    runtime, config, starts, active = managed_mesh
+    applied = runtime.apply(config)
+    record = runtime._load_records()[applied["instance_id"]]
+    rendered = Path(record["config_path"]).read_text(encoding="utf-8")
+    assert "disable_relay_data = false" in rendered
+    assert "no_tun = true" in rendered and "use_smoltcp = true" in rendered
+
+
+def test_relay_data_can_be_disabled_explicitly(managed_mesh, monkeypatch) -> None:
+    monkeypatch.setenv("TETHER_MESH_DISABLE_RELAY_DATA", "true")
+    runtime, config, starts, active = managed_mesh
+    applied = runtime.apply(config)
+    record = runtime._load_records()[applied["instance_id"]]
+    rendered = Path(record["config_path"]).read_text(encoding="utf-8")
+    assert "disable_relay_data = true" in rendered
+
+
 def test_member_wss_retains_the_issuer_trust_and_base_config(managed_mesh, monkeypatch) -> None:
     runtime, config, starts, active = managed_mesh
     original = runtime.apply(config)
@@ -165,7 +183,7 @@ def test_member_wss_retains_the_issuer_trust_and_base_config(managed_mesh, monke
         active["value"] = False
         assert runtime.restore_stopped_network(original["network_id"]) == original
         effective = base.with_name(".transport-runtime.toml").read_text(encoding="utf-8")
-        assert expected in effective and 'disable_relay_data = true' in effective
+        assert expected in effective and 'disable_relay_data = false' in effective
         assert f'uri = "{config["peers"][0]}"' in effective
         assert base.read_bytes() == original_body and credentials.read_bytes() == original_trust
         assert not base.with_name(".relay-credentials.json").exists()
@@ -201,7 +219,7 @@ def test_restore_accepts_only_the_migrated_credential_path(managed_mesh, tmp_pat
     record.update(directory=str(old_directory), config_path=str(old_directory / config_path.name))
 
     # A valid stored digest does not authorize a second configuration change.
-    unexpected = alias_config.replace(b"disable_relay_data = true", b"disable_relay_data = false")
+    unexpected = alias_config.replace(b"disable_relay_data = false", b"disable_relay_data = true")
     record["config_sha256"] = hashlib.sha256(unexpected).hexdigest()
     config_path.write_bytes(unexpected)
     runtime._save_records(records)

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { TRANSFER_CHUNK, newTransferId, transferCrocViaHub, transferFile, transferFileCroc, transferNativeJob } from '../packages/tether-ui/src/transfer.js'
-import { hasNativeTransferEdge, isCrocUploadCandidate, selectNativeCopyBatch } from '../packages/tether-ui/src/transfer-page.js'
+import { hasDirectLanRoute, hasNativeTransferEdge, isCrocUploadCandidate, selectNativeCopyBatch } from '../packages/tether-ui/src/transfer-page.js'
 
 test('large Croc upload hint follows live device capabilities and the transfer direction', () => {
   const croc = { available: true, relay: true }
@@ -22,6 +22,24 @@ test('large Croc upload hint follows live device capabilities and the transfer d
   assert.equal(isCrocUploadCandidate(workstation, {
     ...receiver, capabilities: { ...receiver.capabilities, croc: { available: true, relay: false } }
   }, size), false)
+})
+
+test('a direct LAN route suppresses the Seoul Croc upload detour', () => {
+  const croc = { available: true, relay: true }
+  const workstation = { device_id: 'new-workstation', online: true, capabilities: {
+    os: 'Windows', app_installed: true, croc
+  } }
+  const receiver = { device_id: 'generic-headless-node', online: true, capabilities: {
+    os: 'Linux', app_installed: false, croc
+  } }
+  const size = 32 * 1024 * 1024
+  assert.equal(hasDirectLanRoute(workstation, receiver), false)
+  assert.equal(hasDirectLanRoute(
+    { ...workstation, capabilities: { ...workstation.capabilities, direct: { available: true } } }, receiver), true)
+  assert.equal(hasDirectLanRoute(
+    workstation, { ...receiver, capabilities: { ...receiver.capabilities, mesh: { p2p: true } } }), true)
+  assert.equal(isCrocUploadCandidate(
+    { ...workstation, capabilities: { ...workstation.capabilities, lan: true } }, receiver, size), false)
 })
 
 function world(payload, options = {}) {

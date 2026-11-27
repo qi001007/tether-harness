@@ -38,9 +38,18 @@ export function hasNativeTransferEdge(result, sourceDevice, targetDevice) {
   })
 }
 
+export function hasDirectLanRoute(source, target) {
+  const direct = (caps) => Boolean(caps) && (
+    caps.direct === true || caps.lan === true || caps.same_lan === true || caps.low_latency === true ||
+    caps.direct?.available === true || caps.mesh?.p2p === true || caps.mesh?.direct === true
+  )
+  return direct(source?.capabilities) || direct(target?.capabilities)
+}
+
 export function isCrocUploadCandidate(source, target, bytes) {
   if (!(bytes >= CROC_LARGE_UPLOAD_BYTES)) return false
   if (!source?.online || !target?.online) return false
+  if (hasDirectLanRoute(source, target)) return false
   const from = source.capabilities
   const to = target.capabilities
   return from?.os === 'Windows' && from.app_installed === true &&
@@ -536,7 +545,8 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       const previous = routeKey ? crocRouteRef.current.get(routeKey) : undefined
       const recent = previous?.until > Date.now() ? previous : undefined
       const preferCroc = recent?.worked === true
-      const preferCrocUpload = routeKey && !recent && isCrocUploadCandidate(sourceNode, targetNode, total)
+      const preferCrocUpload = routeKey && !recent && items.length === 1 &&
+        isCrocUploadCandidate(sourceNode, targetNode, total)
       if (routeKey && recent?.worked !== false) crocRouteRef.current.delete(routeKey)
       const rememberCroc = (worked) => {
         if (routeKey) crocRouteRef.current.set(routeKey, { worked, until: Date.now() + CROC_ROUTE_PREFERENCE_MS })
@@ -612,7 +622,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     let useCroc = false
     let useNativeJob = false
     let cancelByTransferId = false
-    const nativeBatch = items.length === 1 ? selectNativeCopyBatch({ items, target, cut }) : null
+    const nativeBatch = selectNativeCopyBatch({ items, target, cut })
     if (nativeBatch) {
       try {
         useNativeJob = hasNativeTransferEdge(await api('/api/edges'), side(fromSide).device, target.device)

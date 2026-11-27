@@ -27,6 +27,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
 
 def test_readonly_allows_project_root_and_denies_outside(env, tmp_path: Path) -> None:
     svc: FsService = env["svc"]
+    svc.policy.update({"mode": "readonly"})
     svc.dispatch("mkdir", {"path": str(env["root"] / "demo")})
     written = svc.dispatch("write", {"path": str(env["root"] / "demo" / "a.txt"), "text": "hello"})
     assert written["bytes"] == 5
@@ -76,6 +77,8 @@ def test_agents_runtime_surface_uses_gateway_route(env) -> None:
 
 
 def test_existing_dsh_workspace_is_writable_in_readonly(env) -> None:
+    svc: FsService = env["svc"]
+    svc.policy.update({"mode": "readonly"})
     home: Path = env["home"]
     dsh_dir = home / "dsh-project"
     dsh_dir.mkdir()
@@ -92,6 +95,34 @@ def test_existing_dsh_workspace_is_writable_in_readonly(env) -> None:
 
     svc.dispatch("write", {"path": str(dsh_dir / "file.txt"), "text": "ok"})
     assert (dsh_dir / "file.txt").read_text(encoding="utf-8") == "ok"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows drive and system path policy")
+def test_default_mode_makes_the_system_drive_read_only(env, monkeypatch: pytest.MonkeyPatch) -> None:
+    svc: FsService = env["svc"]
+    monkeypatch.setenv("SystemDrive", "C:")
+    svc.policy.update({"mode": "default"})
+    assert svc.policy.can_write(Path("C:/Users/Public/tether-policy.txt"), op="write")[0] is False
+    assert svc.policy.can_write(Path("D:/tether-policy/ok.txt"), op="write")[0] is True
+    assert svc.policy.can_write(Path("C:/Windows/tether-policy.txt"), op="write")[0] is False
+    assert svc.policy.can_write(Path("C:/Windows/System32/tether-policy.txt"), op="write")[0] is False
+    assert svc.policy.can_write(env["root"] / "allowed.txt", op="write")[0] is True
+
+
+def test_custom_mode_allows_only_writable_roots(env) -> None:
+    svc: FsService = env["svc"]
+    svc.policy.update({"mode": "custom"})
+    assert svc.policy.can_write(env["root"] / "allowed.txt", op="write")[0] is True
+    outside = Path("D:/tether-policy/denied.txt") if sys.platform == "win32" else Path("/tether-policy-denied.txt")
+    assert svc.policy.can_write(outside, op="write")[0] is False
+
+
+def test_locked_mode_denies_all_writes(env) -> None:
+    svc: FsService = env["svc"]
+    svc.policy.update({"mode": "locked"})
+    assert svc.policy.can_write(env["root"] / "allowed.txt", op="write")[0] is False
+    outside = Path("D:/tether-policy/denied.txt") if sys.platform == "win32" else Path("/tether-policy-denied.txt")
+    assert svc.policy.can_write(outside, op="write")[0] is False
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows drive and system path policy")

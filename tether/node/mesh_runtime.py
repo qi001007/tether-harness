@@ -646,6 +646,7 @@ class EasyTierRuntime:
         listeners = ["tcp://0.0.0.0:0", "udp://0.0.0.0:0"]
         if config.get("member_wss_port") is not None:
             listeners.append(f'ws://127.0.0.1:{config["member_wss_port"]}')
+        disable_relay_data = str(os.environ.get("TETHER_MESH_DISABLE_RELAY_DATA", "")).strip().lower() in ("1", "true")
         lines = [
             f'instance_name = "tether-{config["instance_id"]}"',
             f'instance_id = "{config["instance_id"]}"',
@@ -660,7 +661,7 @@ class EasyTierRuntime:
             "[flags]",
             "no_tun = true",
             "use_smoltcp = true",
-            "disable_relay_data = true",
+            f"disable_relay_data = {'true' if disable_relay_data else 'false'}",
             "",
             "[secure_mode]",
             "enabled = true",
