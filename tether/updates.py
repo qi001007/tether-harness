@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import filecmp
 import hashlib
 import copy
 import http.client
@@ -116,8 +117,8 @@ TRANSPORT_REJECTION_CODES = frozenset({
     "insecure_url", "insecure_redirect",
 })
 _manifest_cache_lock = threading.Lock()
-_manifest_check_cache: dict[str, tuple[float, dict[str, Any]]] = {}
-_manifest_check_flights: dict[str, Future[dict[str, Any]]] = {}
+_manifest_check_cache: dict[tuple, tuple[float, dict[str, Any]]] = {}
+_manifest_check_flights: dict[tuple, Future[dict[str, Any]]] = {}
 _download_locks: dict[str, threading.Lock] = {}
 
 PLUGIN_PACKAGE_MAP = {
@@ -198,6 +199,8 @@ ERROR_MESSAGES = {
     "plugin_package_missing": "DeepSeek Harness 桌面配置中缺少待更新的 Tether 插件包。",
     "plugin_source_unavailable": "DSH 插件 file: 源码依赖目录无法安全确认，已阻止更新。",
     "plugin_profile_changed": "更新准备后当前 DSH profile 已变化，请重新检查并准备更新。",
+    "dependency_install_failed": "虚拟环境依赖安装失败，已尝试恢复原环境。",
+    "channel_not_selected": "此更新清单与设备选择的更新通道不匹配。",
     "dependency_change_requires_manual_install": "更新包含依赖变化，需要手动安装依赖后再更新。",
     "update_busy": "另一个更新正在进行。",
     "no_update": "当前组件已经是最新版本。",
@@ -466,6 +469,15 @@ def parse_withdrawn_header(value: str | None) -> dict[str, list[str]]:
     return table
 
 
+class _ManifestWithWithdrawals(dict):
+    """Cache the signed document separately from the Hub's additional vetoes."""
+
+    def __init__(self, manifest: dict, withdrawals: dict):
+        super().__init__(manifest)
+        self.signed_document = manifest
+        self.withdrawals = withdrawals
+
+
 def merge_withdrawn(manifest: dict[str, Any], table: dict[str, list[str]]) -> dict[str, Any]:
     """Fold the header ledger into a manifest that has already been verified.
 
@@ -475,7 +487,7 @@ def merge_withdrawn(manifest: dict[str, Any], table: dict[str, list[str]]) -> di
     """
     if not table:
         return manifest
-    merged = dict(manifest)
+    merged = _ManifestWithWithdrawals(manifest, table)
     existing = merged.get("withdrawn")
     combined: dict[str, list[str]] = ({str(key): list(value) for key, value in existing.items()}
                                       if isinstance(existing, dict) else {})
@@ -753,9 +765,11 @@ class UpdateManager:
             allow_unsigned = os.environ.get("TETHER_ALLOW_UNSIGNED_RELEASE", "") == "1"
         self._allow_unsigned = bool(allow_unsigned)
         self._public_key_hex = public_key_hex
-        self.channel = str(os.environ.get("TETHER_UPDATE_CHANNEL") or "stable").strip().lower()
+        self.channel = str(os.environ.get("TETHER_UPDATE_CHANNEL") or "preview").strip().lower()
         if self.channel not in {"stable", "beta", "preview"}:
             self.channel = "stable"
+        self._manifest_key = (tuple(self._manifest_urls), self.channel, self._public_key_hex,
+                              self._allow_unsigned, self._allow_unsigned_explicit, self._allow_loopback_http)
         self._disk_manifest_path = self.state_dir / "manifest-cache.json"
         self._cancel = threading.Event()
         self._last_source = ""
@@ -1246,6 +1260,8 @@ class UpdateManager:
         manifest = record.get("manifest")
         if not isinstance(fetched_at, (int, float)) or not isinstance(manifest, dict):
             return None
+        if manifest.get("channel", "stable") not in ("stable", self.channel):
+            return None
         if time.time() - float(fetched_at) > max_age:
             return None
         try:
@@ -1255,13 +1271,16 @@ class UpdateManager:
             dev_loopback = not self._allow_unsigned_explicit and self._is_loopback_http_url(source)
             if not (exc.code == "signature_missing" and (self._allow_unsigned or dev_loopback)):
                 return None
-        return manifest
+        return merge_withdrawn(manifest, parse_withdrawn_header(record.get("withdrawn_header")))
 
     def _save_disk_manifest(self, manifest: dict[str, Any], source: str) -> None:
         try:
             self.state_dir.mkdir(parents=True, exist_ok=True)
+            overlay = getattr(manifest, "withdrawals", {})
+            header = ";".join(f"{name}:{','.join(versions)}" for name, versions in overlay.items())
             self._write_atomic(self._disk_manifest_path, (json.dumps({
-                "schema": 1, "fetched_at": time.time(), "source": source, "manifest": manifest,
+                "schema": 1, "fetched_at": time.time(), "source": source, "withdrawn_header": header,
+                "manifest": getattr(manifest, "signed_document", manifest),
             }, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
         except OSError:
             pass
@@ -1346,17 +1365,17 @@ class UpdateManager:
         now = time.monotonic()
         if not force and use_check_cache:
             with _manifest_cache_lock:
-                cached = _manifest_check_cache.get(self.manifest_url)
+                cached = _manifest_check_cache.get(self._manifest_key)
                 if cached is not None and cached[0] > now:
                     self._last_source = self.manifest_url
                     self._last_stale = False
                     return copy.deepcopy(cached[1])
         with _manifest_cache_lock:
-            flight = _manifest_check_flights.get(self.manifest_url)
+            flight = _manifest_check_flights.get(self._manifest_key)
             leader = flight is None
             if leader:
                 flight = Future()
-                _manifest_check_flights[self.manifest_url] = flight
+                _manifest_check_flights[self._manifest_key] = flight
         assert flight is not None
         if not leader and use_check_cache and not force:
             try:
@@ -1395,16 +1414,16 @@ class UpdateManager:
             self._last_source = source
             self._save_disk_manifest(manifest, source)
             with _manifest_cache_lock:
-                _manifest_check_cache[self.manifest_url] = (
+                _manifest_check_cache[self._manifest_key] = (
                     time.monotonic() + MANIFEST_CHECK_CACHE_TTL, copy.deepcopy(manifest))
                 if leader:
-                    _manifest_check_flights.pop(self.manifest_url, None)
+                    _manifest_check_flights.pop(self._manifest_key, None)
                     flight.set_result(copy.deepcopy(manifest))
             return copy.deepcopy(manifest)
         except Exception as exc:
             if leader:
                 with _manifest_cache_lock:
-                    _manifest_check_flights.pop(self.manifest_url, None)
+                    _manifest_check_flights.pop(self._manifest_key, None)
                     if not flight.done():
                         flight.set_exception(exc if isinstance(exc, UpdateError)
                                              else UpdateError("download_failed"))
@@ -1692,7 +1711,7 @@ class UpdateManager:
                     self.state_dir / f"latest-{self.component}.json",
                     (json.dumps({"schema": 1, "component": self.component, "version": version,
                                  "update_available": update_available, "rollout_paused": newer and not allowed,
-                                 "withdrawn": withdrawn,
+                                 "withdrawn": withdrawn, "channel": manifest.get("channel", "stable"),
                                  "checked_at": checked_at, "source": self._last_source,
                                  # Persisted so an operator reading this file after a
                                  # restart still sees that the Hub refused on policy
@@ -1706,6 +1725,7 @@ class UpdateManager:
             result = {"ok": True, "component": self.component, "current_version": current,
                       "installed_version": installed if self.component == "app" else None,
                       "latest_version": version, "update_available": update_available,
+                      "channel": manifest.get("channel", "stable"), "selected_channel": self.channel,
                       "rollout_paused": newer and not allowed,
                       "withdrawn": withdrawn,
                       "rollout_percent": rollout["percent"] if rollout else 100,
@@ -1856,7 +1876,7 @@ class UpdateManager:
         # be read back as an advertised update.
         self._record_rejections()
         return {"ok": False, "component": self.component, "error_code": code,
-                "source_rejections": list(self._source_rejections),
+                "selected_channel": self.channel, "source_rejections": list(self._source_rejections),
                 **self._block_report(definitive=False),
                 "policy_rejected_primary": self._policy_rejected_primary,
                 "error": ERROR_MESSAGES.get(code, "更新操作失败。")}
@@ -1956,7 +1976,87 @@ class UpdateManager:
             targets.append((source_target, str(source_target)))
         return targets
 
-    def _check_dependencies(self, staged: list[tuple[Path, Path, str]]) -> None:
+    def _source_venv(self) -> Path:
+        prefix = Path(sys.prefix).resolve()
+        if (getattr(sys, "frozen", False) or prefix == Path(sys.base_prefix).resolve()
+                or not (prefix / "pyvenv.cfg").is_file() or self.state_dir.is_relative_to(prefix)):
+            raise UpdateError("dependency_change_requires_manual_install")
+        return prefix
+
+    def _node_requirements(self, requirements: list, offered: bytes, manifest: dict | None) -> list[str]:
+        self._source_venv()
+        if not manifest or not manifest.get("signature"):
+            raise UpdateError("dependency_change_requires_manual_install")
+        item = manifest["components"]["node"]
+        artifact = self._cached_artifact(item["sha256"], item["size"])
+        if not artifact or _sha256_path(artifact) != item["sha256"]:
+            raise UpdateError("prepared_hash_mismatch")
+        # prepared.json is local mutable state. Bind pip's exact input back to
+        # the verified release archive even when apply runs long after prepare.
+        with zipfile.ZipFile(artifact) as archive:
+            if archive.read(f"tether-node-{item['version']}/pyproject.toml") != offered:
+                raise UpdateError("prepared_hash_mismatch")
+        # pip accepts options, paths and direct URLs as well as package names.
+        # Permit ordinary index requirements with versions, extras and markers.
+        spec = r"[a-zA-Z0-9][a-zA-Z0-9._,;! =<>'\"~()\[\]*+-]*"
+        if not isinstance(requirements, list) or any(not isinstance(req, str) or not re.fullmatch(spec, req)
+                                                      for req in requirements):
+            raise UpdateError("dependency_change_requires_manual_install")
+        return requirements
+
+    @staticmethod
+    def _install_node_requirements(requirements: list[str]) -> None:
+        try:
+            with tempfile.TemporaryDirectory() as cwd:
+                subprocess.run([sys.executable, "-I", "-m", "pip", "--isolated", "--disable-pip-version-check",
+                                "--require-virtualenv", "--no-input", "install", "--only-binary=:all:",
+                                "--prefix", sys.prefix, "--", *requirements], cwd=cwd, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300, check=True)
+        except (OSError, subprocess.SubprocessError):
+            raise UpdateError("dependency_install_failed") from None
+
+    def _restore_node_venv(self, backup_dir: Path, recorded_prefix: str | None) -> bool:
+        if recorded_prefix is None:
+            return True
+        try:
+            prefix = self._source_venv()
+            snapshot = backup_dir / "venv"
+            if str(prefix) != recorded_prefix or snapshot.is_symlink() or not (snapshot / "pyvenv.cfg").is_file():
+                return False
+            self._restore_directory(snapshot, prefix)
+            return True
+        except (OSError, UpdateError):
+            return False
+
+    @classmethod
+    def _restore_directory(cls, snapshot: Path, target: Path) -> None:
+        # Reconcile in place: the running Python executable and loaded modules
+        # can be locked on Windows. Leave identical files and symlinks alone.
+        for live in target.iterdir():
+            old = snapshot / live.name
+            if old.is_symlink() and live.is_symlink() and os.readlink(old) == os.readlink(live):
+                continue
+            if not old.is_symlink() and not live.is_symlink():
+                if old.is_dir() and live.is_dir():
+                    cls._restore_directory(old, live)
+                    continue
+                if old.is_file() and live.is_file() and filecmp.cmp(old, live, shallow=False):
+                    continue
+            if live.is_dir() and not live.is_symlink():
+                shutil.rmtree(live)
+            else:
+                live.unlink()
+        for old in snapshot.iterdir():
+            live = target / old.name
+            if live.exists() or live.is_symlink():
+                continue
+            if old.is_dir() and not old.is_symlink():
+                shutil.copytree(old, live, symlinks=True)
+            else:
+                shutil.copy2(old, live, follow_symlinks=False)
+
+    def _check_dependencies(self, staged: list[tuple[Path, Path, str]], manifest: dict | None) -> list[str]:
+        requirements: list[str] = []
         for source, target, relative in staged:
             if self.component == "app" and relative == "apps/tether-app/package.json" and target.is_file():
                 current = _json_object(target.read_bytes())
@@ -1971,25 +2071,29 @@ class UpdateManager:
                     if current.get(field, {}) != offered.get(field, {}):
                         raise UpdateError("dependency_change_requires_manual_install")
             if self.component == "node" and relative == "pyproject.toml" and target.is_file():
-                if self._python_dependencies(target.read_bytes()) != self._python_dependencies(source.read_bytes()):
-                    raise UpdateError("dependency_change_requires_manual_install")
+                old = self._python_dependencies(target.read_bytes())
+                offered = source.read_bytes()
+                new = self._python_dependencies(offered)
+                if old != new:
+                    if old[1:] != new[1:]:
+                        raise UpdateError("dependency_change_requires_manual_install")
+                    requirements = self._node_requirements(new[0], offered, manifest)
+        return requirements
 
     @staticmethod
-    def _python_dependencies(raw: bytes) -> str:
-        content = raw.decode("utf-8")
-        def section(name: str) -> str:
-            match = re.search(rf"(?ms)^\[{re.escape(name)}\]\s*(.*?)(?=^\[|\Z)", content)
-            return match.group(1) if match else ""
-
-        def field(block: str, name: str) -> str:
-            match = re.search(rf"(?ms)^{re.escape(name)}\s*=\s*(.*?)(?=^[A-Za-z0-9_-]+\s*=|^\[|\Z)", block)
-            return re.sub(r"\s+", "", match.group(1)) if match else ""
-
-        project = section("project")
-        optional = re.sub(r"\s+", "", section("project.optional-dependencies"))
-        build_requires = field(section("build-system"), "requires")
-        return "|".join((field(project, "dependencies"), field(project, "requires-python"),
-                          field(project, "dynamic"), optional, build_requires))
+    def _python_dependencies(raw: bytes) -> tuple:
+        # The standalone DSH plugin only ships the plugin updater's Python files.
+        try:
+            import tomllib
+        except ImportError:  # Python 3.10 app/source Node archives include this copy.
+            from .node import _tomli as tomllib
+        try:
+            config = tomllib.loads(raw.decode("utf-8"))
+            project = config["project"]
+            return (project.get("dependencies", []), project.get("requires-python"), project.get("dynamic"),
+                    project.get("optional-dependencies"), config.get("build-system", {}).get("requires"))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            raise UpdateError("dependency_change_requires_manual_install") from None
 
     def _check_python_dependencies(self, offered: bytes) -> None:
         target = self.root / "pyproject.toml"
@@ -2263,11 +2367,12 @@ class UpdateManager:
                       else self._validate_archive(archive_path, item, prepared_root))
             if debian_package is not None:
                 self._stage_artifact_copy(archive_path, prepared_root / "tether-node.deb")
-            self._check_dependencies(staged)
+            self._check_dependencies(staged, manifest)
             self._write_progress("preparing", 90, target_version)
             record = {
                 "id": prepared_id, "component": self.component, "from_version": current,
                 "to_version": target_version, "same_version_retry": same_version_retry,
+                "channel": manifest.get("channel", "stable"),
                 "sha256": item["sha256"], "size": item["size"],
                 "debian_package": debian_package,
                 "served_by": served["served_by"], "source_attempts": served["attempts"],
@@ -2655,6 +2760,8 @@ class UpdateManager:
                 raise UpdateError("transaction_state_invalid")
             targets = self._validate_node_transaction_targets(record)
             success = self._rollback(targets)
+            if not self._restore_node_venv(self.state_dir / "backups" / "node" / prepared_id, record.get("python_venv")):
+                success = False
             if not success:
                 record["state"] = "recovery_required"
                 record["recovery_error"] = "rollback_failed"
@@ -2696,6 +2803,7 @@ class UpdateManager:
         lock_fd = None
         replaced: list[tuple[Path, Path | None]] = []
         backup_dir: Path | None = None
+        venv_prefix = None
         try:
             lock = self._lock()
             if lock is None:
@@ -2707,6 +2815,8 @@ class UpdateManager:
             prepared_root, record, staged = self._load_prepared(prepared_id)
             if self.component == "plugin":
                 self._check_plugin_targets()
+            if record.get("channel", "stable") not in ("stable", self.channel):
+                raise UpdateError("channel_not_selected")
             expected_version = record["to_version"]
             _semver(expected_version)
             current = self._versions()[self.component]
@@ -2720,14 +2830,20 @@ class UpdateManager:
             # A prepare can sit for hours; re-check the held rollout against the
             # cached manifest (no network) so an operator's pause still applies.
             cached = self._load_disk_manifest(MANIFEST_DISK_MAX_AGE)
-            if cached is not None:
-                cached_item = (cached.get("components") or {}).get(self.component)
-                if isinstance(cached_item, dict) and cached_item.get("version") == expected_version:
-                    if not _rollout_allows(cached_item, self.component, expected_version, self.device):
-                        raise UpdateError("rollout_paused")
+            cached_item = (cached or {}).get("components", {}).get(self.component, {})
+            if cached_item.get("version") == expected_version:
+                if not _rollout_allows(cached_item, self.component, expected_version, self.device):
+                    raise UpdateError("rollout_paused")
+                if _is_withdrawn(cached, self.component, expected_version):
+                    raise UpdateError("update_withdrawn")
             if self.component in {"app", "plugin"} and self.activity()["busy"]:
                 raise UpdateError("app_busy")
-            self._check_dependencies(staged)
+            requirements = self._check_dependencies(staged, cached)
+            if requirements and (cached_item.get("version") != expected_version
+                                 or cached_item.get("sha256") != record.get("sha256")):
+                raise UpdateError("prepared_stale")
+            if self.component == "node" and self._node_transaction_path(prepared_id).exists():
+                raise UpdateError("update_busy")
             base = self.dsh_home if self.component == "plugin" else self.root
             backup_dir = self.state_dir / "backups" / self.component / prepared_id
             if backup_dir.exists():
@@ -2746,6 +2862,15 @@ class UpdateManager:
                                "state": "applying", "stage": "prepared", "targets": []}
                 self._write_atomic(transaction_path,
                                    (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
+            if requirements:
+                prefix = self._source_venv()
+                shutil.copytree(prefix, backup_dir / "venv", symlinks=True,
+                                ignore=shutil.ignore_patterns("__pycache__"))
+                transaction["python_venv"] = str(prefix)
+                transaction["stage"] = "installing_dependencies"
+                self._write_atomic(transaction_path, json.dumps(transaction).encode("utf-8"))
+                venv_prefix = str(prefix)
+                self._install_node_requirements(requirements)
             total_files = max(1, len(staged))
             for target_index, (source, target, relative) in enumerate(staged):
                 safe_target = self._safe_target(target)
@@ -2886,6 +3011,8 @@ class UpdateManager:
                     "updated_files": len(staged), "error": ""}
         except UpdateError as exc:
             rolled_back = self._rollback(replaced)
+            if venv_prefix is not None and not self._restore_node_venv(backup_dir, venv_prefix):
+                rolled_back = False
             if self.component == "node" and not rolled_back and backup_dir is not None:
                 try:
                     path = self._node_transaction_path(prepared_id)
@@ -2904,6 +3031,8 @@ class UpdateManager:
             return self._error("rollback_failed" if not rolled_back else exc.code)
         except Exception:
             rolled_back = self._rollback(replaced)
+            if venv_prefix is not None and not self._restore_node_venv(backup_dir, venv_prefix):
+                rolled_back = False
             if self.component == "node" and not rolled_back and backup_dir is not None:
                 try:
                     path = self._node_transaction_path(prepared_id)
@@ -3104,6 +3233,7 @@ class UpdateManager:
                 pass
             installed_latest: bool | None = None
             latest_version = ""
+            latest_channel = None
             checked_at = 0.0
             latest_source = ""
             source_rejections: list[dict[str, str]] = []
@@ -3115,6 +3245,7 @@ class UpdateManager:
                 latest = _json_object((self.state_dir / f"latest-{self.component}.json").read_bytes())
                 if latest.get("component") == self.component and isinstance(latest.get("version"), str):
                     latest_version = latest["version"]
+                    latest_channel = latest.get("channel")
                     installed_latest = latest["version"] == current
                     checked_at = float(latest.get("checked_at") or 0)
                     latest_source = str(latest.get("source") or "")
@@ -3138,6 +3269,10 @@ class UpdateManager:
                     checked_at = float(latest.get("checked_at") or 0) or checked_at
             except (OSError, UpdateError, TypeError, ValueError):
                 pass
+            if latest_channel is not None and latest_channel not in ("stable", self.channel):
+                latest_version = ""
+                installed_latest = None
+                blocked_reason, blocked_by = "channel_not_selected", latest_source
             if prepared:
                 installed_latest = False
             try:
@@ -3147,6 +3282,7 @@ class UpdateManager:
             result = {"ok": True, "component": self.component, "current_version": current,
                       "installed_version": installed if self.component == "app" else None,
                       "latest_version": latest_version or None,
+                      "channel": latest_channel, "selected_channel": self.channel,
                       "update_available": bool(newer and not rollout_paused),
                       "checked_at": checked_at or None, "manifest_source": latest_source,
                       "source_rejections": source_rejections,

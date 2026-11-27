@@ -399,8 +399,8 @@ class UpdateService {
     if (this.packaged) {
       const { autoUpdater } = require('electron-updater')
       this.electronUpdater = autoUpdater
-      autoUpdater.autoDownload = false
-      autoUpdater.autoInstallOnAppQuit = false
+      autoUpdater.autoDownload = true
+      autoUpdater.autoInstallOnAppQuit = true
       if (process.platform === 'win32' && process.arch === 'x64') {
         configureWindowsDelta(autoUpdater, app.getVersion(), () => this.legacyWindowsCacheDir,
           (method, bytes) => this.observeWindowsDownload(method, bytes))
@@ -418,22 +418,59 @@ class UpdateService {
           }
         })
       }
-      const updateChannel = String(env.TETHER_UPDATE_CHANNEL || '').trim().toLowerCase()
-      if (updateChannel) {
-        autoUpdater.allowPrerelease = updateChannel === 'preview'
-        autoUpdater.channel = autoUpdater.allowPrerelease ? 'preview' : 'latest'
-      } else {
-        let packagedChannel = ''
+      let channel = String(env.TETHER_UPDATE_CHANNEL || '').trim().toLowerCase()
+      if (!channel) {
         try {
           const config = fs.readFileSync(path.join(process.resourcesPath, 'app-update.yml'), 'utf8')
-          const match = config.match(/^channel:\s*([a-z0-9_-]{1,32})\s*$/mi)
-          if (match) packagedChannel = match[1].toLowerCase()
+          channel = config.match(/^channel:\s*([a-z0-9_-]+)\s*$/mi)?.[1].toLowerCase() || ''
         } catch (_) { /* electron-updater reports missing packaged configuration on check */ }
-        autoUpdater.allowPrerelease = packagedChannel === 'preview'
       }
-      autoUpdater.on('update-available', (info) => { this.electronUpdateInfo = info })
-      autoUpdater.on('update-not-available', (info) => { this.electronUpdateInfo = info })
-      autoUpdater.on('update-downloaded', (info) => { this.electronUpdateInfo = info; this.electronDownloaded = true })
+      autoUpdater.allowPrerelease = channel === 'preview' || channel === 'beta'
+      autoUpdater.channel = autoUpdater.allowPrerelease ? channel : 'latest'
+      autoUpdater.allowDowngrade = false // Setting channel enables downgrades in electron-updater.
+      autoUpdater.on('update-available', (info) => {
+        if (this.electronUpdateInfo?.version !== info.version) {
+          this.preparedIds.clear()
+          this.electronDownloaded = false
+          autoUpdater.autoInstallOnAppQuit = false
+        }
+        this.electronUpdateInfo = info
+        // checkForUpdates starts downloading immediately after this synchronous event.
+        if (process.platform === 'win32' && !this.electronDownloaded) {
+          ensureWindowsUpdateCacheSpace(info, 2, this.windowsLocation)
+          this.startWindowsReceipt()
+        }
+      })
+      autoUpdater.on('update-not-available', () => {
+        this.electronUpdateInfo = null
+        this.preparedIds.clear()
+        this.electronDownloaded = false
+        autoUpdater.autoInstallOnAppQuit = false
+      })
+      autoUpdater.on('update-downloaded', (info) => {
+        if (info.version !== this.electronUpdateInfo?.version) return
+        this.electronDownloaded = true
+        autoUpdater.autoInstallOnAppQuit = true
+        if (!this.preparedIds.size) this.preparedIds.add(crypto.randomBytes(16).toString('hex'))
+        if (this.windowsReceipt?.status === 'downloading') {
+          this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'prepared')
+        }
+      })
+      if (process.platform === 'win32') {
+        app.on?.('quit', (_event, exitCode) => {
+          if (exitCode !== 0 || !autoUpdater.autoInstallOnAppQuit || !this.electronDownloaded
+              || this.windowsReceipt?.status === 'installing') return
+          try {
+            ensureWindowsUpdateCacheSpace(this.electronUpdateInfo, 1, this.windowsLocation)
+            const temp = prepareWindowsInstallerTemp(this.windowsLocation)
+            process.env.TEMP = process.env.TMP = process.env.TETHER_UPDATER_TEMP = temp
+            this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'installing')
+          } catch (error) {
+            autoUpdater.autoInstallOnAppQuit = false
+            this.recordElectronApplyFailure(error, this.electronUpdateInfo.version)
+          }
+        })
+      }
     }
   }
 
@@ -499,7 +536,7 @@ class UpdateService {
         device_id: this.deviceId || String(this.env.TETHER_DEVICE || ''), controller_origin: controllerOrigin,
         latest_version: this.electronUpdateInfo && this.electronUpdateInfo.version || current,
         update_available: !!(this.electronUpdateInfo && this.electronUpdateInfo.version && this.electronUpdateInfo.version !== current),
-        prepared: this.electronDownloaded ? [{ prepared_id: [...this.preparedIds][0] || '' }] : [],
+        prepared: this.electronDownloaded ? [...this.preparedIds].map(prepared_id => ({ prepared_id })) : [],
         restart_required: false, source: 'electron-updater'
       }
       let lastResult = this.electronLastResult
@@ -523,13 +560,24 @@ class UpdateService {
   async check() {
     if (!this.electronUpdater) return this.run('check', undefined, true)
     const current = this.app.getVersion()
-    const checked = await this.electronUpdater.checkForUpdates()
-    const info = checked && checked.updateInfo || this.electronUpdateInfo
-    this.electronUpdateInfo = info || null
-    const latest = info && info.version || current
+    if (!this.electronDownloadPromise) {
+      if (process.platform === 'win32') await this.windowsUpdateLocation()
+      const checked = await this.electronUpdater.checkForUpdates()
+      const download = checked?.downloadPromise
+      if (download) {
+        const version = checked.updateInfo.version
+        this.electronDownloadPromise = download
+        download.catch((error) => {
+          this.recordElectronApplyFailure(error, version)
+        }).finally(() => {
+          if (this.electronDownloadPromise === download) this.electronDownloadPromise = null
+        })
+      }
+    }
+    const latest = this.electronUpdateInfo?.version || current
     return { ok: true, component: 'app', current_version: current, latest_version: latest,
-      update_available: !!(info && latest !== current), source: 'electron-updater',
-      checked_at: new Date().toISOString(), prepared: [] }
+      update_available: latest !== current, source: 'electron-updater',
+      checked_at: new Date().toISOString(), prepared: [...this.preparedIds].map(prepared_id => ({ prepared_id })) }
   }
   async activity() {
     const result = await this.run('activity')
@@ -558,6 +606,7 @@ class UpdateService {
             return file
           }
           updater.downloadedUpdateHelper = helper
+          this.windowsLocation = location
           this.legacyWindowsCacheDir = location.legacyCacheDir
           return location
         }).catch((error) => {
@@ -619,6 +668,7 @@ class UpdateService {
       if (!this.electronUpdateInfo || this.electronUpdateInfo.version === this.app.getVersion()) {
         throw Object.assign(new Error('没有可用的 APP 更新'), { code: 'update_not_available' })
       }
+      const targetVersion = this.electronUpdateInfo.version
       const windows = process.platform === 'win32'
       if (windows) this.startWindowsReceipt()
       try {
@@ -626,16 +676,21 @@ class UpdateService {
           const location = await this.windowsUpdateLocation()
           if (!this.electronDownloaded) ensureWindowsUpdateCacheSpace(this.electronUpdateInfo, 2, location)
         }
-        this.electronDownloaded = false
-        await this.electronUpdater.downloadUpdate()
+        const download = this.electronDownloadPromise || this.electronUpdater.downloadUpdate()
+        this.electronDownloadPromise = download
+        try { await download }
+        finally { if (this.electronDownloadPromise === download) this.electronDownloadPromise = null }
       } catch (error) {
         if (windows) this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'failed', this.electronErrorCode(error))
         throw error
       }
+      if (this.electronUpdateInfo?.version !== targetVersion) {
+        throw Object.assign(new Error('可用的 APP 更新已变化，请重新检查'), { code: 'update_not_available' })
+      }
       if (windows && this.windowsReceipt.status === 'downloading') {
         this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'prepared')
       }
-      const preparedId = crypto.randomBytes(16).toString('hex')
+      const preparedId = this.preparedIds.values().next().value || crypto.randomBytes(16).toString('hex')
       this.preparedIds.add(preparedId)
       this.electronDownloaded = true
       return { ok: true, component: 'app', prepared_id: preparedId, prepared: [{ prepared_id: preparedId }],

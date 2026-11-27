@@ -287,10 +287,11 @@ try {
       return originalLoad.call(this, request, parent, isMain)
     }
     let packagedService
+    const appEvents = new EventEmitter()
     try {
       packagedService = new UpdateService({
-        repoRoot, dataDir, python: 'python-fixture', env: {},
-        app: { getPath: (name) => name === 'exe' ? executableAlias : userData,
+        repoRoot, dataDir, python: 'python-fixture', env: { TETHER_UPDATE_CHANNEL: 'preview' },
+        app: { on: appEvents.on.bind(appEvents), getPath: (name) => name === 'exe' ? executableAlias : userData,
           getVersion: () => '0.5.5', isPackaged: true },
         exec,
         stopManagedNode: async () => { stopEnv = { temp: process.env.TEMP, tmp: process.env.TMP } }
@@ -362,6 +363,45 @@ try {
     originalMkdirSync(path.dirname(receiptFile), { recursive: true })
     const readReceipt = () => JSON.parse(fs.readFileSync(receiptFile, 'utf8'))
     try {
+      assert.equal(updater.autoDownload, true)
+      assert.equal(updater.channel, 'preview')
+      assert.equal(updater.allowPrerelease, true)
+      assert.equal(updater.allowDowngrade, false)
+      let finishDownload
+      updater.checkForUpdates = async () => {
+        updater.emit('update-available', updateInfo)
+        const downloadPromise = new Promise(resolve => { finishDownload = resolve }).then(async () => {
+          await updater.downloadUpdate()
+          updater.emit('update-downloaded', updateInfo)
+        })
+        return { isUpdateAvailable: true, updateInfo, downloadPromise }
+      }
+      freeBytes = 1n
+      await assert.rejects(packagedService.check(), { code: 'insufficient_update_cache_space' })
+      assert.equal(finishDownload, undefined)
+      freeBytes = 2n * 3000n + reserveBytes
+      assert.equal((await packagedService.check()).update_available, true)
+      assert.equal(updater.autoInstallOnAppQuit, false, 'an incomplete package cannot install on exit')
+      const preparing = packagedService.prepare()
+      finishDownload()
+      const background = await preparing
+      assert.equal(downloadCalls, 1, 'one-click joins the automatic download')
+      assert.equal(installCalls.length, 0)
+      assert.equal(updater.autoInstallOnAppQuit, true)
+      assert.equal((await packagedService.status()).prepared[0].prepared_id, background.prepared_id)
+      appEvents.emit('quit', {}, 1)
+      assert.equal(readReceipt().status, 'prepared', 'an abnormal exit does not arm the installer')
+      freeBytes = 1n
+      appEvents.emit('quit', {}, 0)
+      assert.equal(updater.autoInstallOnAppQuit, false, 'low disk space also prevents quit-time installation')
+      freeBytes = 2n * 3000n + reserveBytes
+      updater.emit('update-not-available', { version: '0.5.4' })
+      assert.equal((await packagedService.status()).update_available, false)
+      assert.equal(updater.autoInstallOnAppQuit, false)
+      assert.throws(() => packagedService.assertElectronPrepared(background.prepared_id), { code: 'invalid_prepared_id' })
+      downloadCalls = 0
+      packagedService.windowsReceipt = null
+
       packagedService.electronUpdateInfo = updateInfo
       freeBytes = 2n * 3000n + reserveBytes - 1n
       await assert.rejects(packagedService.prepare(), (error) => error.code === 'insufficient_update_cache_space'

@@ -2521,7 +2521,7 @@ def test_unreachable_hub_still_falls_through_to_the_origin(
 def test_a_policy_rejected_primary_source_is_reported_but_not_fatal(
         flaky_server, tmp_path: Path, monkeypatch) -> None:
     """受滤网与旧通道设备仍要能降级拿到东西，但降级发生过必须看得见。"""
-    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
     root = tmp_path / "install"
     seed_version(root)
     hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
@@ -2545,7 +2545,7 @@ def test_a_policy_rejected_primary_source_is_reported_but_not_fatal(
 def test_a_transport_failure_does_not_look_like_a_policy_rejection(
         flaky_server, tmp_path: Path, monkeypatch) -> None:
     """字段一旦被网络噪声污染就没人再信它：Hub 只是没答上时不能报策略拒绝。"""
-    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
     root = tmp_path / "install"
     seed_version(root)
     hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"), version="0.5.14")
@@ -2573,7 +2573,7 @@ def test_a_policy_downgrade_survives_a_restart_through_the_persisted_record(
         flaky_server, tmp_path: Path, monkeypatch) -> None:
     """运维看的是重启后的那台机器，不是内存：字段必须落在 latest-<component>.json 里，
     并且由一个全新实例回读出来，不能只在当次 check() 的返回值里活着。"""
-    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
     root = tmp_path / "install"
     seed_version(root)
     hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
@@ -2603,7 +2603,7 @@ def test_every_source_refusing_still_records_why_each_one_refused(
         flaky_server, tmp_path: Path, monkeypatch) -> None:
     """「一个新版也看不到」恰恰全发生在所有源都被策略挡住时，那正是运维最需要
     知道谁拒的、为何拒的一刻。失败路径不能只留一个 manifest_unavailable。"""
-    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
     root = tmp_path / "install"
     seed_version(root)
     hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
@@ -2638,7 +2638,7 @@ def test_a_restarted_node_reads_back_each_feeds_own_reason(
     上一版这条测试是假绿：第二次 check() 全源被拒时落到了磁盘陈旧清单，走的是成功
     路径写盘，删掉落盘步骤它照样通过。这里改用全新 state，逼它真走失败路径。
     """
-    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
     root = tmp_path / "install"
     seed_version(root)
     hub_url = _signed_manifest(flaky_server, "node", make_zip("node", version="0.5.14"),
@@ -2665,7 +2665,7 @@ def test_a_restarted_node_reads_back_each_feeds_own_reason(
 def test_a_policy_blocked_device_says_why_instead_of_looking_up_to_date(
         flaky_server, tmp_path: Path, monkeypatch) -> None:
     """releases/latest 回答 0.4.11 时，调用方必须能读出「被通道挡住」，不是「已是最新」。"""
-    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
     root = tmp_path / "install"
     root.mkdir(parents=True)
     # 现场是设备已经在 0.5.14：只有这时源站的 0.4.11 才会既「没有更新」又是被通道
@@ -2711,7 +2711,7 @@ def test_an_all_refused_check_names_the_block_and_survives_a_restart(
     判据分三段：失败出口当场带这对字段 → 字段落进 latest-app.json → 换新实例
     （等价于节点重启）后 status() 还读得回来。status() 不重新取清单，不落盘就永远看不见。
     """
-    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
     root = tmp_path / "install"
     root.mkdir(parents=True)
     # 现场是设备已经在 0.5.14，不是 seed_version 的 0.2.0：本条测的是「查不到」，
@@ -2747,7 +2747,7 @@ def test_an_all_refused_check_names_the_block_and_survives_a_restart(
 def test_the_block_pair_clears_once_the_feed_answers_again(
         flaky_server, tmp_path: Path, monkeypatch) -> None:
     """反向：同一次检查先被通道挡住、放行后字段必须清空，否则它变成第二句谎话。"""
-    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
     root = tmp_path / "install"
     root.mkdir(parents=True)
     (root / "version.json").write_text(json.dumps({"schema": 1, "components": {
@@ -2769,3 +2769,109 @@ def test_the_block_pair_clears_once_the_feed_answers_again(
     assert cleared["blocked_reason"] == "" and cleared["blocked_by"] == "", cleared
     assert persisted["blocked_reason"] == "" and persisted["blocked_by"] == "", persisted
     assert reopened["blocked_reason"] == "" and reopened["blocked_by"] == "", reopened
+
+def test_preview_follows_deployment_but_an_explicit_stable_selection_still_blocks(
+        artifact_server, tmp_path, monkeypatch):
+    root = tmp_path / "install"
+    seed_version(root)
+    archive = make_zip("app")
+    url = _signed_manifest(artifact_server, "app", archive, channel="preview")
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    manager = _strict_manager(root, url, tmp_path / "state")
+    checked = manager.check()
+    assert checked["ok"] and checked["channel"] == manager.status()["channel"] == "preview"
+    prepared = manager.prepare()
+    assert prepared["ok"], prepared
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "stable")
+    stable = _strict_manager(root, url, tmp_path / "state")
+    assert stable.status()["blocked_reason"] == "channel_not_selected"
+    assert stable.check()["error_code"] == "channel_not_selected"
+    assert stable.apply(prepared["prepared_id"])["error_code"] == "channel_not_selected"
+
+
+def test_signed_wheel_install_and_node_rollback_restore_the_running_venv(artifact_server, tmp_path, monkeypatch):
+    root = tmp_path / "install"
+    seed_version(root)
+    (root / "pyproject.toml").write_text("[project]\ndependencies=[]\n", encoding="utf-8")
+    prefix = root / ".venv"
+    subprocess.run([sys.executable, "-m", "venv", str(prefix)], check=True)
+    interpreter = prefix / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+    wheels = tmp_path / "wheels"
+    wheels.mkdir()
+    with zipfile.ZipFile(wheels / "tether_test_dependency-1.0-py3-none-any.whl", "w") as wheel:
+        dist = "tether_test_dependency-1.0.dist-info/"
+        wheel.writestr("tether_test_dependency.py", "version = '1.0'\n")
+        wheel.writestr(dist + "METADATA", "Metadata-Version: 2.1\nName: tether-test-dependency\nVersion: 1.0\n")
+        wheel.writestr(dist + "WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+        wheel.writestr(dist + "RECORD", "\n".join(name + ",," for name in [*wheel.namelist(), dist + "RECORD"]))
+    (prefix / ("pip.ini" if os.name == "nt" else "pip.conf")).write_text(
+        f"[global]\nno-index = true\nfind-links = {wheels.as_uri()}\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "prefix", str(prefix))
+    monkeypatch.setattr(sys, "executable", str(interpreter))
+    def manager_for(requirement):
+        offered = f"[project]\ndependencies=[{requirement!r}]\n".encode()
+        url = _signed_manifest(artifact_server, "node", make_zip("node", extra={"pyproject.toml": offered}))
+        return UpdateManager(root, "node", manifest_url=url, state_dir=tmp_path / "state",
+                             public_key_hex=_TEST_PUBLIC_HEX, allow_unsigned=False, fallback_manifest_urls=[])
+
+    manager = manager_for("tether-test-dependency==1.0")
+    prepared = manager.prepare()
+    assert prepared["ok"], prepared
+    applied = manager.apply(prepared["prepared_id"])
+    assert applied.get("status") == "awaiting_acceptance", applied
+    probe = [str(interpreter), "-I", "-c", "import importlib.util; print(bool(importlib.util.find_spec('tether_test_dependency')))"]
+    assert subprocess.check_output(probe, text=True).strip() == "True"
+    # Roll back with a new manager, as the restarted Node does after failed acceptance.
+    manager = manager_for("tether-test-dependency==1.0")
+    assert manager.rollback(prepared["prepared_id"])["ok"]
+    assert subprocess.check_output(probe, text=True).strip() == "False"
+
+    manager = manager_for("tether-test-dependency==9.9")
+    prepared = manager.prepare()
+    assert prepared["ok"], prepared
+    assert manager.apply(prepared["prepared_id"])["error_code"] == "dependency_install_failed"
+    assert json.loads((root / "version.json").read_text())["components"]["node"] == "0.2.0"
+    assert subprocess.check_output(probe, text=True).strip() == "False"
+
+
+def test_unsigned_or_staged_only_dependency_changes_cannot_feed_pip(artifact_server, tmp_path, monkeypatch):
+    root = tmp_path / "install"
+    seed_version(root)
+    (root / "pyproject.toml").write_text("[project]\ndependencies=[]\n", encoding="utf-8")
+    prefix = tmp_path / "venv"
+    prefix.mkdir()
+    (prefix / "pyvenv.cfg").touch()
+    monkeypatch.setattr(sys, "prefix", str(prefix))
+    offered = b"[project]\ndependencies=['signed-package==1']\n"
+    archive = make_zip("node", extra={"pyproject.toml": offered})
+    url = _signed_manifest(artifact_server, "node", archive, sign=False)
+    manager = UpdateManager(root, "node", manifest_url=url, state_dir=tmp_path / "state",
+                            allow_unsigned=True, public_key_hex=_TEST_PUBLIC_HEX, fallback_manifest_urls=[])
+    assert manager.prepare()["error_code"] == "dependency_change_requires_manual_install"
+    _signed_manifest(artifact_server, "node", archive)
+    prepared = manager.prepare()
+    directory = manager.state_dir / "prepared" / prepared["prepared_id"]
+    tampered = offered.replace(b"signed", b"unsafe")
+    (directory / "pyproject.toml").write_bytes(tampered)
+    record = json.loads((directory / "prepared.json").read_bytes())
+    entry = next(item for item in record["files"] if item["path"] == "pyproject.toml")
+    entry["sha256"] = hashlib.sha256(tampered).hexdigest()
+    (directory / "prepared.json").write_text(json.dumps(record))
+    assert manager.apply(prepared["prepared_id"])["error_code"] == "prepared_hash_mismatch"
+
+    direct = b"[project]\ndependencies=['fixture @ https://invalid.example/fixture.whl']\n"
+    _signed_manifest(artifact_server, "node", make_zip("node", extra={"pyproject.toml": direct}))
+    assert manager.prepare()["error_code"] == "dependency_change_requires_manual_install"
+
+
+def test_signed_manifest_keeps_hub_withdrawals_after_restart(artifact_server, tmp_path, monkeypatch):
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app"))
+    manager = _strict_manager(root, url, tmp_path / "state")
+    body = artifact_server.files["/manifest.json"]
+    monkeypatch.setattr(manager, "_fetch_manifest", lambda *_args, **_kwargs: (body, "app:0.2.1"))
+    assert manager.check(force=True)["withdrawn"] is True
+    restarted = _strict_manager(root, url, tmp_path / "state")
+    assert restarted._load_disk_manifest(3600)["withdrawn"] == {"app": ["0.2.1"]}
