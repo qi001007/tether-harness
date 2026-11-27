@@ -175763,9 +175763,14 @@ function hasNativeTransferEdge(result, sourceDevice, targetDevice) {
     return from === sourceDevice && to === targetDevice || from === targetDevice && to === sourceDevice;
   });
 }
+function hasDirectLanRoute(source, target) {
+  const direct = (caps) => Boolean(caps) && (caps.direct === true || caps.lan === true || caps.same_lan === true || caps.low_latency === true || caps.direct?.available === true || caps.mesh?.p2p === true || caps.mesh?.direct === true);
+  return direct(source?.capabilities) || direct(target?.capabilities);
+}
 function isCrocUploadCandidate(source, target, bytes) {
   if (!(bytes >= CROC_LARGE_UPLOAD_BYTES)) return false;
   if (!source?.online || !target?.online) return false;
+  if (hasDirectLanRoute(source, target)) return false;
   const from = source.capabilities;
   const to = target.capabilities;
   return from?.os === "Windows" && from.app_installed === true && to?.os === "Linux" && to.app_installed === false && [from, to].every((caps) => caps.croc?.available === true && caps.croc?.relay === true);
@@ -176416,7 +176421,7 @@ function createTransferPage({
       const previous = routeKey ? crocRouteRef.current.get(routeKey) : void 0;
       const recent = previous?.until > Date.now() ? previous : void 0;
       const preferCroc = recent?.worked === true;
-      const preferCrocUpload = routeKey && !recent && isCrocUploadCandidate(sourceNode, targetNode, total);
+      const preferCrocUpload = routeKey && !recent && items.length === 1 && isCrocUploadCandidate(sourceNode, targetNode, total);
       if (routeKey && recent?.worked !== false) crocRouteRef.current.delete(routeKey);
       const rememberCroc = (worked) => {
         if (routeKey) crocRouteRef.current.set(routeKey, { worked, until: Date.now() + CROC_ROUTE_PREFERENCE_MS });
@@ -176511,7 +176516,7 @@ function createTransferPage({
     let useCroc = false;
     let useNativeJob = false;
     let cancelByTransferId = false;
-    const nativeBatch = items.length === 1 ? selectNativeCopyBatch({ items, target: target2, cut }) : null;
+    const nativeBatch = selectNativeCopyBatch({ items, target: target2, cut });
     if (nativeBatch) {
       try {
         useNativeJob = hasNativeTransferEdge(await api2("/api/edges"), side(fromSide).device, target2.device);
@@ -184659,7 +184664,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   const NATIVE_SURFACE_RETRIES = 3;
   const NATIVE_SURFACE_DOCUMENT_RETRIES = 1;
   const DSH_MESH_OPEN_TIMEOUT_MS = 15e3;
-  const DSH_MESH_RETRY_MS = 5 * 60 * 1e3;
+  const DSH_MESH_RETRY_MS = 15 * 1e3;
   function safeMeshDshEndpoint(value) {
     try {
       const url = new URL(String(value || ""));
@@ -184985,18 +184990,32 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const entry = catalog && Array.isArray(catalog.services) ? catalog.services.find((service2) => service2 && service2.id === "dsh") : null;
       if (!entry || entry.state !== "ready") return degrade("catalog_not_ready", entry && entry.state);
       let service = null;
-      try {
-        service = await withMeshTimeout(host.workbench.open(id, "dsh"), DSH_MESH_OPEN_TIMEOUT_MS, (late) => {
-          const opened = late && late.grantId;
-          if (!opened) return;
-          try {
-            void Promise.resolve(host.workbench.close(id, "dsh", opened)).catch(() => {
-            });
-          } catch (_2) {
+      let lastOpenError = null;
+      for (let attemptIdx = 0; attemptIdx < 2; attemptIdx += 1) {
+        try {
+          service = await withMeshTimeout(host.workbench.open(id, "dsh"), DSH_MESH_OPEN_TIMEOUT_MS, (late) => {
+            const opened = late && late.grantId;
+            if (!opened) return;
+            try {
+              void Promise.resolve(host.workbench.close(id, "dsh", opened)).catch(() => {
+              });
+            } catch (_2) {
+            }
+          });
+          lastOpenError = null;
+          break;
+        } catch (error) {
+          lastOpenError = error;
+          const transient = error && [409, 502, 503, 504].includes(Number(error.status));
+          if (attemptIdx === 0 && transient) {
+            await new Promise((resolve3) => setTimeout(resolve3, 600));
+            continue;
           }
-        });
-      } catch (error) {
-        return degrade(error && error.code === "mesh_open_timeout" ? "open_timeout" : "open_failed", error && error.message);
+          break;
+        }
+      }
+      if (lastOpenError) {
+        return degrade(lastOpenError.code === "mesh_open_timeout" ? "open_timeout" : "open_failed", lastOpenError.message);
       }
       const verified = meshDshService(service, id);
       if (!verified) {
@@ -185173,7 +185192,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         } catch (_2) {
         }
       }
-      if (result.state === "unknown" && identity2 && urlValue && partition && bridge && typeof bridge.inspectSurfaceLogin === "function") {
+      const isLocalTarget = !!(localDeviceId && deviceId === localDeviceId);
+      if (result.state === "unknown" && isLocalTarget && identity2 && urlValue && partition && bridge && typeof bridge.inspectSurfaceLogin === "function") {
         let parsed;
         try {
           parsed = new URL(urlValue);
@@ -185196,7 +185216,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const previous = surfaceStateRef.current;
       if (!previous || previous.deviceId !== deviceId) return;
       if (previous.loginState === result.state) return;
-      const reloadAfterLogin = previous.loginState !== "logged_in" && result.state === "logged_in" && previous.status === "native-document-loaded";
+      const reloadAfterLogin = previous.loginState === "logged_out" && result.state === "logged_in" && previous.status === "native-document-loaded";
       setState((prev) => prev.deviceId === deviceId ? { ...prev, loginState: result.state, loginReason: result.reason, reloadAfterLogin } : prev);
       if (reloadAfterLogin) {
         setState((prev) => prev.deviceId === deviceId ? { ...prev, status: "loading", url: "", message: "DSH \u5DF2\u767B\u5F55\uFF0C\u6B63\u5728\u91CD\u65B0\u52A0\u8F7D\u5DE5\u4F5C\u533A\u2026" } : prev);
@@ -186718,7 +186738,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [auditCount, setAuditCount] = React2.useState(0);
     const [auditRetained, setAuditRetained] = React2.useState(1e5);
     const [auditLoading, setAuditLoading] = React2.useState(false);
-    const [mode, setMode] = React2.useState("readonly");
+    const [mode, setMode] = React2.useState("default");
     const [rootsText, setRootsText] = React2.useState("");
     const [ask, setAsk] = React2.useState(null);
     const [path, setPath] = React2.useState("");
@@ -191708,14 +191728,18 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
                 "div",
                 { style: { display: "grid", gap: 6, marginBottom: 4 } },
                 [
-                  ["readonly", "\u9ED8\u8BA4\uFF08\u53EA\u8BFB + \u9879\u76EE\u53EF\u5199\uFF09", "\u5168\u76D8\u53EF\u8BFB\uFF1B\u53EA\u5199\u9879\u76EE\u6839\u4E0E\u4E0B\u5217\u76EE\u5F55"],
+                  ["default", "\u9ED8\u8BA4\uFF08\u7CFB\u7EDF\u76D8\u53EA\u8BFB + \u5176\u4ED6\u76D8\u8BFB\u5199\uFF09", "Windows \u7CFB\u7EDF\u76D8\u4EC5\u9879\u76EE\u53EF\u5199\u3001\u5176\u4ED6\u76D8\u53EF\u8BFB\u5199\uFF1BLinux \u4EC5\u9879\u76EE\u53EF\u5199"],
+                  ["full", "\u5168\u76D8\u8BFB\u5199", "\u7CFB\u7EDF\u4E0E\u51ED\u636E\u76EE\u5F55\u4ECD\u62D2\u7EDD"],
                   ["locked", "\u9501\u5B9A\uFF08\u5168\u90E8\u53EA\u8BFB\uFF09", "\u62D2\u7EDD\u6240\u6709\u5199\u5165\u4E0E\u5220\u9664"],
-                  ["full", "\u5168\u76D8\u8BFB\u5199", "\u7CFB\u7EDF\u4E0E\u51ED\u636E\u76EE\u5F55\u4ECD\u62D2\u7EDD"]
-                ].map(([value, title, desc]) => h3(
-                  "label",
-                  { key: value, title: desc, style: { border: 0, borderRadius: 8, padding: "8px 10px", cursor: "pointer", background: mode === value ? C2.soft : C2.panel } },
-                  h3("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, h3("input", { type: "radio", checked: mode === value, onChange: () => setMode(value) }), h3("strong", { style: { fontSize: 13 } }, title))
-                ))
+                  ["custom", "\u81EA\u5B9A\u4E49\uFF08\u4EC5\u53EF\u5199\u6839\u76EE\u5F55\uFF09", "\u5168\u76D8\u53EF\u8BFB\uFF1B\u53EA\u5199\u9879\u76EE\u6839\u4E0E\u4E0B\u5217\u76EE\u5F55"]
+                ].map(([value, title, desc]) => {
+                  const selected2 = mode === value || value === "custom" && mode === "readonly";
+                  return h3(
+                    "label",
+                    { key: value, title: desc, style: { border: 0, borderRadius: 8, padding: "8px 10px", cursor: "pointer", background: selected2 ? C2.soft : C2.panel } },
+                    h3("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, h3("input", { type: "radio", checked: selected2, onChange: () => setMode(value) }), h3("strong", { style: { fontSize: 13 } }, title))
+                  );
+                })
               ),
               h3(
                 "div",

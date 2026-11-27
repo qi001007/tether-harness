@@ -39921,9 +39921,18 @@ function hasNativeTransferEdge(result, sourceDevice, targetDevice) {
   })
 }
 
+function hasDirectLanRoute(source, target) {
+  const direct = (caps) => Boolean(caps) && (
+    caps.direct === true || caps.lan === true || caps.same_lan === true || caps.low_latency === true ||
+    caps.direct?.available === true || caps.mesh?.p2p === true || caps.mesh?.direct === true
+  )
+  return direct(source?.capabilities) || direct(target?.capabilities)
+}
+
 function isCrocUploadCandidate(source, target, bytes) {
   if (!(bytes >= CROC_LARGE_UPLOAD_BYTES)) return false
   if (!source?.online || !target?.online) return false
+  if (hasDirectLanRoute(source, target)) return false
   const from = source.capabilities
   const to = target.capabilities
   return from?.os === 'Windows' && from.app_installed === true &&
@@ -40419,7 +40428,8 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
       const previous = routeKey ? crocRouteRef.current.get(routeKey) : undefined
       const recent = previous?.until > Date.now() ? previous : undefined
       const preferCroc = recent?.worked === true
-      const preferCrocUpload = routeKey && !recent && isCrocUploadCandidate(sourceNode, targetNode, total)
+      const preferCrocUpload = routeKey && !recent && items.length === 1 &&
+        isCrocUploadCandidate(sourceNode, targetNode, total)
       if (routeKey && recent?.worked !== false) crocRouteRef.current.delete(routeKey)
       const rememberCroc = (worked) => {
         if (routeKey) crocRouteRef.current.set(routeKey, { worked, until: Date.now() + CROC_ROUTE_PREFERENCE_MS })
@@ -40495,7 +40505,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     let useCroc = false
     let useNativeJob = false
     let cancelByTransferId = false
-    const nativeBatch = items.length === 1 ? selectNativeCopyBatch({ items, target, cut }) : null
+    const nativeBatch = selectNativeCopyBatch({ items, target, cut })
     if (nativeBatch) {
       try {
         useNativeJob = hasNativeTransferEdge(await api('/api/edges'), side(fromSide).device, target.device)
@@ -46541,9 +46551,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
     // 失败或超时才回落到既有 Hub 网关描述符。5s dial + 5s TLS 在主进程里，
     // 这里再留一点 bootstrap 余量，避免一次卡死吃掉整个 surface 打开窗口。
     const DSH_MESH_OPEN_TIMEOUT_MS = 15000
-    // 一次降级后 5 分钟内不再重付 mesh 探测成本；用户手动重连（retryDocument）
-    // 会清掉这个窗口，重新给 mesh 一次机会。
-    const DSH_MESH_RETRY_MS = 5 * 60 * 1000
+    // 一次降级后短冷却（15 秒），避免 8s 轮询反复探测又不把用户锁死在慢网关里；
+    // 用户手动重连（retryDocument）或切回页签会立刻清掉冷却窗口。
+    const DSH_MESH_RETRY_MS = 15 * 1000
 
     // mesh 工作台的 endpoint 是 caddy-easytier 的 https origin（带端口），
     // 与本机/Hub 网关的 `?tether_native=1` 映射页不是同一种地址，单独校验。
@@ -46865,14 +46875,28 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           ? catalog.services.find((service) => service && service.id === 'dsh') : null
         if (!entry || entry.state !== 'ready') return degrade('catalog_not_ready', entry && entry.state)
         let service = null
-        try {
-          service = await withMeshTimeout(host.workbench.open(id, 'dsh'), DSH_MESH_OPEN_TIMEOUT_MS, (late) => {
-            const opened = late && late.grantId
-            if (!opened) return
-            try { void Promise.resolve(host.workbench.close(id, 'dsh', opened)).catch(() => {}) } catch (_) { /* best effort */ }
-          })
-        } catch (error) {
-          return degrade(error && error.code === 'mesh_open_timeout' ? 'open_timeout' : 'open_failed', error && error.message)
+        let lastOpenError = null
+        for (let attemptIdx = 0; attemptIdx < 2; attemptIdx += 1) {
+          try {
+            service = await withMeshTimeout(host.workbench.open(id, 'dsh'), DSH_MESH_OPEN_TIMEOUT_MS, (late) => {
+              const opened = late && late.grantId
+              if (!opened) return
+              try { void Promise.resolve(host.workbench.close(id, 'dsh', opened)).catch(() => {}) } catch (_) { /* best effort */ }
+            })
+            lastOpenError = null
+            break
+          } catch (error) {
+            lastOpenError = error
+            const transient = error && [409, 502, 503, 504].includes(Number(error.status))
+            if (attemptIdx === 0 && transient) {
+              await new Promise((resolve) => setTimeout(resolve, 600))
+              continue
+            }
+            break
+          }
+        }
+        if (lastOpenError) {
+          return degrade(lastOpenError.code === 'mesh_open_timeout' ? 'open_timeout' : 'open_failed', lastOpenError.message)
         }
         const verified = meshDshService(service, id)
         if (!verified) {
@@ -47052,7 +47076,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             }
           } catch (_) { /* unknown; never reuse the Hub token as DSH state */ }
         }
-        if (result.state === 'unknown' && identity && urlValue && partition && bridge
+        const isLocalTarget = !!(localDeviceId && deviceId === localDeviceId)
+        if (result.state === 'unknown' && isLocalTarget && identity && urlValue && partition && bridge
             && typeof bridge.inspectSurfaceLogin === 'function') {
           let parsed
           try { parsed = new URL(urlValue) } catch (_) { return }
@@ -47070,7 +47095,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const previous = surfaceStateRef.current
         if (!previous || previous.deviceId !== deviceId) return
         if (previous.loginState === result.state) return
-        const reloadAfterLogin = previous.loginState !== 'logged_in' && result.state === 'logged_in'
+        const reloadAfterLogin = previous.loginState === 'logged_out' && result.state === 'logged_in'
           && previous.status === 'native-document-loaded'
         setState((prev) => prev.deviceId === deviceId
           ? { ...prev, loginState: result.state, loginReason: result.reason, reloadAfterLogin } : prev)
@@ -48351,7 +48376,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [auditCount, setAuditCount] = React.useState(0)
       const [auditRetained, setAuditRetained] = React.useState(100000)
       const [auditLoading, setAuditLoading] = React.useState(false)
-      const [mode, setMode] = React.useState('readonly')
+      const [mode, setMode] = React.useState('default')
       const [rootsText, setRootsText] = React.useState('')
       const [ask, setAsk] = React.useState(null)
       const [path, setPath] = React.useState('')
@@ -52271,12 +52296,15 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('div', { className: 'tether-drawer-body', style: { overflow: 'hidden', flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
               h('div', { style: { flex: '0 0 auto', maxHeight: '58%', overflowY: 'auto' } },
               h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
-                [['readonly', '默认（只读 + 项目可写）', '全盘可读；只写项目根与下列目录'],
+                [['default', '默认（系统盘只读 + 其他盘读写）', 'Windows 系统盘仅项目可写、其他盘可读写；Linux 仅项目可写'],
+                 ['full', '全盘读写', '系统与凭据目录仍拒绝'],
                  ['locked', '锁定（全部只读）', '拒绝所有写入与删除'],
-                 ['full', '全盘读写', '系统与凭据目录仍拒绝']].map(([value, title, desc]) =>
-                  h('label', { key: value, title: desc, style: { border: 0, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', background: mode === value ? C.soft : C.panel } },
-                    h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('input', { type: 'radio', checked: mode === value, onChange: () => setMode(value) }), h('strong', { style: { fontSize: 13 } }, title))
-                  ))
+                 ['custom', '自定义（仅可写根目录）', '全盘可读；只写项目根与下列目录']].map(([value, title, desc]) => {
+                  const selected = mode === value || (value === 'custom' && mode === 'readonly')
+                  return h('label', { key: value, title: desc, style: { border: 0, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', background: selected ? C.soft : C.panel } },
+                    h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('input', { type: 'radio', checked: selected, onChange: () => setMode(value) }), h('strong', { style: { fontSize: 13 } }, title))
+                  )
+                })
               ),
               h('div', { title: 'DSH 工作区与节点工作目录始终可写', style: { display: 'flex', alignItems: 'center', height: 28, marginTop: 14, fontSize: 13, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute } },
                 h('span', null, '可写根目录'),
