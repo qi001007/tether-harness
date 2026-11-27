@@ -258,12 +258,21 @@ def collect_matrix(inputs: Path, output: Path, version: str, channel: str, base_
                 Path(file["url"]).name == file["url"] and file.get("sha512")
                 and (output / file["url"]).is_file() for file in metadata["files"])):
             raise ValueError(f"incomplete Electron update feed: {feed}{suffix}.yml")
-    manifest = assemble(output, version, plugin_version, channel, base_url, frozen_plugin=seed["components"]["plugin"])
-    if set(manifest["components"]["node"].get("debian", {})) != {"amd64", "arm64"}:
+    assembled = assemble(output, version, plugin_version, channel, base_url, frozen_plugin=seed["components"]["plugin"])
+    debian = assembled["components"]["node"].get("debian", {})
+    if set(debian) != {"amd64", "arm64"}:
         raise ValueError("matrix is missing a Linux Node DEB")
-    for kind in platforms:
-        manifest["components"][kind]["platforms"] = platforms[kind]
-    return manifest
+    if seed["channel"] != channel:
+        raise ValueError("matrix channel differs from signed component manifest")
+    for kind, targets in platforms.items():
+        signed = seed["components"][kind]
+        actual = assembled["components"][kind]
+        if any(signed[key] != actual[key] for key in ("version", "size", "sha256")):
+            raise ValueError(f"{kind} ZIP differs from signed component manifest")
+        signed.update(url=actual["url"], platforms=targets)
+    seed["components"]["node"]["debian"] = debian
+    del seed["signature"]
+    return seed
 
 
 def main() -> int:

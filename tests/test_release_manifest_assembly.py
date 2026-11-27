@@ -149,6 +149,8 @@ def test_signed_matrix_feed_can_update_all_supported_architectures(tmp_path, mon
     public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     monkeypatch.setattr(release, "PUBLIC_KEY_HEX", public.hex())
     seed = module.assemble(dist, version, plugin, channel, BASE, plugin_base_url="https://example.org/v0.2.93")
+    seed["components"]["app"]["rollout"] = {"percent": 0, "include": [], "exclude": []}
+    seed["withdrawn"] = {"node": ["0.9.7"]}
     seed["signature"] = base64.b64encode(key.sign(release.canonical_bytes(seed))).decode()
     (dist / "tether-update.json").write_text(json.dumps(seed), encoding="utf-8")
     (dist / f"tether-plugin-{plugin}.zip").unlink()  # plugin is served from its independent release
@@ -178,6 +180,8 @@ def test_signed_matrix_feed_can_update_all_supported_architectures(tmp_path, mon
     release.verify_signature(manifest)
     assert module.validate(manifest) == []
     assert manifest["components"]["plugin"] == seed["components"]["plugin"]
+    assert manifest["components"]["app"]["rollout"] == seed["components"]["app"]["rollout"]
+    assert manifest["withdrawn"] == seed["withdrawn"]
     for slot in ("platforms", "debian"):
         assert len(manifest["components"]["node"][slot]) == 2
         for entry in manifest["components"]["node"][slot].values():
