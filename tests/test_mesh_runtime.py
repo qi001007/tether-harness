@@ -349,3 +349,22 @@ def test_supervisor_backs_off_after_a_failed_restore(managed_mesh) -> None:
     entry = supervisor.summary()["networks"][0]
     assert entry["state"] == "stopped" and "configuration changed" in entry["last_error"]
     assert entry["retry_in_seconds"] >= 0
+
+
+def test_restore_migrates_disable_relay_data_without_revision_bump(managed_mesh, monkeypatch) -> None:
+    runtime, config, starts, active = managed_mesh
+    monkeypatch.setenv("TETHER_MESH_DISABLE_RELAY_DATA", "1")
+    applied = runtime.apply(config)
+    record = runtime._load_records()[applied["instance_id"]]
+    config_path = Path(record["config_path"])
+    assert "disable_relay_data = true" in config_path.read_text(encoding="utf-8")
+
+    # Upgrade to default (on-demand relay: disable_relay_data = false) at same revision
+    monkeypatch.delenv("TETHER_MESH_DISABLE_RELAY_DATA", raising=False)
+    starts.clear()
+    active["value"] = False
+    restored = runtime.restore_stopped_network(config["network_id"])
+
+    assert restored["state"] == "ready"
+    assert starts == [applied["instance_id"]]
+    assert "disable_relay_data = false" in config_path.read_text(encoding="utf-8")

@@ -739,12 +739,28 @@ class EasyTierRuntime:
 
     @staticmethod
     def _legacy_mesh_template_only(config_path: Path, candidate: str) -> bool:
-        """Permit only the logger removal and dynamic listener template migration."""
+        """Permit only safe template migrations (logger/listeners and disable_relay_data)."""
         try:
             previous = tomllib.loads(config_path.read_text(encoding="utf-8"))
             current = tomllib.loads(candidate)
         except (OSError, ValueError):
             return False
+        prev_flags = previous.get("flags")
+        curr_flags = current.get("flags")
+        relay_migrated = False
+        if (isinstance(prev_flags, dict) and isinstance(curr_flags, dict) and
+                isinstance(prev_flags.get("disable_relay_data"), bool) and
+                isinstance(curr_flags.get("disable_relay_data"), bool) and
+                prev_flags.get("disable_relay_data") != curr_flags.get("disable_relay_data")):
+            prev_flags = dict(prev_flags)
+            curr_flags = dict(curr_flags)
+            prev_flags.pop("disable_relay_data", None)
+            curr_flags.pop("disable_relay_data", None)
+            previous["flags"] = prev_flags
+            current["flags"] = curr_flags
+            relay_migrated = True
+        if relay_migrated and previous == current:
+            return True
         old_logger = previous.pop("file_logger", None)
         old_listeners = previous.pop("listeners", None)
         new_listeners = current.pop("listeners", None)
