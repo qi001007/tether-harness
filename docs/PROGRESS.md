@@ -1,5 +1,10 @@
 # 实时进度
 
+## 2026-11-27 · 客户端阶段 0B
+
+本地发布门禁收敛为五项。已覆盖 Hub 不可达时的本机 DSH 会话、更新回滚和 Linux arm64 选包。跨设备实机验收与 Codeg 页面基线替换留待后续阶段。
+
+
 ## 2026-11-24 · 0.5.15 Codeg 回归修复与发布暂停
 
 - 症状：装完 0.5.15 后本机 DESKTOP-LOCAL 与 LAPTOP-01 的 Codeg 均打不开。本地复现为 catalog 先 `codeg ready`，`workbenchOpen` 抛“旧节点 Codeg 运行状态不一致”，随后 `codeg stopped / codeg_stopped`。

@@ -46,3 +46,5 @@
 
 - 2026-11-19：scripts/up.py显示的本地Node console端口跟随平台默认值（Windows 18894、其他平台18893），并尊重TETHER_CONSOLE_PORT。
 - 2026-11：`release_pipeline.py` 的 `status`/`plan` 只读校验版本与矩阵，`bump --version X.Y.Z` 默认 dry-run、`--write` 同步 version.json、APP package.json、package-lock 两处 version、pyproject.toml 并自检，`build`/`promote` 仍明确拒绝；不触发 workflow、不发布。
+
+- 2026-11-27 发布检查收敛为五项，补入 Node 回滚工具。构建输出包含两个 LF 安装脚本。

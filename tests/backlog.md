@@ -273,3 +273,5 @@
 
 - 2026-11-22 覆盖设置页和标题栏使用的三个设备更新按钮并行提交、同设备去重、新发行忽略旧失败任务、Headless Node 分派，以及 Windows 随包接管版本和旧发布的选择。
 - 2026-11 `test_release_workflow_validation.py` 的 candidate 断言改为 dispatch 驱动契约（inputs、concurrency、test job、draft）；新增 `test_release_pipeline.py` 覆盖 bump dry-run/写入/CRLF/非法版本。
+
+- 2026-11-27 覆盖发布门禁失败与部分执行、Node 回滚、Hub 离线时的本机会话和安装脚本制品。

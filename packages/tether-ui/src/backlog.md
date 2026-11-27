@@ -87,3 +87,5 @@
 - 2026-11-25 DSH 首帧回归：本机 DSH web 已运行但 `native-surface.json` 描述符滞后时，renderer 本机 `/dsh/surface` 返回 409 后会立即回退 Hub 网关并挂载 `native surface request failed` 死页。`fetchSurfaceDescriptor` 的本机快路现在把 409/`surface_error` 作为有界重试（最多 6 次），描述符就绪后直接挂 `127.0.0.1` 页面；不再永久降级 Hub。测试 `tests/test_native_surface_effects.mjs` 16 passed。
 - 2026-11-24 Agents fallback：Codeg 内嵌页在项目未激活或 OpenCode<2.x 时把“终端/结构化”渲染成 disabled，用户误认为功能阉割。`agents-page.js` 恢复 `AgentHome` 入口，Agent 主页用 Tether catalog/harness/shell：结构化走 `/fs/acp_start`，终端按 catalog id 映射 runtime agent type（`opencode→open_code`）走 `/fs/terminal_start`。LAPTOP/DESKTOP 真机点测通过；已安装 WebUI 是热替换，重装会丢，源码修复待下一版。
 - 2026-11-24 远程更新静默化：更新入口一律 28px 图标（无“一键更新”文字按钮），进度用环形百分比而非无解释 spinner。`MinimalUpdateButton` 只认本页发起的 job（`markUpdateJobStarted`/`updateJobStartedHere`），其他机器发起的 job 在本机页面完全不渲染、不占全屏，进度只在发起端；目标端 0.5.11 的旧 `detailsOpen=true` 无法热修，新版本不再复现。APP 0.5.14 载荷 quarantine（`updatePayloadQuarantined`），远程优先 Node，本机一键更新只跑 Node；0.5.15 打包修复后移除该版本号即可恢复。设置“更新”分区打开或窗口获焦即重查，不依赖重启或 legacy localStorage。
+
+- 2026-11-27 Hub 状态尚未就绪时保留本机目标和 DSH 工作台。

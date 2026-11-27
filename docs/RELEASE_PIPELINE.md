@@ -1,4 +1,12 @@
-# 发布产线 v1（阶段 2：可运行脚手架，未触发）
+# 发布产线
+
+## 本地发布检查（2026-11-27）
+
+运行 `python scripts/release_gate.py run` 检查 pnpm 打包依赖、桌面入口唯一性、版本源一致性、Node 更新事务回滚，以及清单装配与发布编排冒烟。要核验已组装的 pnpm 入口和启动器，可加 `--runtime <装配目录>`。日志和判定保存在 `.scratch/release-gate/<版本>/`。
+
+`python scripts/release_pipeline.py run --version <当前版本> --until gate` 会预演版本同步并执行本地检查。省略 `--approve build` 时，构建阶段记为 refused，检查通过后返回 2。构建、公开发布、切换 Hub pin 分别使用 build、publish、pin 批准项。阶段结果保存在 `.scratch/release-run/<版本>/state.json`。
+
+## 阶段 2 历史记录
 
 状态：阶段 2 已落地。`.github/workflows/release-matrix.yml` 与 `scripts/release_pipeline.py bump` 已就绪；本阶段未触发任何 workflow、未发布、未切 Hub、未动设备、未提交。基线为工作树 `codex/tether-0510-node-compat`（含主人未提交改动）。
 
