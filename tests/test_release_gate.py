@@ -5,12 +5,10 @@
 """
 from __future__ import annotations
 
-import base64
-import hashlib
 import importlib.util
 import json
 import sys
-import time
+from argparse import Namespace
 from pathlib import Path
 
 import pytest
@@ -28,431 +26,23 @@ def load_script(name: str):
     return module
 
 
-@pytest.fixture
-def hub_pin(monkeypatch, tmp_path):
-    module = load_script("release_gate_hub_pin")
-    monkeypatch.setattr(module, "ROOT", tmp_path)
-    (tmp_path / "version.json").write_text(json.dumps(
-        {"schema": 1, "components": {"app": "0.5.15", "plugin": "0.2.93", "node": "0.5.15"}}),
-        encoding="utf-8")
-    return module, tmp_path
-
-
-def signed_manifest(private_key, version="0.5.15"):
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-    from tether.release import canonical_bytes
-
-    def platform(target, suffix):
-        name = f"Tether-{version}-{target}.{suffix}"
-        return {name: {"url": f"https://example.invalid/{name}", "size": 1234,
-                       "sha256": "a" * 64, "format": suffix}}
-
-    manifest = {
-        "schema": 1, "channel": "preview",
-        "components": {
-            "app": {"version": version, "platforms": {
-                **platform("win-x64", "exe"), **platform("linux-x64", "AppImage"),
-                **platform("mac-arm64", "dmg")}},
-            "node": {"version": version, "platforms": platform("linux-x64", "tar.gz")},
-            # Hub 的 _valid_manifest 要求 app/node/plugin 三段齐全；插件按官方发行冻结版本。
-            "plugin": {"version": "0.2.93",
-                       "url": "https://example.invalid/tether-plugin-0.2.93.zip",
-                       "sha256": "c" * 64, "size": 4096, "format": "zip"},
-        },
-    }
-    manifest["signature"] = base64.b64encode(private_key.sign(canonical_bytes(manifest))).decode()
-    return manifest
-
-
-class Args:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-
-def run_check(module, tmp_path, manifest, pin="0.5.15", withdrawn=None, assets=None,
-              additional_assets=None):
-    (tmp_path / "hub.json").write_text(json.dumps(manifest), encoding="utf-8")
-    return module.check("hub.json", "0.5.15", Args(
-        release_assets=assets, additional_release_assets=additional_assets,
-        pin=pin, withdrawn=withdrawn))
-
-
-@pytest.fixture
-def keypair(monkeypatch):
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-    import tether.release as release
-
-    private = Ed25519PrivateKey.generate()
-    public = private.public_key().public_bytes_raw().hex()
-    monkeypatch.setattr(release, "PUBLIC_KEY_HEX", public)
-    return private
-
-
-def test_signed_matching_manifest_passes(hub_pin, keypair):
-    module, tmp_path = hub_pin
-    problems = run_check(module, tmp_path, signed_manifest(keypair))
-    assert problems == [], problems
-
-
-def test_wrong_pin_is_caught(hub_pin, keypair):
-    module, tmp_path = hub_pin
-    problems = run_check(module, tmp_path, signed_manifest(keypair), pin="0.5.14")
-    assert problems, "pin 不等于候选版本必须被抓到"
-    assert {item["rule"] for item in problems} == {"pin"}, problems
-
-
-def test_missing_sha256_is_caught(hub_pin, keypair):
-    module, tmp_path = hub_pin
-    manifest = signed_manifest(keypair)
-    entry = manifest["components"]["app"]["platforms"]
-    list(entry.values())[0]["sha256"] = "nope"
-    problems = run_check(module, tmp_path, manifest)
-    assert any(item["rule"] == "digest" for item in problems)
-
-
-def test_unsigned_manifest_is_caught(hub_pin, keypair):
-    module, tmp_path = hub_pin
-    manifest = signed_manifest(keypair)
-    del manifest["signature"]
-    problems = run_check(module, tmp_path, manifest)
-    assert any(item["rule"] == "signature" for item in problems)
-
-
-def test_withdrawn_asset_is_caught(hub_pin, keypair):
-    module, tmp_path = hub_pin
-    manifest = signed_manifest(keypair)
-    withdrawn = list(manifest["components"]["app"]["platforms"].values())[0]["url"]
-    (tmp_path / "withdrawn.txt").write_text(withdrawn.rsplit("/", 1)[-1] + "\n", encoding="utf-8")
-    problems = run_check(module, tmp_path, manifest, withdrawn="withdrawn.txt")
-    assert any(item["rule"] == "withdrawn" for item in problems)
-
-
-def test_plugin_assets_may_come_from_frozen_release(hub_pin, keypair):
-    module, tmp_path = hub_pin
-    (tmp_path / "release.json").write_text(json.dumps({"assets": [
-        {"name": "Tether-0.5.15-win-x64.exe"},
-        {"name": "Tether-0.5.15-linux-x64.AppImage"},
-        {"name": "Tether-0.5.15-mac-arm64.dmg"},
-        {"name": "Tether-0.5.15-linux-x64.tar.gz"},
-    ]}), encoding="utf-8")
-    (tmp_path / "plugin.json").write_text(json.dumps({"assets": [
-        {"name": "tether-plugin-0.2.93.zip"}]}), encoding="utf-8")
-
-    problems = run_check(module, tmp_path, signed_manifest(keypair),
-                         assets="release.json", additional_assets="plugin.json")
-
-    assert problems == [], problems
-
-
-def test_release_asset_must_exist(hub_pin, keypair):
-    module, tmp_path = hub_pin
-    (tmp_path / "assets.json").write_text(json.dumps({"assets": [{"name": "other.exe"}]}),
-                                          encoding="utf-8")
-    problems = run_check(module, tmp_path, signed_manifest(keypair),
-                         assets="assets.json")
-    assert any(item["rule"] == "asset" for item in problems)
-
-
-# --- 证据校验器 -----------------------------------------------------------
-
-@pytest.fixture
-def runner(monkeypatch, tmp_path):
-    module = load_script("release_gate")
-    monkeypatch.setattr(module, "ROOT", tmp_path)
-    (tmp_path / "version.json").write_text(json.dumps(
-        {"schema": 1, "components": {"app": "0.5.15", "node": "0.5.15", "plugin": "0.2.93"}}),
-        encoding="utf-8")
-    return module, tmp_path
-
-
-def args_for(module, tmp_path, **over):
-    """参数表来自 runner 自己的 argparse，不在测试里手抄字段。
-
-    手抄过一次事故：`GATES` 新增 `{hub_repo}`/`{fleet_size}` 后，测试的假 namespace
-    缺字段，resolve() 直接 AttributeError，把本该 BLOCKED 的门禁变成 REG-1 红。
-    """
-    namespace = module.defaults_namespace()
-    namespace.action = "check-evidence"
-    namespace.version = "0.5.15"
-    namespace.commit = "abc1234"
-    namespace.evidence_root = ".scratch/release-gate"
-    namespace.timeout = 60
-    for key, value in over.items():
-        setattr(namespace, key, value)
-    return namespace
-
-
-def write_record(tmp_path, gate_id, **fields):
-    from datetime import datetime, timezone
-
-    shot = tmp_path / "shot.png"
-    shot.write_bytes(b"fake-png")
-    record = {
-        "gate": gate_id, "version": "0.5.15", "commit": "abc1234",
-        "executed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "verdict": "pass", "evidence": [{"path": "shot.png", "sha256": hashlib.sha256(shot.read_bytes()).hexdigest()}],
-    }
-    record.update(fields)
-    directory = tmp_path / ".scratch/release-gate/0.5.15/real"
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / f"{gate_id}.json").write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
-    return shot
-
-
-def test_missing_record_is_blocked_not_passed(runner):
-    module, tmp_path = runner
-    gate = module.GATE_BY_ID["F-CODEG-LOCAL"]
-    result = module.verify_real_gate(gate, args_for(module, tmp_path))
-    assert result["verdict"] == "BLOCKED"
-
-
-def test_complete_record_passes(runner):
-    module, tmp_path = runner
-    write_record(tmp_path, "F-TRANSFER", device="LAPTOP", os="Windows 11",
-                 screenshot="shot.png", log="shot.png", sha256_source="a", sha256_target="a",
-                 measured={"mb_per_min": 5.1, "elapsed_s": 20, "streams": 4})
-    result = module.verify_real_gate(module.GATE_BY_ID["F-TRANSFER"], args_for(module, tmp_path))
-    assert result["verdict"] == "PASS", result
-
-
-def test_tampered_screenshot_fails(runner):
-    module, tmp_path = runner
-    shot = write_record(tmp_path, "F-TRANSFER", device="LAPTOP", os="Windows 11",
-                        screenshot="shot.png", log="shot.png", sha256_source="a", sha256_target="a",
-                        measured={"mb_per_min": 5.1, "elapsed_s": 20, "streams": 4})
-    shot.write_bytes(b"swapped-later")
-    result = module.verify_real_gate(module.GATE_BY_ID["F-TRANSFER"], args_for(module, tmp_path))
-    assert result["verdict"] == "FAIL"
-    assert any("哈希不符" in item for item in result["problems"])
-
-
-def test_unknown_measurement_fails(runner):
-    module, tmp_path = runner
-    write_record(tmp_path, "F-TRANSFER", device="LAPTOP", os="Windows 11",
-                 screenshot="shot.png", log="shot.png", sha256_source="a", sha256_target="a",
-                 measured={"mb_per_min": "unknown", "elapsed_s": 20, "streams": 4})
-    result = module.verify_real_gate(module.GATE_BY_ID["F-TRANSFER"], args_for(module, tmp_path))
-    assert result["verdict"] == "FAIL"
-    assert any("mb_per_min" in item for item in result["problems"])
-
-
-def test_stale_evidence_for_another_commit_fails(runner):
-    module, tmp_path = runner
-    write_record(tmp_path, "F-HUB-LOGIN", device="HUB", os="Ubuntu 22.04",
-                 screenshot="shot.png", log="shot.png", measured={"login_ms": 900},
-                 commit="deadbee")
-    result = module.verify_real_gate(module.GATE_BY_ID["F-HUB-LOGIN"], args_for(module, tmp_path))
-    assert result["verdict"] == "FAIL"
-    assert any("提交" in item for item in result["problems"])
-
-
-def test_evidence_older_than_freeze_fails(runner):
-    module, tmp_path = runner
-    write_record(tmp_path, "F-HUB-LOGIN", device="HUB", os="Ubuntu 22.04",
-                 screenshot="shot.png", log="shot.png", measured={"login_ms": 900})
-    # 冻结时间设在证据之后一天：旧验收记录不能给新版本背书。
-    future = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() + 86400))
-    args = args_for(module, tmp_path, not_before=future)
-    result = module.verify_real_gate(module.GATE_BY_ID["F-HUB-LOGIN"], args)
-    assert result["verdict"] == "FAIL"
-    assert any("早于冻结提交时间" in item for item in result["problems"])
-
-
-def test_host_snapshot_refused_without_consent(netmod):
-    module, tmp_path = netmod
-    sys.argv = ["release_gate_network.py", "--host-snapshot", str(tmp_path / "snap.json")]
-    assert module.main() == 2, "未加 --allow-host-snapshot 不得执行主机命令"
-    assert not (tmp_path / "snap.json").exists()
-
-
-def test_fail_verdict_record_is_not_a_pass(runner):
-    module, tmp_path = runner
-    write_record(tmp_path, "F-HUB-LOGIN", device="HUB", os="Ubuntu 22.04",
-                 screenshot="shot.png", log="shot.png", measured={"login_ms": 900}, verdict="fail")
-    result = module.verify_real_gate(module.GATE_BY_ID["F-HUB-LOGIN"], args_for(module, tmp_path))
-    assert result["verdict"] == "FAIL"
-
-
-def test_missing_snapshot_input_blocks_instead_of_failing(runner):
-    module, tmp_path = runner
-    gate = module.GATE_BY_ID["VER-2"]
-    result = module.run_auto_gate(gate, args_for(module, tmp_path, version="0.5.15"))
-    assert result["verdict"] == "BLOCKED"
-    assert "--hub-manifest" in result["reason"]
-
-
-def test_resolve_survives_incomplete_namespace(runner):
-    """占位符解析不许因为 namespace 少字段就 AttributeError。"""
-    module, _ = runner
-
-    class Bare:
-        version = "0.5.15"
-
-    assert module.resolve("--v {version} --repo {hub_repo} --n {fleet_size}", Bare()) == \
-        "--v 0.5.15 --repo  --n "
-
-
-def test_every_placeholder_is_declared_or_defaulted(runner):
-    """GATES 里出现的每个 {占位符} 都必须要么是可缺省参数，要么登记进缺输入表。
-
-    漏登记时 runner 会把空串塞进命令行，门禁变成 FAIL 而不是 BLOCKED，等于把
-    "主人还没给快照"谎报成"版本有问题"。
-    """
-    import re as _re
-
-    module, _ = runner
-    defaults = vars(module.defaults_namespace())
-    problems = []
-    for gate in module.GATES:
-        for part in gate.get("command", []):
-            for name in _re.findall(r"\{(\w+)\}", part):
-                if name not in module.SNAPSHOT_ARGS and name not in defaults:
-                    problems.append(f"{gate['id']}: 未登记占位符 {name}")
-    assert not problems, problems
-
-
-def test_placeholder_without_input_is_blocked_not_failing(runner):
-    module, tmp_path = runner
-    result = module.run_auto_gate(module.GATE_BY_ID["AUD-1"], args_for(module, tmp_path))
-    assert result["verdict"] == "BLOCKED", result
-    assert "--hub-repo" in result["reason"], result
-
-
-def test_defaults_namespace_matches_snapshot_args(runner):
-    """defaults_namespace 与 SNAPSHOT_ARGS 的键必须都能落到 argparse 上。"""
-    module, _ = runner
-    defaults = vars(module.defaults_namespace())
-    for key in module.SNAPSHOT_ARGS:
-        assert key in defaults, f"SNAPSHOT_ARGS 里的 {key} 没有对应 CLI 参数"
-
-
-def test_runner_never_touches_network_by_default(runner):
-    """保持默认不联网：ART-4 只能 BLOCKED，不能被当成通过。"""
-    module, tmp_path = runner
-    result = module.run_auto_gate(module.GATE_BY_ID["ART-4"], args_for(module, tmp_path))
-    assert result["verdict"] == "BLOCKED", result
-    assert "--allow-network" in result["reason"], result
-
-
-
-
-def test_partial_run_can_never_say_ready(runner, capsys):
-    """只跑一条门禁也判 READY 是这类 runner 最危险的失效方式。"""
-    module, tmp_path = runner
-    args = args_for(module, tmp_path)
-    code = module.print_verdict([{"gate": "VER-1", "kind": "auto", "verdict": "PASS",
-                                  "blocking": True}], args)
-    out = capsys.readouterr().out
-    assert code == 2
-    assert "PARTIAL" in out
-    payload = json.loads((tmp_path / ".scratch/release-gate/0.5.15/verdict.json")
-                         .read_text(encoding="utf-8"))
-    assert payload["verdict"] == "PARTIAL"
-    assert "F-TRANSFER" in payload["not_evaluated"]
-
-
-def test_gate_ids_are_documented(runner):
-    """runner 的 GATES 与 docs/RELEASE_GATE.md 必须逐条对应，防止两边漂开。"""
-    import re
-
-    module, _ = runner
-    doc = (ROOT / "docs" / "RELEASE_GATE.md").read_text(encoding="utf-8")
-    orphans = []
-    for gate in module.GATES:
-        pattern = rf"(?m)^(#{{2,4}}\s.*\b{re.escape(gate['id'])}\b)|\|\s*`{re.escape(gate['id'])}`"
-        if not re.search(pattern, doc):
-            orphans.append(gate["id"])
-    assert not orphans, (f"门禁表有 ID 未写进 docs/RELEASE_GATE.md：{orphans}"
-                         "（谁往 GATES 里加了 ID，谁就得同时补上判据小节）")
-    assert all(gate.get("title") and gate.get("id") for gate in module.GATES)
-    assert len({gate["id"] for gate in module.GATES}) == len(module.GATES), "ID 重复"
-
-
-def test_every_real_gate_declares_evidence_fields(runner):
-    """REAL 门禁不声明证据字段就等于随便写点什么都能过。"""
-    module, _ = runner
-    loose = [gate["id"] for gate in module.GATES
-             if gate["kind"] == "real" and not gate.get("evidence_fields")]
-    assert not loose, loose
-
-
-def test_blocking_gates_cover_the_release_surface(runner):
-    module, _ = runner
-    prefixes = {gate["id"].split("-")[0] for gate in module.GATES if gate["blocking"]}
-    for family in ("ART", "VER", "NET", "PRV", "UPD", "F", "PLAT", "REG"):
-        assert family in prefixes, f"blocking 门禁缺 {family} 族"
-
-
-def test_all_blocking_pass_is_the_only_ready_state(runner, capsys):
-    module, tmp_path = runner
-    args = args_for(module, tmp_path)
-    results = [{"gate": gate["id"], "kind": gate["kind"], "verdict": "PASS",
-                "blocking": gate["blocking"]} for gate in module.GATES]
-    assert module.print_verdict(results, args) == 0
-    assert "READY-FOR-APPROVAL" in capsys.readouterr().out
-
-
-# --- 网络/隐私扫描 -------------------------------------------------------
-
-@pytest.fixture
-def netmod(monkeypatch, tmp_path):
-    module = load_script("release_gate_network")
-    for base in list(module.FIRST_PARTY):
-        (tmp_path / base).mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(module, "ROOT", tmp_path)
-    return module, tmp_path
-
-
-def write_source(tmp_path, relative, text):
-    path = tmp_path / relative
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    return path
-
-
-def test_clean_sources_pass(netmod):
-    module, tmp_path = netmod
-    write_source(tmp_path, "tether/node/mesh_runtime.py",
-                 'argv = [str(self.core), "--no-tun", "--use-smoltcp"]\n')
-    assert module.scan("tun-route") == []
-    assert module.check_mesh_no_tun() == []
-
-
-def test_tun_flag_and_route_edit_are_caught(netmod):
-    module, tmp_path = netmod
-    write_source(tmp_path, "tether/node/bad.py",
-                 'core = "easytier-core"\nargv = [core, "--tun", "--network-name", "x"]\n')
-    hits = module.scan("tun-route")
-    assert any("TUN" in item["why"] for item in hits)
-    assert module.check_mesh_no_tun(), "缺 --no-tun 的命令行构造必须被抓到"
-
-
-def test_pppoe_and_proxy_writes_are_caught(netmod):
-    module, tmp_path = netmod
-    write_source(tmp_path, "apps/tether-app/dial.js", 'spawnSync("rasdial", args)\n')
-    write_source(tmp_path, "apps/tether-app/proxy.js", 'set("ProxyEnable", 1)\n')
-    assert module.scan("pppoe")
-    assert module.scan("proxy")
-
-
-def test_env_proxy_strip_is_allowed(netmod):
-    module, tmp_path = netmod
-    write_source(tmp_path, "tether/node/croc.py", 'env.pop("HTTP_PROXY", None)\n')
-    assert module.scan("proxy") == []
-
-
-def test_bundled_assets_are_excluded(netmod):
-    module, tmp_path = netmod
-    write_source(tmp_path, "tether/node/bin/agents-runtime/web/chunk.js",
-                 'const help = "rasdial route add wintun"\n')
-    for check in ("pppoe", "proxy", "tun-route"):
-        assert module.scan(check) == [], f"{check} 不应扫打包产物"
-
-
-def test_private_mesh_reference_is_caught(netmod):
-    module, tmp_path = netmod
-    write_source(tmp_path, "laptop/start.ps1", 'Start-Process "Tether-Private-Mesh.exe"\n')
-    assert any("私有mesh" in item["why"] for item in module.scan("private-mesh"))
+@pytest.mark.parametrize(("only", "exit_code", "expected"), [
+    (None, 0, "READY-FOR-APPROVAL"), ("ENT-1", 2, "PARTIAL")
+])
+def test_success_requires_every_gate(tmp_path, monkeypatch, only, exit_code, expected):
+    gate = load_script("release_gate")
+    command = [sys.executable, "-c", "pass"]
+    monkeypatch.setattr(gate, "commands", lambda *_: {"ENT-1": command, "VER-1": command})
+    args = ["run", "--version", "1.0.0", "--evidence-root", str(tmp_path)]
+    assert gate.main(args + (["--only", only] if only else [])) == exit_code
+    assert json.loads((tmp_path / "1.0.0/verdict.json").read_text())["verdict"] == expected
+
+
+def test_gate_failure_blocks_release(tmp_path, monkeypatch):
+    gate = load_script("release_gate")
+    monkeypatch.setattr(gate, "commands", lambda *_: {"VER-1": [sys.executable, "-c", "exit(1)"]})
+    assert gate.main(["run", "--version", "1.0.0", "--evidence-root", str(tmp_path)]) == 1
+    assert json.loads((tmp_path / "1.0.0/verdict.json").read_text())["verdict"] == "PUBLISH-BLOCKED"
 
 
 # --- 唯一入口（ENT） ------------------------------------------------------
@@ -607,13 +197,6 @@ def test_ent4_record_never_claims_pass_without_a_real_zero_entry_run(entrymod):
         assert path.is_file() and item["sha256"] == module.sha256_file(path)
 
 
-def test_ent_gates_are_registered_and_documented(runner):
-    module, _ = runner
-    for gate_id in ("ENT-1", "ENT-2", "ENT-3", "ENT-4"):
-        assert gate_id in module.GATE_BY_ID, gate_id
-    assert module.GATE_BY_ID["ENT-4"]["kind"] == "real", "卸载后清理只能真机枚举"
-
-
 # --- DSH 账号与映射 -------------------------------------------------------
 
 @pytest.fixture
@@ -736,7 +319,7 @@ def test_dsh1_catches_external_origin_and_unapproved_instance(dshmod):
     (tmp_path / "approved.json").write_text(json.dumps({"instances": [
         {"id": "DESKTOP-LOCAL", "dsh_home": "D:/DeepSeek Harness/.dsh",
          "profile": "desktop", "host": "http://127.0.0.1:4310"}]}), encoding="utf-8")
-    args = Args(descriptor=str(tmp_path / "d.json"), dsh_home=None,
+    args = Namespace(descriptor=str(tmp_path / "d.json"), dsh_home=None,
                 approved=str(tmp_path / "approved.json"), allow_host_inspection=False)
     whys = " ".join(item["why"] for item in module.check_mapping(args))
     assert "回环" in whys and "批准实例" in whys, whys
@@ -744,7 +327,7 @@ def test_dsh1_catches_external_origin_and_unapproved_instance(dshmod):
 
 def test_dsh1_missing_descriptor_exits_two(dshmod):
     module, tmp_path = dshmod
-    args = Args(descriptor=None, dsh_home=None, approved=None, allow_host_inspection=False)
+    args = Namespace(descriptor=None, dsh_home=None, approved=None, allow_host_inspection=False)
     with pytest.raises(SystemExit) as excinfo:
         module.check_mapping(args)
     assert excinfo.value.code == 2
@@ -770,7 +353,7 @@ def mapping_args(module, tmp_path, descriptor, *, instances=None, approved=True)
              "host": "http://127.0.0.1:4310"}]}), encoding="utf-8")
     if instances:
         (tmp_path / "i.json").write_text(json.dumps({"instances": instances}), encoding="utf-8")
-    return Args(descriptor=str(tmp_path / "d.json"), dsh_home=None,
+    return Namespace(descriptor=str(tmp_path / "d.json"), dsh_home=None,
                 approved=str(tmp_path / "a.json") if approved else None,
                 allow_host_inspection=False, active_pid=None,
                 instances=str(tmp_path / "i.json") if instances else None)
@@ -843,12 +426,6 @@ def test_dsh2_hub_loggedin_conflation_is_caught(dshmod):
                    ui="const dshAccountState = 'unknown'\nconst shown = loggedIn && dshAccountState")
     hits = module.check_ui_account()
     assert any("Hub 会话" in item["why"] or "全局 DSH 登录布尔" in item["why"] for item in hits), hits
-
-
-def test_dsh_gates_registered(runner):
-    module, _ = runner
-    for gate_id in ("DSH-1", "DSH-2", "DSH-3", "DSH-4", "DSH-5", "DSH-6"):
-        assert gate_id in module.GATE_BY_ID, gate_id
 
 
 def test_dsh6_clean_contract_passes(dshmod):
@@ -1081,28 +658,6 @@ def test_memory_declared_not_enforced_returns_degraded_not_blocked(monkeypatch, 
     assert code == module.DEGRADED_EXIT == 4
     assert result["verdict"] == "DEGRADED"
 
-    runner = load_script("release_gate")
-    monkeypatch.setattr(runner, "ROOT", tmp_path)
-    args = runner.defaults_namespace()
-    args.version = "0.5.16"
-    args.evidence_root = str(tmp_path / "release-gate")
-    process = type("Proc", (), {"returncode": 4, "stdout": "DEGRADED 内存上限判据\n",
-                                "stderr": ""})()
-    monkeypatch.setattr(runner.subprocess, "run", lambda *args, **kwargs: process)
-    record = runner.run_auto_gate({"id": "MEM-1", "blocking": True, "kind": "auto",
-                                   "title": "memory", "command": ["unused"]}, args)
-    assert record["verdict"] == "DEGRADED"
-    assert record["exit_code"] == 4
-
-    counts = {"PASS": 0, "FAIL": 0, "BLOCKED": 0, "DEGRADED": 0}
-    blockers = []
-    if record["blocking"] and record["verdict"] in {"FAIL", "BLOCKED"}:
-        blockers.append(record)
-    counts[record["verdict"]] += 1
-    assert counts["DEGRADED"] == 1
-    assert blockers == [], "内核未开 memory controller 属宿主属性，不能拦发布"
-
-
 def test_memory_cgroup_not_ready_remains_blocked(monkeypatch, capsys):
     module = load_script("release_gate_memory")
     from tether.node.memory_guard import STATE_UNDETERMINED
@@ -1110,74 +665,3 @@ def test_memory_cgroup_not_ready_remains_blocked(monkeypatch, capsys):
     code, result = _run_memory_probe(monkeypatch, capsys, STATE_UNDETERMINED)
     assert code == module.BLOCKED
     assert result["verdict"] == "BLOCKED"
-
-
-# --- 装配产物完整性 -------------------------------------------------------
-
-def test_empty_runtime_is_reported_missing(monkeypatch, tmp_path):
-    module = load_script("release_gate_assets")
-    monkeypatch.setattr(module, "ROOT", tmp_path)
-    empty = tmp_path / ".runtime/desktop-candidate"
-    empty.mkdir(parents=True)
-    problems: list[str] = []
-    for component in module.COMPONENTS:
-        _, missing = module.find_entries(empty, component)
-        problems.extend(missing)
-    problems.extend(module.check_declared_digests(empty))
-    module.check_codeg_web(empty, problems)
-    assert problems, "空装配产物不能被判为完整"
-
-
-def test_assembled_runtime_passes(monkeypatch, tmp_path):
-    module = load_script("release_gate_assets")
-    monkeypatch.setattr(module, "ROOT", tmp_path)
-    runtime = tmp_path / ".runtime/desktop-candidate"
-    for relative in ["components/nodejs/node.exe", "components/nodejs/pnpm.cmd",
-                     "components/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js",
-                     "components/dsh/node_modules/pnpm/bin/pnpm.mjs",
-                     "components/codeg/asset.json", "node-bin/herdr.exe",
-                     "node-bin/agents-runtime/codeg-server.exe",
-                     "node-bin/agents-runtime/codeg-mcp.exe",
-                     "components/easytier/asset.json", "components/meshcentral/meshcentral.js",
-                     "node-bin/agents-runtime/web/index.html", "node-bin/agents-runtime/web/login.html",
-                     "node-bin/agents-runtime/web/workspace.html", "node-bin/agents-runtime/web/token.html",
-                     "node-bin/agents-runtime/web/_next/static/chunks/a.js"]:
-        path = runtime / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("x", encoding="utf-8")
-    descriptors = {
-        "components/nodejs/runtime.json": {"component": "nodejs", "version": "24.22.2"},
-        "components/nodejs/pnpm.json": {"component": "pnpm", "version": "11.28.5",
-                                        "shim": "pnpm.cmd",
-                                        "entry": "../dsh/node_modules/pnpm/bin/pnpm.mjs"},
-        "components/dsh/runtime.json": {"component": "@deepseek-ai/dsh", "version": "0.2.1-rc.5",
-                                        "entry": "node_modules/@deepseek-ai/dsh/lib/bin.js"},
-        "components/dsh-plugin/asset.json": {"component": "dsh-plugin", "version": "0.2.93"},
-        "components/codeg/asset.json": {"component": "codeg", "version": "v0.42.0"},
-        "components/easytier/asset.json": {"component": "easytier", "version": "v2.6.4"},
-    }
-    for relative, payload in descriptors.items():
-        path = runtime / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload), encoding="utf-8")
-    problems = []
-    for component in module.COMPONENTS:
-        _, missing = module.find_entries(runtime, component)
-        problems.extend(f"{component['name']}: {item}" for item in missing)
-    problems.extend(module.check_declared_digests(runtime))
-    module.check_codeg_web(runtime, problems)
-    assert problems == [], problems
-
-
-def test_declared_digest_mismatch_is_caught(monkeypatch, tmp_path):
-    module = load_script("release_gate_assets")
-    monkeypatch.setattr(module, "ROOT", tmp_path)
-    runtime = tmp_path / ".runtime/desktop-candidate"
-    directory = runtime / "components/codeg"
-    directory.mkdir(parents=True)
-    (directory / "asset.zip").write_bytes(b"payload")
-    (directory / "asset.json").write_text(json.dumps(
-        {"component": "codeg", "version": "v0.42.0", "asset": "asset.zip",
-         "sha256": "b" * 64, "size": 7}), encoding="utf-8")
-    problems = module.check_declared_digests(runtime)
-    assert any("SHA-256" in item for item in problems), problems

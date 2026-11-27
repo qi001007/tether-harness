@@ -123,3 +123,9 @@ def test_invalid_version_and_until_are_rejected_before_any_action(calls) -> None
     assert _run(calls, version="0.5") == 2
     assert _run(calls, until="ship") == 2
     assert not calls
+
+def test_unapproved_stages_run_without_remote_or_credentials(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "ROOT", tmp_path)
+    monkeypatch.setattr(pipeline, "_repo", lambda: pytest.fail("unexpected remote lookup"))
+    assert pipeline.stage_build("1.0.0", "preview", "main", False, 0, 0, approve=False) == 2
+    assert pipeline.stage_publish("1.0.0", "preview", approve=False) == 2

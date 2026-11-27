@@ -37,50 +37,141 @@ test('APP binding keeps its startup version while enrollment adds a Node credent
   assert.match(main, /appBindingWatcher\.close\(\)/)
 })
 
-test('startup repairs desktop and start-menu shortcuts to launch Electron directly', () => {
-  assert.match(main, /ensureAppShortcuts\(\)/)
-  assert.match(main, /shell\.writeShortcutLink\(link, 'update', options\)/)
-  assert.match(main, /target: process\.execPath/)
-  assert.match(main, /getPath\('desktop'\)/)
-  assert.match(main, /getPath\('programs'\)/)
-  assert.match(main, /Tether APP\.lnk/)
-})
-
-test('startup preserves a usable shortcut for a different Tether installation', () => {
+function shortcutHost({ execPath, entries, extraFiles = [], realpath = {}, packaged = true }) {
   const desktop = 'C:/Desktop'
   const programs = 'C:/Programs'
-  const appPath = 'C:/QA/Tether App'
-  const installed = 'C:/Stable/Tether App'
-  const target = path.win32.join(installed, 'electron.exe')
-  const desktopLink = path.win32.join(desktop, 'Tether APP.lnk')
-  const programsLink = path.win32.join(programs, 'Tether APP.lnk')
-  const entries = new Map([
-    [desktopLink, { cwd: installed, target }],
-    [programsLink, { cwd: appPath.toUpperCase(), target: 'C:/QA/electron.exe' }]
-  ])
-  const exists = new Set([installed, target])
+  const link = (zone, name) => path.win32.join(zone === 'desktop' ? desktop : programs, name)
+  const links = new Map()
+  const files = new Set(extraFiles)
+  for (const [zone, name, value] of entries) {
+    const full = link(zone, name)
+    links.set(full, value)
+    files.add(full)
+  }
+  const removed = []
   const written = []
-  const fn = main.match(/^function ensureAppShortcuts\(\) \{[\s\S]*?^\}/m)[0]
   const context = {
-    app: { getPath: key => ({ desktop, programs })[key], getAppPath: () => appPath },
+    app: { getPath: zone => ({ desktop, programs })[zone] },
     env: {},
-    fs: { existsSync: value => exists.has(value) },
+    fs: {
+      existsSync: value => files.has(value),
+      rmSync: value => { removed.push(value); files.delete(value) },
+      realpathSync: value => realpath[value] || value
+    },
     path: path.win32,
-    process: { platform: 'win32', execPath: 'C:/QA/electron.exe' },
-    repoRoot: 'C:/QA',
-    packaged: false,
+    process: { platform: 'win32', execPath },
+    packaged,
+    APP_USER_MODEL_ID: 'com.tether.app',
+    log: () => {},
+    safeRendererPath: value => String(value),
+    safeRendererMessage: value => String(value),
     shell: {
-      readShortcutLink: link => entries.get(link),
-      writeShortcutLink: (link, mode) => { written.push([link, mode]); return true }
+      readShortcutLink: full => {
+        if (!links.has(full)) throw new Error('no such link')
+        return links.get(full)
+      },
+      writeShortcutLink: (full, mode, options) => { written.push([full, mode, options]); return true }
     }
   }
+  const fn = main.match(/^function ensureAppShortcuts\(\) \{[\s\S]*?^\}/m)[0]
   vm.runInNewContext(fn + '\nensureAppShortcuts()', context)
-  assert.deepEqual(written, [[programsLink, 'update']])
+  return { link, removed, written, files }
+}
 
-  exists.delete(installed)
-  written.length = 0
-  vm.runInNewContext('ensureAppShortcuts()', context)
-  assert.deepEqual(written, [[desktopLink, 'update'], [programsLink, 'update']])
+test('startup keeps exactly one desktop entry that matches the installer identity', () => {
+  assert.match(main, /const canonicalName = 'Tether\.lnk'/)
+  assert.match(main, /if \(!packaged \|\| process\.platform !== 'win32'/)
+  assert.match(main, /const target = resolveReal\(process\.execPath\)/)
+  assert.match(main, /cwd: installDir,/)
+  assert.match(main, /appUserModelId: APP_USER_MODEL_ID/)
+  assert.doesNotMatch(main, /args: '"' \+ appPath/)
+  assert.doesNotMatch(main, /icon: fs\.existsSync\(iconPath\) \? iconPath : process\.execPath/)
+})
+
+test('one product name is used by the window, the shell entry and the tray', () => {
+  assert.match(main, /title: 'Tether',/)
+  assert.match(main, /mainWindow\.on\('page-title-updated', \(event\) => \{ event\.preventDefault\(\) \}\)/,
+    '网页标题不得顶掉桌面壳名，否则任务栏与入口不同名')
+  assert.match(main, /description: 'Tether',/)
+  assert.match(main, /tray\.setToolTip\('Tether'\)/)
+  assert.match(fs.readFileSync(path.join(root, 'desktop/packaging/electron-builder.yml'), 'utf8'),
+    /^productName: Tether$/m)
+})
+
+test('startup heals a machine that carries both entry names', () => {
+  const w = (...parts) => path.win32.join(...parts)
+  const realRoot = w('E:', 'Tether')
+  const realExe = w(realRoot, 'Tether.exe')
+  const realIcon = w(realRoot, 'resources', 'tether-runtime', 'assets', 'tether-app-s.ico')
+  const junctionRoot = w('D:', 'Apps', 'Tether')
+  const junctionExe = w(junctionRoot, 'Tether.exe')
+  const junctionAsar = w(junctionRoot, 'resources', 'app.asar')
+  const legacy = { target: junctionExe, cwd: junctionAsar }
+  const host = shortcutHost({
+    execPath: junctionExe,
+    realpath: { [junctionExe]: realExe },
+    extraFiles: [realExe, realIcon, junctionExe, junctionAsar],
+    entries: [
+      ['desktop', 'Tether APP.lnk', legacy],
+      ['programs', 'Tether APP.lnk', legacy],
+      ['desktop', 'Tether.lnk', { target: realExe, cwd: realRoot, icon: realIcon }],
+      // 开始菜单那条由 NSIS 写成 exe 自带图标，需要被修回品牌图标源。
+      ['programs', 'Tether.lnk', { target: realExe, cwd: realRoot, icon: realExe }]
+    ]
+  })
+
+  assert.deepEqual(host.removed.sort(), [
+    host.link('desktop', 'Tether APP.lnk'),
+    host.link('programs', 'Tether APP.lnk')
+  ], '两个 legacy 名都要消失，否则用户看到的还是两个入口')
+  assert.deepEqual(host.written.map(([full]) => full), [host.link('programs', 'Tether.lnk')],
+    '字段已经正确的桌面入口不该被重写')
+  const [, mode, options] = host.written[0]
+  assert.equal(mode, 'replace')
+  assert.equal(options.target, realExe, '经 D: 联接启动也不能把联接路径写进用户入口')
+  assert.equal(options.cwd, realRoot)
+  assert.equal(options.icon, realIcon)
+  assert.equal(options.appUserModelId, 'com.tether.app')
+  assert.equal(options.args, undefined, 'NSIS 的 Tether.exe 自己会定位 asar，不该再传参数')
+  assert.deepEqual([...host.files].filter(full => full.toLowerCase().endsWith('.lnk')).sort(), [
+    host.link('desktop', 'Tether.lnk'),
+    host.link('programs', 'Tether.lnk')
+  ].sort(), '每个区最后只剩一个 Tether 入口名')
+})
+
+test('startup leaves a legacy entry that launches another live install', () => {
+  const w = (...parts) => path.win32.join(...parts)
+  const realRoot = w('E:', 'Tether')
+  const realExe = w(realRoot, 'Tether.exe')
+  const realIcon = w(realRoot, 'resources', 'tether-runtime', 'assets', 'tether-app-s.ico')
+  const otherRoot = w('C:', 'Portable', 'Tether')
+  const otherExe = w(otherRoot, 'Tether.exe')
+  const host = shortcutHost({
+    execPath: realExe,
+    extraFiles: [realExe, realIcon, otherExe],
+    entries: [
+      ['desktop', 'Tether APP.lnk', { target: otherExe, cwd: otherRoot }],
+      ['desktop', 'Tether.lnk', { target: realExe, cwd: realRoot, icon: realIcon }],
+      ['programs', 'Tether.lnk', { target: realExe, cwd: realRoot, icon: realIcon }]
+    ]
+  })
+
+  assert.deepEqual(host.removed, [], '另一份安装的真实入口不能被本机自愈删掉')
+  assert.deepEqual(host.written, [])
+})
+
+test('a source-tree run never writes user shell entries', () => {
+  const w = (...parts) => path.win32.join(...parts)
+  const realExe = w('E:', 'Tether', 'Tether.exe')
+  const host = shortcutHost({
+    execPath: realExe,
+    packaged: false,
+    extraFiles: [realExe, w('E:', 'Tether', 'resources', 'tether-runtime', 'assets', 'tether-app-s.ico')],
+    entries: [['desktop', 'Tether APP.lnk', { target: realExe, cwd: w('E:', 'Tether') }]]
+  })
+
+  assert.deepEqual(host.removed, [], '开发态不改用户桌面')
+  assert.deepEqual(host.written, [])
 })
 
 test('closing the window hides it to the tray until an explicit quit', () => {

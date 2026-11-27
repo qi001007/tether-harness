@@ -408,7 +408,10 @@ test('the shortcut and restart path launch Electron directly without a console',
   assert.match(installAppSource, /\$Electron = Join-Path \$AppDir "node_modules\\electron\\dist\\electron\.exe"/)
   assert.match(installAppSource, /\$lnk\.TargetPath = \$Electron/)
   assert.match(installAppSource, /\$lnk\.Arguments = '"' \+ \$AppDir \+ '"'/)
-  assert.equal(installAppSource.includes('Tether-App.cmd'), false)
+  // 0.2.82 的黑窗来自把 Tether-App.cmd 当入口用；这个名字现在只允许出现在清理里。
+  assert.equal(/CreateShortcut\(\(Join-Path \$folder "Tether-App\.cmd"\)/.test(installAppSource), false)
+  assert.match(installAppSource, /CreateShortcut\(\(Join-Path \$folder "Tether\.lnk"\)/,
+    '源码安装路径必须写与 NSIS 同名的那一个入口')
   assert.equal(/explorer\.exe/i.test(installAppSource), false)
 
   assert.match(nodeAgentSource, /\[sys\.executable, "-m", "tether\.node\.app_restart", "--root", str\(root\)/)

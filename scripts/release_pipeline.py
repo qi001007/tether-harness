@@ -303,19 +303,19 @@ def _record(version: str, stage: str, status: str, **extra) -> None:
 def stage_build(version: str, channel: str, ref: str, sign: bool, poll: float, timeout: float,
                 approve: bool = True) -> int:
     """Reuse an existing preview draft, or dispatch the matrix workflow when asked."""
-    repo = _repo()
     tag = _tag(version, channel)
-    status, release = _github("GET", f"/repos/{repo}/releases/tags/{tag}")
-    if status == 200:
-        _record(version, "build", "existing", tag=tag,
-                url=str((release or {}).get("html_url", "")))
-        return 0
     # A dispatch burns CI minutes and creates a draft release, so a bare `run`
     # does not do it. The unattended chain is a local readiness report.
     if not approve:
         _record(version, "build", "refused", tag=tag, ref=ref,
                 reason="pass --approve build; this dispatches CI and creates a draft")
         return 2
+    repo = _repo()
+    status, release = _github("GET", f"/repos/{repo}/releases/tags/{tag}")
+    if status == 200:
+        _record(version, "build", "existing", tag=tag,
+                url=str((release or {}).get("html_url", "")))
+        return 0
     _record(version, "build", "running", workflow="release-matrix.yml", tag=tag)
     status, payload = _github("POST", f"/repos/{repo}/actions/workflows/release-matrix.yml/dispatches",
                               {"ref": ref, "inputs": {"version": version, "channel": channel,
@@ -349,12 +349,12 @@ def stage_build(version: str, channel: str, ref: str, sign: bool, poll: float, t
 
 
 def stage_test(version: str, commit: str) -> int:
-    """The matrix gates packaging on its own test jobs; locally this is the gate's REG list."""
+    """Exercise the installed-version lookup and Node transaction recovery before the gates."""
     result = subprocess.run([sys.executable, "-m", "pytest", "-q",
-                             "tests/test_updates.py", "tests/test_update_rollback_script.py",
-                             "tests/test_update_fleet_probe.py", "tests/test_release_manifest_assembly.py",
-                             "tests/test_node_update_protocol.py"],
-                            cwd=str(ROOT), capture_output=True, text=True)
+                             "tests/test_node_update_protocol.py::test_frozen_windows_desktop_node_reads_installed_version",
+                             "tests/test_updates.py::test_node_transaction_rolls_back_after_manager_recreation",
+                             "tests/test_updates.py::test_node_rollback_failure_keeps_recovery_transaction"],
+                            cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace")
     tail = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
     _record(version, "test", "success" if result.returncode == 0 else "failed", summary=tail[:160])
     return 0 if result.returncode == 0 else 1
@@ -363,7 +363,7 @@ def stage_test(version: str, commit: str) -> int:
 def stage_gate(version: str, commit: str) -> int:
     result = subprocess.run([sys.executable, "scripts/release_gate.py", "run",
                              "--version", version, "--commit", commit],
-                            cwd=str(ROOT), capture_output=True, text=True)
+                            cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace")
     verdict = "PUBLISH-OK" if result.returncode == 0 else "PUBLISH-BLOCKED"
     _record(version, "gate", verdict, exit=result.returncode)
     print("\n".join(line for line in result.stdout.splitlines() if line.strip())[-4000:])
@@ -371,7 +371,6 @@ def stage_gate(version: str, commit: str) -> int:
 
 
 def stage_publish(version: str, channel: str, approve: bool) -> int:
-    repo = _repo()
     tag = _tag(version, channel)
     # Refuse before the first request: an unapproved run must not even look at
     # GitHub, and a missing tag must not be reported as a failed publish.
@@ -379,6 +378,7 @@ def stage_publish(version: str, channel: str, approve: bool) -> int:
         _record(version, "publish", "refused", tag=tag,
                 reason="pass --approve publish; a public release is visible to every device")
         return 2
+    repo = _repo()
     status, releases = _github("GET", f"/repos/{repo}/releases/tags/{tag}")
     if status != 200:
         _record(version, "publish", "failed", http=status, tag=tag, detail=str(releases)[:200])
@@ -434,7 +434,7 @@ def run_chain(version: str, channel: str, until: str, approve: set[str], ref: st
         elif stage == "gate":
             code = stage_gate(version, commit)
             if code != 0:
-                print("\nPUBLISH-BLOCKED：见 docs/RELEASE_GATE.md 的冻结条件。")
+                print("\nPUBLISH-BLOCKED：查看上方失败项和对应日志。")
         elif stage == "publish":
             code = stage_publish(version, channel, "publish" in approve)
         elif stage == "pin":

@@ -14,3 +14,4 @@ packages/tether-dsh-surface/updater/
 *.egg-info/
 .qoder/settings.local.json
 .qoder/laptop-dsh_adapter.py
+.scratch/
