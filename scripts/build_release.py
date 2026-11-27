@@ -64,7 +64,8 @@ def add_mapped_file(archive: zipfile.ZipFile, source: str, target: str, prefix: 
         archive.write(path, f"{prefix}/{target}")
 
 
-def add_tether_runtime(archive: zipfile.ZipFile, prefix: str, *, target_platform: str | None = None) -> None:
+def add_tether_runtime(archive: zipfile.ZipFile, prefix: str, *, target_platform: str | None = None,
+                      codeg_web: Path | None = None) -> None:
     """Add only the public client/Node runtime; Controller and web admin UI are private."""
     for rel in ("tether/__init__.py", "tether/updates.py", "tether/updates_cli.py",
                 "tether/release.py", "tether/ed25519.py", "tether/mcp_server.py"):
@@ -82,11 +83,20 @@ def add_tether_runtime(archive: zipfile.ZipFile, prefix: str, *, target_platform
         if path.is_file() and not path.is_symlink() and (
                 path.suffix in {".py", ".html"} or "bin" in path.relative_to(node).parts
                 or path == node / "_tomli" / "LICENSE"):
+            if codeg_web and path.is_relative_to(node / "bin/agents-runtime/web"):
+                continue
             if target_platform == "windows" and path.relative_to(node).as_posix() in windows_excluded_runtime_files:
                 continue
             rel = path.relative_to(ROOT).as_posix()
             if "__pycache__" not in path.parts:
                 archive.write(path, f"{prefix}/{rel}")
+    if codeg_web:
+        for name in ("index.html", "workspace.html", "login.html", "token.html"):
+            if not (codeg_web / name).is_file():
+                raise ValueError(f"Codeg static export is missing {name}")
+        for path in sorted(codeg_web.rglob("*")):
+            if path.is_file() and not path.is_symlink():
+                archive.write(path, f"{prefix}/tether/node/bin/agents-runtime/web/{path.relative_to(codeg_web).as_posix()}")
 
 
 def add_windows_herdr_runtime(archive: zipfile.ZipFile, prefix: str, herdr_runtime: Path) -> None:
@@ -336,6 +346,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--release-tag")
     parser.add_argument("--channel", choices=("stable", "preview"), default="stable")
     parser.add_argument("--node-deb", type=Path)
+    parser.add_argument("--codeg-web", type=Path, help="built Codeg static export for both ZIPs")
     parser.add_argument("--herdr-runtime", type=Path,
                          help="directory containing the pinned, hydrated Windows Herdr/ConPTY files")
     parser.add_argument("--output-dir", type=Path)
@@ -411,7 +422,7 @@ or start a server.
     with zipfile.ZipFile(app, "w", zipfile.ZIP_DEFLATED) as archive:
         add_tree(archive, ROOT / "apps" / "tether-app", app_prefix)
         add_tree(archive, ROOT / "packages" / "tether-ui", app_prefix)
-        add_tether_runtime(archive, app_prefix, target_platform="windows")
+        add_tether_runtime(archive, app_prefix, target_platform="windows", codeg_web=args.codeg_web)
         add_tree(archive, ROOT / "assets", app_prefix)
         for rel in ("pyproject.toml", ".env.example", "version.json", "desktop/install-app.ps1", "desktop/install-app.cmd"):
             add_file(archive, rel, app_prefix)
@@ -432,7 +443,7 @@ tether-harness-server component is installed. Otherwise, configure a Hub or inst
     node_prefix = f"tether-node-{version}"
     node = stage / f"tether-node-{version}.zip"
     with zipfile.ZipFile(node, "w", zipfile.ZIP_DEFLATED) as archive:
-        add_tether_runtime(archive, node_prefix)
+        add_tether_runtime(archive, node_prefix, codeg_web=args.codeg_web)
         if herdr_runtime is not None:
             add_windows_herdr_runtime(archive, node_prefix, herdr_runtime)
         if frozen is None:

@@ -129,3 +129,62 @@ def test_unknown_deb_architecture_is_rejected(tmp_path: Path) -> None:
         manifest["components"]["node"]["debian"]["amd64"], architecture="rpi-32")
 
     assert any("rpi-32" in item for item in module.validate(manifest))
+
+@pytest.mark.parametrize(("channel", "feed"), [("stable", "latest"), ("preview", "preview")])
+def test_signed_matrix_feed_can_update_all_supported_architectures(tmp_path, monkeypatch, channel, feed):
+    import base64
+    import sys
+    import yaml
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from tether import release
+
+    version, plugin = "0.9.9", "0.2.93"
+    dist = _draft(tmp_path, version, plugin, architectures=())
+    inputs = tmp_path / "inputs"
+    key = Ed25519PrivateKey.generate()
+    seed_bytes = key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                                  serialization.NoEncryption())
+    monkeypatch.setenv("TETHER_RELEASE_PRIVATE_KEY", base64.b64encode(seed_bytes).decode())
+    public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    monkeypatch.setattr(release, "PUBLIC_KEY_HEX", public.hex())
+    seed = module.assemble(dist, version, plugin, channel, BASE, plugin_base_url="https://example.org/v0.2.93")
+    seed["signature"] = base64.b64encode(key.sign(release.canonical_bytes(seed))).decode()
+    (dist / "tether-update.json").write_text(json.dumps(seed), encoding="utf-8")
+    (dist / f"tether-plugin-{plugin}.zip").unlink()  # plugin is served from its independent release
+
+    for target, extension, suffix in [
+        ("windows-x64", ".exe", ""), ("linux-x64", ".AppImage", "-linux"),
+        ("linux-arm64", None, None), ("macos-x64", ".dmg", "-mac"), ("macos-arm64", ".dmg", "-mac"),
+    ]:
+        directory = inputs / f"tether-{version}-{target}" / target
+        directory.mkdir(parents=True)
+        if target.startswith("linux-"):
+            for ext in ("tar.gz", "deb"):
+                (directory / f"Tether-node-runtime-{version}-{target}.{ext}").write_bytes(target.encode())
+        if extension:
+            name = f"Tether-{version}-{target}{extension}"
+            (directory / name).write_bytes(target.encode())
+            if suffix == "-mac":
+                name = f"Tether-{version}-{target}.zip"
+                (directory / name).write_bytes(target.encode())
+            files = [{"url": name, "size": len(target), "sha512": "fixture"}]
+            (directory / f"{feed}{suffix}.yml").write_text(yaml.safe_dump({"version": version, "files": files}))
+
+    monkeypatch.setattr(sys, "argv", ["assemble_release_manifest", "matrix", "--inputs", str(inputs),
+                                     "--dist", str(dist), "--version", version, "--channel", channel, "--base-url", BASE])
+    assert module.main() == 0
+    manifest = json.loads((dist / "tether-update.json").read_bytes())
+    release.verify_signature(manifest)
+    assert module.validate(manifest) == []
+    assert manifest["components"]["plugin"] == seed["components"]["plugin"]
+    for slot in ("platforms", "debian"):
+        assert len(manifest["components"]["node"][slot]) == 2
+        for entry in manifest["components"]["node"][slot].values():
+            path = dist / entry["url"].split("/")[-1]
+            assert entry["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert len(manifest["components"]["app"]["platforms"]) == 4
+    mac_feed = yaml.safe_load((dist / f"{feed}-mac.yml").read_text())
+    assert {entry["url"] for entry in mac_feed["files"]} == {
+        f"Tether-{version}-macos-x64.zip", f"Tether-{version}-macos-arm64.zip"}
+    assert f"{module.digest(dist / 'tether-update.json')}  tether-update.json" in (dist / "SHA256SUMS").read_text()

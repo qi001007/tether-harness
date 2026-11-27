@@ -262,11 +262,15 @@ def _hub(method: str, path: str, body: dict | None = None) -> tuple[int, object]
         method=method,
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=600 if path.endswith("/prepare") else 60) as response:
             raw = response.read()
             return response.status, (json.loads(raw) if raw else {})
     except urllib.error.HTTPError as exc:
-        return exc.code, str(exc.read()[:400], "utf-8", "replace")
+        raw = exc.read(4096)
+        try:
+            return exc.code, json.loads(raw)
+        except ValueError:
+            return exc.code, raw.decode("utf-8", "replace")[:400]
 
 
 def _repo() -> str:
@@ -317,6 +321,7 @@ def stage_build(version: str, channel: str, ref: str, sign: bool, poll: float, t
                 url=str((release or {}).get("html_url", "")))
         return 0
     _record(version, "build", "running", workflow="release-matrix.yml", tag=tag)
+    dispatched = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     status, payload = _github("POST", f"/repos/{repo}/actions/workflows/release-matrix.yml/dispatches",
                               {"ref": ref, "inputs": {"version": version, "channel": channel,
                                                       "sign": "true" if sign else "false"}})
@@ -327,13 +332,12 @@ def stage_build(version: str, channel: str, ref: str, sign: bool, poll: float, t
     run: dict = {}
     while time.monotonic() < deadline:
         time.sleep(poll)
-        status, listed = _github("GET", f"/repos/{repo}/actions/runs?event=workflow_dispatch"
+        status, listed = _github("GET", f"/repos/{repo}/actions/workflows/release-matrix.yml/runs?event=workflow_dispatch"
                                         "&per_page=20")
         items = (listed or {}).get("workflow_runs", []) if status == 200 else []
         candidate = next((item for item in items
-                          if item.get("name") == "Tether release matrix"
-                          and (str(item.get("display_title", "")).find(version) >= 0
-                               or str(item.get("head_commit", {}).get("message", "")).find(version) >= 0)),
+                          if item.get("display_title") == f"Tether {version} {channel}"
+                          and item.get("created_at", "") >= dispatched),
                          None)
         if candidate is None:
             continue
@@ -387,7 +391,8 @@ def stage_publish(version: str, channel: str, approve: bool) -> int:
     if not release.get("draft"):
         _record(version, "publish", "already-public", tag=tag)
         return 0
-    status, payload = _github("PATCH", f"/repos/{repo}/releases/{release['id']}", {"draft": False})
+    publication = {"draft": False, "make_latest": "true" if channel == "stable" else "false"}
+    status, payload = _github("PATCH", f"/repos/{repo}/releases/{release['id']}", publication)
     ok = status == 200
     _record(version, "publish", "success" if ok else "failed", tag=tag, http=status,
             url=(payload or {}).get("html_url") if ok else str(payload)[:200])
@@ -399,7 +404,22 @@ def stage_pin(version: str, channel: str, approve: bool) -> int:
         _record(version, "pin", "refused", target=version,
                 reason="pass --approve pin; this points every device feed at this version")
         return 2
-    status, payload = _hub("POST", "/api/releases/pin", {"version": version})
+    body = {"version": version}
+
+    def reason(payload):
+        detail = payload.get("detail", payload) if isinstance(payload, dict) else {}
+        return detail.get("code") if isinstance(detail, dict) else None
+
+    status, payload = _hub("POST", "/api/releases/pin", body)
+    if status in (404, 409) and reason(payload) in {"manifest_not_found", "version_not_cached"}:
+        # A newly published preview may be indexed only after release discovery.
+        status, payload = _hub("POST", "/api/releases/refresh", {})
+        if status == 200:
+            status, payload = _hub("POST", "/api/releases/pin", body)
+    if status == 409 and reason(payload) == "version_artifacts_not_cached":
+        status, payload = _hub("POST", "/api/releases/prepare", body)
+        if status == 200:
+            status, payload = _hub("POST", "/api/releases/pin", body)
     ok = status == 200
     _record(version, "pin", "success" if ok else "failed", http=status,
             detail=str(payload)[:200] if not ok else "")

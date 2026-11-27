@@ -4,11 +4,18 @@ set -eu
 DATA_DIR=/var/lib/tether-node
 CONFIG_DIR=/etc/tether-node
 CONFIG_FILE=$CONFIG_DIR/node.env
-PACKAGE_DIR=$DATA_DIR/packages
+PACKAGE_DIR=/var/cache/tether-node
 EASYTIER_USER=tether-easytier
 EASYTIER_DATA_DIR=/var/lib/tether-easytier
 VERSION=@TETHER_VERSION@
-DEB_NAME="tether-node_${VERSION}_amd64.deb"
+ARCH=@TETHER_ARCH@
+DEB_NAME="tether-node_${VERSION}_${ARCH}.deb"
+
+getent group tether >/dev/null || groupadd --system tether
+if ! getent passwd tether >/dev/null; then
+    useradd --system --gid tether --no-create-home --home-dir "$DATA_DIR" --shell /usr/sbin/nologin tether
+fi
+[ "$(id -u tether)" -ne 0 ] && [ "$(id -gn tether)" = tether ] || exit 1
 
 if ! getent group "$EASYTIER_USER" >/dev/null 2>&1; then
     groupadd --system "$EASYTIER_USER"
@@ -33,10 +40,17 @@ EOF
     fi
 fi
 
-install -d -o root -g root -m 0700 "$DATA_DIR"
+# Migrate once, while the legacy state directory still belongs to root.
+if [ -d "$DATA_DIR" ] && [ "$(stat -c %u "$DATA_DIR")" = 0 ]; then
+    if [ -d "$DATA_DIR/packages" ] && [ ! -L "$DATA_DIR/packages" ] && [ ! -e "$PACKAGE_DIR" ]; then
+        mv -T -- "$DATA_DIR/packages" "$PACKAGE_DIR"
+    fi
+    find "$DATA_DIR" -xdev -path "$DATA_DIR/packages" -prune -o -user root -exec chown -h tether:tether {} +
+fi
+install -d -o tether -g tether -m 0700 "$DATA_DIR"
 install -d -o root -g root -m 0700 "$PACKAGE_DIR"
 install -d -o root -g root -m 0700 "$CONFIG_DIR"
-install -d -o root -g root -m 0700 "$DATA_DIR/workspace" "$DATA_DIR/workspaces"
+runuser -u tether -- mkdir -p -- "$DATA_DIR/workspace" "$DATA_DIR/workspaces"
 install -d -o "$EASYTIER_USER" -g "$EASYTIER_USER" -m 0700 "$EASYTIER_DATA_DIR" "$EASYTIER_DATA_DIR/instances"
 
 if [ ! -e "$CONFIG_FILE" ]; then
@@ -72,7 +86,7 @@ if [ -n "$CACHE_SOURCE" ]; then
         echo "tether-node: refusing cached package with unexpected version" >&2
         exit 1
     }
-    [ "$(dpkg-deb -f "$CACHE_SOURCE" Architecture 2>/dev/null || true)" = amd64 ] || {
+    [ "$(dpkg-deb -f "$CACHE_SOURCE" Architecture 2>/dev/null || true)" = "$ARCH" ] || {
         echo "tether-node: refusing cached package with unexpected architecture" >&2
         exit 1
     }
@@ -98,7 +112,7 @@ if command -v systemctl >/dev/null 2>&1; then
     elif [ -e /run/tether-node/was-active ]; then
         systemctl start tether-node.service || START_FAILED=1
     else
-        echo "tether-node: installed as a root system service; configure TETHER_CONTROLLER and enrollment credentials in $CONFIG_FILE before starting" >&2
+        echo "tether-node: installed as the tether service account; configure TETHER_CONTROLLER and enrollment credentials in $CONFIG_FILE before starting" >&2
     fi
     if [ "$START_FAILED" -eq 1 ]; then
         echo "tether-node: new service failed to start; restoring the previous runtime selection" >&2

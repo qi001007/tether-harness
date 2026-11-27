@@ -254,7 +254,9 @@ const nodeBinSetting = runtimeSetting + '/node-bin'
 if (baseConfig.split(runtimeSetting).length !== 3 || baseConfig.split(nodeBinSetting).length !== 2) {
   throw new Error('electron-builder runtime resource mapping changed unexpectedly.')
 }
+const channel = process.env.TETHER_RELEASE_CHANNEL || 'preview'
 const config = replaceCandidateOutputSetting(baseConfig, builderOutput)
+  .replace('channel: preview', `channel: ${channel === 'stable' ? 'latest' : 'preview'}`)
   .replace(nodeBinSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}/node-bin"`)
   .replace(runtimeSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}"`)
   .replace('appId: com.tether.app', `appId: com.tether.app\nelectronVersion: ${electronVersion}\nelectronDist: "${electronDist.replaceAll('\\', '/')}"`)
@@ -302,7 +304,7 @@ const deltaBase = process.env.TETHER_WINDOWS_DELTA_BASE_DIR
 const deltaRepository = process.env.TETHER_WINDOWS_DELTA_REPOSITORY
 if (platform === 'windows' && (deltaBase || deltaRepository)) {
   const { buildWindowsDelta } = await import('./build-windows-delta.mjs')
-  const options = { targetDirectory: output, fromDirectory: deltaBase, repository: deltaRepository,
+  const options = { targetDirectory: output, fromDirectory: deltaBase, repository: deltaRepository, channel,
     token: deltaGitHubToken }
   const previousBase = await buildWindowsDelta(options)
   // A user who skipped one release should still need only one patch.
@@ -323,6 +325,6 @@ for (const entry of readdirSync(output, { withFileTypes: true })) {
   artifacts.push({ name: entry.name, size: statSync(file).size, sha256: hash.digest('hex') })
 }
 if (!artifacts.length) throw new Error(`No candidate artifacts were produced in ${output}`)
-writeFileSync(path.join(output, 'SHA256SUMS.json'), JSON.stringify({ version: expectedVersion, channel: 'preview', platform: platformTarget[platform], artifacts }, null, 2) + '\n')
+writeFileSync(path.join(output, 'SHA256SUMS.json'), JSON.stringify({ version: expectedVersion, channel, platform: platformTarget[platform], artifacts }, null, 2) + '\n')
 console.log(`Candidate artifacts: ${output}`)
 }

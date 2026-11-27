@@ -129,3 +129,28 @@ def test_unapproved_stages_run_without_remote_or_credentials(tmp_path, monkeypat
     monkeypatch.setattr(pipeline, "_repo", lambda: pytest.fail("unexpected remote lookup"))
     assert pipeline.stage_build("1.0.0", "preview", "main", False, 0, 0, approve=False) == 2
     assert pipeline.stage_publish("1.0.0", "preview", approve=False) == 2
+
+@pytest.mark.parametrize(("replies", "paths", "result"), [
+    ([(200, None)], ["pin"], 0),
+    ([(409, "version_artifacts_not_cached"), (200, None), (200, None)], ["pin", "prepare", "pin"], 0),
+    ([(404, "manifest_not_found"), (200, None), (200, None)], ["pin", "refresh", "pin"], 0),
+    ([(409, "version_not_cached"), (200, None), (409, "version_artifacts_not_cached"),
+      (200, None), (200, None)], ["pin", "refresh", "pin", "prepare", "pin"], 0),
+    ([(409, "version_artifacts_not_cached"), (502, "artifact_hash_mismatch")], ["pin", "prepare"], 1),
+    ([(403, "forbidden")], ["pin"], 1),
+])
+def test_pin_recovers_only_from_actionable_cache_errors(calls, monkeypatch, replies, paths, result):
+    replies = iter(replies)
+    seen = []
+
+    def request(method, path, body):
+        assert method == "POST"
+        action = path.split("/")[-1]
+        assert body == ({} if action == "refresh" else {"version": "0.5.16"})
+        seen.append(action)
+        status, code = next(replies)
+        return status, {"detail": {"code": code}} if code else {}
+
+    monkeypatch.setattr(pipeline, "_hub", request)
+    assert pipeline.stage_pin("0.5.16", "preview", True) == result
+    assert seen == paths

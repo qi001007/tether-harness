@@ -1,28 +1,9 @@
 #!/usr/bin/env python3
-"""装配并校验 tether-update.json，使 Hub 一定收得下这份清单。
-
-为什么要单独一个脚本：`.github/workflows/release-matrix.yml` 里内联重写了一遍
-清单装配，产出的 components 只有 app/node 且没有 flat url/sha256/size。Hub 的
-`_valid_manifest`（tether-harness-server/tether_server/controller/releases.py）要求
-app/node/plugin 三段各自带 version/size/sha256/url/protocol/min_protocol/min_updater，
-整份不合格就 503 manifest_unavailable —— 也就是说草稿一旦推到 Hub，所有人的更新页
-一起变红。装配只有一个实现，CI 和 `scripts/build_release.py` 都走它。
-
-    python scripts/assemble_release_manifest.py assemble \
-        --dist .scratch/release-draft --version 0.5.15 --channel preview \
-        --base-url https://github.com/<owner>/<repo>/releases/download/v0.5.15-preview.1 \
-        --out .scratch/release-draft/tether-update.json
-
-    python scripts/assemble_release_manifest.py validate --manifest <path>
-
-顺序是 assemble → 签名 → validate：assemble 产出的清单还没有 signature，直接
-validate 必然判失败，这是有意的——未签清单本来就不许推。
-
-退出码：0 = 通过；1 = 清单会被 Hub 拒收；2 = 输入缺失或读不了。
-"""
+"""Assemble release component and platform metadata from the actual draft files."""
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -33,6 +14,11 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tether.release import canonical_bytes, verify_signature
+
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
@@ -42,8 +28,6 @@ SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 MIN_UPDATER_VERSION = "0.2.1"
 UPDATE_PROTOCOL = 1
-# 与 Hub 端 _valid_manifest 同一条上限；超过它 Hub 会直接判整份清单无效。
-HUB_MAX_COMPONENT_BYTES = 512 * 1024 * 1024
 # Hub 镜像落盘时的单制品上限；超过的包只能从源站（GitHub/CDN）取，mirror 兜不住。
 HUB_MAX_MIRROR_BYTES = 512 * 1024 * 1024
 DEBIAN_ARCHITECTURES = {"amd64", "arm64"}
@@ -107,8 +91,10 @@ def classify(dist: Path, version: str, plugin_version: str) -> dict:
 
 
 def assemble(dist: Path, version: str, plugin_version: str, channel: str, base_url: str,
-             plugin_base_url: str | None = None) -> dict:
+             plugin_base_url: str | None = None, frozen_plugin: dict | None = None) -> dict:
     artifacts = classify(dist, version, plugin_version)
+    if frozen_plugin is not None:
+        artifacts["plugin"] = frozen_plugin
     missing = [name for name in ("app", "node", "plugin") if name not in artifacts]
     if missing:
         raise SystemExit(f"draft 目录里缺少制品：{missing}；清单不能引用不存在的包")
@@ -120,6 +106,11 @@ def assemble(dist: Path, version: str, plugin_version: str, channel: str, base_u
         "components": {},
     }
     for name in ("app", "node", "plugin"):
+        if name == "plugin" and frozen_plugin is not None:
+            if frozen_plugin.get("version") != plugin_version:
+                raise ValueError("frozen plugin version differs from version.json")
+            manifest["components"][name] = frozen_plugin
+            continue
         path = artifacts[name]
         plugin_base = (plugin_base_url.rstrip("/") + "/") if (name == "plugin" and plugin_base_url) else base
         manifest["components"][name] = component_entry(
@@ -157,8 +148,8 @@ def validate(manifest: dict) -> list[str]:
         if not isinstance(version, str) or not SEMVER.fullmatch(version):
             problems.append(f"{prefix}.version 不是合法 semver：{version!r}")
         size = entry.get("size")
-        if not isinstance(size, int) or not 0 < size <= HUB_MAX_COMPONENT_BYTES:
-            problems.append(f"{prefix}.size 必须是 0<{HUB_MAX_COMPONENT_BYTES} 的整数，实际 {size!r}")
+        if type(size) is not int or size <= 0:
+            problems.append(f"{prefix}.size 必须是正整数，实际 {size!r}")
         if not isinstance(entry.get("sha256"), str) or not HEX64.fullmatch(str(entry.get("sha256"))):
             problems.append(f"{prefix}.sha256 缺失或不是 64 位十六进制")
         url = str(entry.get("url") or "")
@@ -166,7 +157,8 @@ def validate(manifest: dict) -> list[str]:
             problems.append(f"{prefix}.url 必须是 https，实际 {url!r}")
         if type(entry.get("protocol")) is not int or entry.get("protocol") < 1:
             problems.append(f"{prefix}.protocol 非法")
-        if type(entry.get("min_protocol", 1)) is not int:
+        minimum = entry.get("min_protocol", 1)
+        if type(minimum) is not int or type(entry.get("protocol")) is not int or not 1 <= minimum <= entry["protocol"]:
             problems.append(f"{prefix}.min_protocol 非法")
         min_updater = entry.get("min_updater")
         if not isinstance(min_updater, str) or not SEMVER.fullmatch(min_updater):
@@ -206,6 +198,74 @@ def mirror_capacity(manifest: dict) -> list[str]:
     return notes
 
 
+def collect_matrix(inputs: Path, output: Path, version: str, channel: str, base_url: str) -> dict:
+    """Collect native installers and both Node architectures beside the component ZIPs."""
+    import shutil
+    import yaml
+
+    seed = json.loads((output / "tether-update.json").read_text(encoding="utf-8"))
+    verify_signature(seed)
+    plugin_version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["plugin"]
+    mac_feeds = []
+    feed = "latest" if channel == "stable" else channel
+    platforms = {"app": {}, "node": {}}
+    for target in ("windows-x64", "linux-x64", "linux-arm64", "macos-arm64", "macos-x64"):
+        directory = inputs / f"tether-{version}-{target}"
+        for path in sorted(directory.rglob("*")):
+            if not path.is_file():
+                continue
+            name = path.name
+            if name == f"{feed}-mac.yml":
+                metadata = yaml.safe_load(path.read_text(encoding="utf-8"))
+                arch = target.removeprefix("macos-")
+                if (not target.startswith("macos-") or str(metadata["version"]) != version
+                        or not any(item["url"].endswith(f"-{arch}.zip") for item in metadata["files"])):
+                    raise ValueError(f"missing architecture-specific macOS ZIP in {target} feed")
+                mac_feeds.append(metadata)
+                continue
+            if name in {"SHA256SUMS", "SHA256SUMS.json", "signing-status.json"}:
+                name = f"{path.stem}-{target}{path.suffix}"
+            destination = output / name
+            if destination.exists():
+                raise ValueError(f"duplicate release asset {name}")
+            shutil.move(str(path), destination)
+            kind = None
+            if name == f"Tether-node-runtime-{version}-{target}.tar.gz":
+                kind, fmt = "node", "tar.gz"
+            elif (target == "windows-x64" and name.endswith(".exe")
+                  or target.startswith("macos-") and name.endswith(".dmg")
+                  or target == "linux-x64" and name.endswith(".AppImage")):
+                kind, fmt = "app", destination.suffix[1:]
+            if kind:
+                if target in platforms[kind]:
+                    raise ValueError(f"multiple {kind} installers for {target}")
+                platforms[kind][target] = {"url": f"{base_url}/{name}", "size": destination.stat().st_size,
+                                           "sha256": digest(destination), "format": fmt}
+    if set(platforms["app"]) != {"windows-x64", "linux-x64", "macos-x64", "macos-arm64"}:
+        raise ValueError("matrix is missing a desktop installer")
+    if set(platforms["node"]) != {"linux-x64", "linux-arm64"}:
+        raise ValueError("matrix is missing a Linux Node archive")
+    if len(mac_feeds) != 2:
+        raise ValueError("both macOS update feeds are required")
+    merged = mac_feeds[0].copy()
+    for obsolete in ("path", "sha512", "sha2"):
+        merged.pop(obsolete, None)
+    merged["files"] = [file for metadata in mac_feeds for file in metadata["files"]]
+    (output / f"{feed}-mac.yml").write_text(yaml.safe_dump(merged, sort_keys=False), encoding="utf-8")
+    for suffix in ("", "-linux", "-mac"):
+        metadata = yaml.safe_load((output / f"{feed}{suffix}.yml").read_text(encoding="utf-8"))
+        if (str(metadata["version"]) != version or not metadata.get("files") or not all(
+                Path(file["url"]).name == file["url"] and file.get("sha512")
+                and (output / file["url"]).is_file() for file in metadata["files"])):
+            raise ValueError(f"incomplete Electron update feed: {feed}{suffix}.yml")
+    manifest = assemble(output, version, plugin_version, channel, base_url, frozen_plugin=seed["components"]["plugin"])
+    if set(manifest["components"]["node"].get("debian", {})) != {"amd64", "arm64"}:
+        raise ValueError("matrix is missing a Linux Node DEB")
+    for kind in platforms:
+        manifest["components"][kind]["platforms"] = platforms[kind]
+    return manifest
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="装配并校验 tether-update.json")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -217,10 +277,32 @@ def main() -> int:
     build.add_argument("--base-url", required=True, help="本批 release 的下载前缀")
     build.add_argument("--plugin-base-url", default=None, help="插件固定发行所在前缀")
     build.add_argument("--out", required=True)
+    matrix = sub.add_parser("matrix", help="assemble and sign the matrix draft")
+    matrix.add_argument("--inputs", type=Path, required=True)
+    matrix.add_argument("--dist", type=Path, required=True)
+    matrix.add_argument("--base-url", required=True)
+    matrix.add_argument("--version", required=True)
+    matrix.add_argument("--channel", choices=("stable", "preview"), required=True)
     check = sub.add_parser("validate", help="只校验一份现成清单")
     check.add_argument("--manifest", required=True)
     args = parser.parse_args()
 
+    if args.command == "matrix":
+        from scripts.build_release import release_private_key
+
+        manifest = collect_matrix(args.inputs, args.dist, args.version, args.channel, args.base_url)
+        key = release_private_key()
+        if key is None:
+            raise SystemExit("TETHER_RELEASE_PRIVATE_KEY is required")
+        manifest["signature"] = base64.b64encode(key.sign(canonical_bytes(manifest))).decode("ascii")
+        verify_signature(manifest)
+        problems = validate(manifest)
+        if problems:
+            raise SystemExit("\n".join(problems))
+        (args.dist / "tether-update.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        files = sorted(path for path in args.dist.iterdir() if path.is_file() and path.name != "SHA256SUMS")
+        (args.dist / "SHA256SUMS").write_text("".join(f"{digest(path)}  {path.name}\n" for path in files), encoding="ascii")
+        return 0
     if args.command == "validate":
         path = Path(args.manifest)
         if not path.is_file():
@@ -238,7 +320,8 @@ def main() -> int:
         manifest = assemble(Path(args.dist), args.version, plugin_version, args.channel,
                             args.base_url, args.plugin_base_url)
         Path(args.out).write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(f"已写出 {args.out}")
+        print(f"已写出待签名清单 {args.out}")
+        return 0
 
     problems = validate(manifest)
     notes = mirror_capacity(manifest)

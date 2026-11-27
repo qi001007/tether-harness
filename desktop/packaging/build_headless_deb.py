@@ -2,29 +2,34 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
 
+from prepare_runtime import headless_archive_name, headless_deb_arch, headless_deb_name
+
 ROOT = Path(__file__).resolve().parents[2]
 VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["node"]
-OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / VERSION / "headless" / "linux-x64"
-ARCHIVE = OUTPUT_DIR / f"Tether-node-runtime-{VERSION}-linux-x64.tar.gz"
-DEB_NAME = f"Tether-node-runtime-{VERSION}-linux-x64.deb"
+TARGET = os.environ.get("TETHER_HEADLESS_TARGET", "linux-x64")
+ARCHITECTURE = headless_deb_arch(TARGET)
+OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / VERSION / "headless" / TARGET
+ARCHIVE = OUTPUT_DIR / headless_archive_name(VERSION, TARGET)
+DEB_NAME = headless_deb_name(VERSION, TARGET)
 PACKAGE_ROOT = f"tether-node-runtime-{VERSION}"
 NFPM_SHA256 = "6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750"
 
 
-def _extract_runtime(temporary: Path) -> Path:
-    if not ARCHIVE.is_file():
-        raise ValueError(f"headless runtime tarball is missing: {ARCHIVE}")
+def _extract_runtime(temporary: Path, archive_path: Path) -> Path:
+    if not archive_path.is_file():
+        raise ValueError(f"headless runtime tarball is missing: {archive_path}")
     destination = temporary / "unpacked"
     destination.mkdir()
     deferred_links = []
     member_names = set()
-    with tarfile.open(ARCHIVE, "r:gz") as archive:
+    with tarfile.open(archive_path, "r:gz") as archive:
         for member in archive.getmembers():
             name = member.name.rstrip("/")
             parts = PurePosixPath(name).parts
@@ -84,17 +89,20 @@ def _extract_runtime(temporary: Path) -> Path:
             raise ValueError(f"runtime archive link is dangling or escapes package root: {name}") from error
     manifest = json.loads((package / "runtime-manifest.json").read_text(encoding="utf-8"))
     if (manifest.get("schema") != 1 or manifest.get("version") != VERSION
-            or manifest.get("platform") != "linux-x64"):
+            or manifest.get("platform") != TARGET):
         raise ValueError("headless runtime manifest does not match the Debian package")
-    for path in (
+    required = [
         "bin/tether-node", "resources/tether-runtime/tether-python",
         "laptop/tether-node-pair",
         "tether-source/tether/node/agent.py", "tether-source/tether/node/pair_cli.py",
         "tether-source/tether/node/console.html",
         "tether-source/tether/node/_tomli/LICENSE",
-        "resources/tether-runtime/components/nodejs/bin/node",
-        "resources/tether-runtime/components/meshcentral/meshcentral.js",
-    ):
+        "tether-source/tether/node/bin/agents-runtime/codeg-server",
+    ]
+    if TARGET == "linux-x64":
+        required.extend(("resources/tether-runtime/components/nodejs/bin/node",
+                         "resources/tether-runtime/components/meshcentral/meshcentral.js"))
+    for path in required:
         if not (package / path).is_file():
             raise ValueError(f"runtime package is missing {path}")
     return package
@@ -102,19 +110,21 @@ def _extract_runtime(temporary: Path) -> Path:
 
 def _nfpm_config(build: Path, payload: Path) -> Path:
     packaging = ROOT / "desktop" / "packaging" / "headless-deb"
-    office_dependencies_path = payload / "resources/tether-runtime/components/libreoffice/linux-dependencies.json"
-    office_dependencies = json.loads(office_dependencies_path.read_text(encoding="utf-8"))
-    depends = office_dependencies.get("depends")
-    if (not isinstance(depends, list) or not all(isinstance(item, str) and item for item in depends)
-            or office_dependencies.get("source_sha256") != "8290c8f46cb33d6df8f681cb796e0697461ea070f86ec55b63c94d7eb9d9a476"):
-        raise ValueError("Debian runtime is missing verified LibreOffice system dependency metadata")
+    depends = []
+    if TARGET == "linux-x64":
+        office_dependencies_path = payload / "resources/tether-runtime/components/libreoffice/linux-dependencies.json"
+        office_dependencies = json.loads(office_dependencies_path.read_text(encoding="utf-8"))
+        depends = office_dependencies.get("depends")
+        if (not isinstance(depends, list) or not all(isinstance(item, str) and item for item in depends)
+                or office_dependencies.get("source_sha256") != "8290c8f46cb33d6df8f681cb796e0697461ea070f86ec55b63c94d7eb9d9a476"):
+            raise ValueError("Debian runtime is missing verified LibreOffice system dependency metadata")
     depends = list(dict.fromkeys([*depends, "passwd", "util-linux"]))
     readme = _write_versioned_file(
         build, "README.Debian", Path("headless-deb") / "README.Debian", "@TETHER_VERSION@"
     )
     config = {
         "name": "tether-node",
-        "arch": "amd64",
+        "arch": ARCHITECTURE,
         "platform": "linux",
         "version": VERSION,
         "maintainer": "Tether maintainers",
@@ -134,7 +144,7 @@ def _nfpm_config(build: Path, payload: Path) -> Path:
             "preremove": str(packaging / "prerm"),
             "postremove": str(packaging / "postrm"),
         },
-        "deb": {"arch": "amd64"},
+        "deb": {"arch": ARCHITECTURE},
     }
     path = build / "nfpm.yaml"
     # JSON is a valid YAML subset and safely quotes local absolute paths.
@@ -149,7 +159,7 @@ def _write_postinstall(build: Path) -> Path:
 def _write_versioned_file(build: Path, name: str, source: Path, marker: str) -> Path:
     template = (ROOT / "desktop" / "packaging" / source).read_text(encoding="utf-8")
     path = build / name
-    path.write_text(template.replace(marker, VERSION), encoding="utf-8")
+    path.write_text(template.replace(marker, VERSION).replace("@TETHER_ARCH@", ARCHITECTURE).replace("@TETHER_TARGET@", TARGET), encoding="utf-8")
     return path
 
 
@@ -160,6 +170,7 @@ def main() -> int:
     parser.add_argument("--nfpm", required=True, type=Path)
     parser.add_argument("--nfpm-archive", required=True, type=Path)
     parser.add_argument("--nfpm-sha256", default=NFPM_SHA256)
+    parser.add_argument("--asset-dir", type=Path, default=OUTPUT_DIR)
     args = parser.parse_args()
     if not args.nfpm.is_file() or not args.nfpm_archive.is_file():
         raise ValueError(f"nFPM executable is missing: {args.nfpm}")
@@ -177,14 +188,15 @@ def main() -> int:
     digest = hashlib.sha256(args.nfpm.read_bytes()).hexdigest()
     if digest != extracted_digest:
         raise ValueError("nFPM executable does not match the pinned release archive")
-    if not ARCHIVE.is_file():
+    archive_path = args.asset_dir / ARCHIVE.name
+    if not archive_path.is_file():
         raise ValueError("build the headless runtime tarball before packaging the Debian asset")
-    target = OUTPUT_DIR / DEB_NAME
+    target = args.asset_dir / DEB_NAME
     if target.exists():
         raise ValueError(f"refusing to replace existing Debian artifact: {target}")
-    with tempfile.TemporaryDirectory(prefix="tether-deb-build-", dir=OUTPUT_DIR) as temp:
+    with tempfile.TemporaryDirectory(prefix="tether-deb-build-", dir=args.asset_dir) as temp:
         build = Path(temp)
-        package = _extract_runtime(build)
+        package = _extract_runtime(build, archive_path)
         config = _nfpm_config(build, package)
         command = [str(args.nfpm), "package", "--packager", "deb", "--config", str(config), "--target", str(target)]
         subprocess.run(command, cwd=ROOT, check=True)
@@ -193,13 +205,13 @@ def main() -> int:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     hexdigest = digest.hexdigest()
-    (OUTPUT_DIR / (DEB_NAME + ".sha256")).write_text(f"{hexdigest}  {DEB_NAME}\n", encoding="ascii")
+    (args.asset_dir / (DEB_NAME + ".sha256")).write_text(f"{hexdigest}  {DEB_NAME}\n", encoding="ascii")
     metadata = {
-        "format": "deb", "package": "tether-node", "architecture": "amd64",
+        "format": "deb", "package": "tether-node", "architecture": ARCHITECTURE,
         "version": VERSION, "filename": DEB_NAME,
         "size": target.stat().st_size, "sha256": hexdigest,
     }
-    (OUTPUT_DIR / (DEB_NAME + ".manifest-fragment.json")).write_text(
+    (args.asset_dir / (DEB_NAME + ".manifest-fragment.json")).write_text(
         json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     print(f"Created {target} ({target.stat().st_size} bytes, SHA-256 {hexdigest})")
     return 0

@@ -664,7 +664,7 @@ def install_pnpm_launcher(node_runtime_dir: Path, dsh_runtime_dir: Path) -> None
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target", required=True, choices=sorted(TARGETS))
+    parser.add_argument("--target", required=True, choices=sorted(TARGETS | HEADLESS_TARGETS.keys()))
     parser.add_argument("--output", type=Path, default=ROOT / ".runtime/desktop-candidate")
     parser.add_argument("--codeg-web", type=Path, required=True)
     parser.add_argument("--herdr-runtime", type=Path, required=True)
@@ -687,25 +687,26 @@ def main() -> int:
     if component_root.exists():
         shutil.rmtree(component_root)
     component_root.mkdir(parents=True)
-    node_asset_name = remote_manifest["platforms"][args.target]["node_asset"]
-    node_asset = next((item for item in remote_manifest["nodejs"]["assets"] if item["name"] == node_asset_name), None)
-    if node_asset is None:
-        raise ValueError(f"pinned Node.js asset is missing for {args.target}")
-    node_runtime_dir = component_root / "nodejs"
-    assemble_node_runtime(node_asset, node_runtime_dir)
-    (node_runtime_dir / "runtime.json").write_text(json.dumps({
-        "component": "Node.js", "version": remote_manifest["nodejs"]["version"],
-        "license": remote_manifest["nodejs"]["license"], "source": remote_manifest["nodejs"]["source"],
-        "asset": node_asset["name"], "size": node_asset["size"], "sha256": node_asset["sha256"],
-    }, indent=2) + "\n", encoding="utf-8")
-    meshcentral_dir = component_root / "meshcentral"
-    source_archive = output / "sources" / "MeshCentral" / remote_manifest["source_archives"][0]["name"]
-    assemble_meshcentral(remote_manifest["source_archives"][0], meshcentral_dir, source_archive)
-    assemble_meshagent(remote_manifest["meshagent"], args.target, component_root / "meshagent" / args.target)
-    assemble_libreoffice(libreoffice_manifest, args.target, component_root / "libreoffice")
-    assemble_dsh(dsh_manifest, args.target, component_root / "dsh", component_root / "dsh-plugin",
-                 output / "licenses" / "DSH-node-dependencies")
-    install_pnpm_launcher(node_runtime_dir, component_root / "dsh")
+    if args.target != "linux-arm64":
+        node_asset_name = remote_manifest["platforms"][args.target]["node_asset"]
+        node_asset = next((item for item in remote_manifest["nodejs"]["assets"] if item["name"] == node_asset_name), None)
+        if node_asset is None:
+            raise ValueError(f"pinned Node.js asset is missing for {args.target}")
+        node_runtime_dir = component_root / "nodejs"
+        assemble_node_runtime(node_asset, node_runtime_dir)
+        (node_runtime_dir / "runtime.json").write_text(json.dumps({
+            "component": "Node.js", "version": remote_manifest["nodejs"]["version"],
+            "license": remote_manifest["nodejs"]["license"], "source": remote_manifest["nodejs"]["source"],
+            "asset": node_asset["name"], "size": node_asset["size"], "sha256": node_asset["sha256"],
+        }, indent=2) + "\n", encoding="utf-8")
+        meshcentral_dir = component_root / "meshcentral"
+        source_archive = output / "sources" / "MeshCentral" / remote_manifest["source_archives"][0]["name"]
+        assemble_meshcentral(remote_manifest["source_archives"][0], meshcentral_dir, source_archive)
+        assemble_meshagent(remote_manifest["meshagent"], args.target, component_root / "meshagent" / args.target)
+        assemble_libreoffice(libreoffice_manifest, args.target, component_root / "libreoffice")
+        assemble_dsh(dsh_manifest, args.target, component_root / "dsh", component_root / "dsh-plugin",
+                     output / "licenses" / "DSH-node-dependencies")
+        install_pnpm_launcher(node_runtime_dir, component_root / "dsh")
     for icon_name in ["tether-app-s.ico", "tether-app-s.png"]:
         icon_source = ROOT / "assets" / icon_name
         if not icon_source.is_file():
@@ -727,6 +728,7 @@ def main() -> int:
     herdr_required = {
         "windows-x64": ["herdr.exe", "conpty/conpty.dll", "conpty/x64/OpenConsole.exe", "conpty/arm64/OpenConsole.exe", "conpty/herdr-conpty.json"],
         "linux-x64": ["herdr-linux-x86_64"],
+        "linux-arm64": [],
         "macos-x64": ["herdr-macos-x86_64"],
         "macos-arm64": ["herdr-macos-aarch64"],
     }[args.target]
@@ -804,39 +806,40 @@ def main() -> int:
         target = output / "licenses" / notice
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
-    shutil.copy2(node_runtime_dir / "LICENSE", output / "licenses" / "LICENSE.Node.js")
-    shutil.copy2(meshcentral_dir / "LICENSE", output / "licenses" / "LICENSE.MeshCentral")
-    shutil.copy2(LICENSE_DIR / "LICENSE.LibreOffice", output / "licenses" / "LICENSE.LibreOffice")
-    shutil.copy2(LICENSE_DIR / "NOTICE.LibreOffice", output / "licenses" / "NOTICE.LibreOffice")
-    agent_license = LICENSE_DIR / "LICENSE.MeshAgent"
-    if not agent_license.is_file():
-        raise ValueError("MeshAgent Apache-2.0 license text is missing")
-    shutil.copy2(agent_license, output / "licenses" / "LICENSE.MeshAgent")
-    (output / "licenses" / "NOTICE.MeshAgent").write_text(
-        "MeshAgent legacy-1.2.6 fixed upstream binaries. Apache-2.0 attribution: "
-        "https://github.com/Ylianst/MeshAgent/tree/legacy-1.2.6 (README.md, License section).\n",
-        encoding="utf-8")
-    dependency_notices = output / "licenses" / "MeshCentral-node-dependencies"
-    dependency_notices.mkdir(parents=True, exist_ok=True)
-    dependency_rows = []
-    for package_json in (meshcentral_dir / "node_modules").rglob("package.json"):
-        try:
-            metadata = json.loads(package_json.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        package_name = str(metadata.get("name") or package_json.parent.name)
-        package_version = str(metadata.get("version") or "unknown")
-        package_license = metadata.get("license", "see package source")
-        if isinstance(package_license, dict):
-            package_license = package_license.get("type", "see package source")
-        dependency_rows.append(f"{package_name}@{package_version}: {package_license}")
-        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", package_name)
-        for license_file in package_json.parent.iterdir():
-            if license_file.is_file() and license_file.name.lower() in {
-                    "license", "license.md", "license.txt", "notice", "notice.md", "notice.txt"}:
-                shutil.copy2(license_file, dependency_notices / f"{safe_name}-{package_version}-{license_file.name}")
-    (dependency_notices / "DEPENDENCIES.txt").write_text(
-        "\n".join(sorted(set(dependency_rows))) + "\n", encoding="utf-8")
+    if args.target != "linux-arm64":
+        shutil.copy2(node_runtime_dir / "LICENSE", output / "licenses" / "LICENSE.Node.js")
+        shutil.copy2(meshcentral_dir / "LICENSE", output / "licenses" / "LICENSE.MeshCentral")
+        shutil.copy2(LICENSE_DIR / "LICENSE.LibreOffice", output / "licenses" / "LICENSE.LibreOffice")
+        shutil.copy2(LICENSE_DIR / "NOTICE.LibreOffice", output / "licenses" / "NOTICE.LibreOffice")
+        agent_license = LICENSE_DIR / "LICENSE.MeshAgent"
+        if not agent_license.is_file():
+            raise ValueError("MeshAgent Apache-2.0 license text is missing")
+        shutil.copy2(agent_license, output / "licenses" / "LICENSE.MeshAgent")
+        (output / "licenses" / "NOTICE.MeshAgent").write_text(
+            "MeshAgent legacy-1.2.6 fixed upstream binaries. Apache-2.0 attribution: "
+            "https://github.com/Ylianst/MeshAgent/tree/legacy-1.2.6 (README.md, License section).\n",
+            encoding="utf-8")
+        dependency_notices = output / "licenses" / "MeshCentral-node-dependencies"
+        dependency_notices.mkdir(parents=True, exist_ok=True)
+        dependency_rows = []
+        for package_json in (meshcentral_dir / "node_modules").rglob("package.json"):
+            try:
+                metadata = json.loads(package_json.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            package_name = str(metadata.get("name") or package_json.parent.name)
+            package_version = str(metadata.get("version") or "unknown")
+            package_license = metadata.get("license", "see package source")
+            if isinstance(package_license, dict):
+                package_license = package_license.get("type", "see package source")
+            dependency_rows.append(f"{package_name}@{package_version}: {package_license}")
+            safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", package_name)
+            for license_file in package_json.parent.iterdir():
+                if license_file.is_file() and license_file.name.lower() in {
+                        "license", "license.md", "license.txt", "notice", "notice.md", "notice.txt"}:
+                    shutil.copy2(license_file, dependency_notices / f"{safe_name}-{package_version}-{license_file.name}")
+        (dependency_notices / "DEPENDENCIES.txt").write_text(
+            "\n".join(sorted(set(dependency_rows))) + "\n", encoding="utf-8")
     source_offer = LICENSE_DIR / "SOURCE_OFFERS.md"
     shutil.copy2(source_offer, output / "licenses" / "SOURCE_OFFERS.md")
     for asset in manifest.get("source_archives", []):

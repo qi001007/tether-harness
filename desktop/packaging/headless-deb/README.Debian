@@ -2,21 +2,13 @@ Tether Node Debian package
 ==========================
 
 This package installs a system service named tether-node.service. The service
-runs as root so the managed Node can use the approved system package updater
-and perform its configured device-management operations. Install or upgrade
-the package with APT as root so its declared LibreOffice runtime dependencies
-are installed from the configured Debian repositories:
+runs as the tether service account. Install or upgrade the package with APT as
+an administrator so dpkg verifies the architecture and installs dependencies:
 
-    sudo apt install ./Tether-node-runtime-@TETHER_VERSION@-linux-x64.deb
+    sudo apt install ./Tether-node-runtime-@TETHER_VERSION@-@TETHER_TARGET@.deb
 
-The service does not receive broad sudo rules because it already runs under
-systemd as root.
-
-The Node service manages EasyTier networks with the dedicated no-login
-`tether-easytier` system account. Its private network configuration is stored
-under `/var/lib/tether-easytier`; the EasyTier core runs through `setpriv`
-without TUN or elevated capabilities. The `tether-node` service itself remains
-the system-level manager and update owner.
+The default filesystem policy is readonly. The service owns its data directory
+and workspace. Package replacement remains an administrator operation.
 
 On first installation the service remains stopped until the Node is paired.
 Create a one-time pairing code in the Tether APP, then run this command from a
@@ -35,6 +27,5 @@ If pairing completed but the service did not start, run:
 
     systemctl enable --now tether-node.service
 
-The signed preview channel is selected for this candidate package. The package
-manager owns Debian runtime updates; the legacy per-file Node updater is not
-used. Removing the package keeps /var/lib/tether-node data and credentials.
+The Node follows the configured or signed manifest channel. The package
+manager owns Debian runtime updates. Removing the package keeps /var/lib/tether-node data and credentials.

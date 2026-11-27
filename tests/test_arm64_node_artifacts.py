@@ -77,6 +77,7 @@ def test_updater_reports_no_unsupported_architecture_on_arm64(tmp_path: Path, li
     linux_host.setattr(updater, "_installed", lambda: {
         "package": "tether-node", "version": "0.5.15", "architecture": "arm64"})
 
+    linux_host.setattr(updater, "_systemd_owner", lambda: True)
     reason = updater.availability()["reason"]
 
     assert reason != "unsupported_architecture"
@@ -180,3 +181,42 @@ def test_croc_accepts_a_host_installed_binary_on_arm64(monkeypatch, fake_machine
     assert croc.binary() == "/usr/local/bin/croc"
 
 
+
+@pytest.mark.parametrize(("target", "architecture"), [("linux-arm64", "arm64"), ("linux-x64", "amd64")])
+def test_debian_build_identity_and_service_are_consistent(tmp_path, monkeypatch, target, architecture):
+    import importlib.util
+    import json
+
+    packaging = Path(__file__).resolve().parents[1] / "desktop/packaging"
+    monkeypatch.syspath_prepend(str(packaging))
+    monkeypatch.setenv("TETHER_HEADLESS_TARGET", target)
+    spec = importlib.util.spec_from_file_location("headless_deb_under_test", packaging / "build_headless_deb.py")
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    payload = tmp_path / "runtime"
+    if target == "linux-x64":
+        office = payload / "resources/tether-runtime/components/libreoffice/linux-dependencies.json"
+        office.parent.mkdir(parents=True)
+        office.write_text(json.dumps({"depends": ["libx11-6"], "source_sha256":
+                                     "8290c8f46cb33d6df8f681cb796e0697461ea070f86ec55b63c94d7eb9d9a476"}))
+    config = json.loads(builder._nfpm_config(tmp_path, payload).read_bytes())
+    assert config["arch"] == config["deb"]["arch"] == architecture
+    assert builder.DEB_NAME == f"Tether-node-runtime-{builder.VERSION}-{target}.deb"
+    postinst = Path(config["scripts"]["postinstall"]).read_text()
+    assert f"ARCH={architecture}" in postinst and "useradd --system --gid tether" in postinst
+    service = next(Path(item["src"]) for item in config["contents"] if item["dst"].endswith("tether-node.service"))
+    assert "User=tether" in service.read_text() and "Group=tether" in service.read_text()
+
+def test_unprivileged_deb_install_reports_an_administrator_update(tmp_path, linux_host):
+    import os
+    from unittest.mock import patch
+
+    linux_host.setattr(platform_module, "system", lambda: "Linux")
+    linux_host.setattr(DebianPackageUpdater, "_os_id", lambda self: "debian")
+    linux_host.setattr(os, "geteuid", lambda: 99, raising=False)
+    updater = DebianPackageUpdater(tmp_path, owner="deb_package_manager")
+    linux_host.setattr(updater, "_installed", lambda: None)
+    with patch.object(Path, "is_dir", side_effect=PermissionError):
+        result = updater.availability()
+    assert result["available"] is False
+    assert result["reason"] == "root_required" and result["transaction"] is None

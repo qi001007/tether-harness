@@ -45,7 +45,8 @@ class DebianPackageUpdater:
         self.data_dir = Path(data_dir).resolve()
         self.owner = (owner if owner is not None else
                       os.environ.get("TETHER_NODE_UPDATE_OWNER", "")).strip().lower()
-        self.packages_dir = self.data_dir / "packages"
+        self.packages_dir = (Path("/var/cache/tether-node") if self.data_dir == Path("/var/lib/tether-node")
+                             else self.data_dir / "packages")
         self.transactions_dir = self.packages_dir / "transactions"
         self.architecture = debian_architecture() or ""
 
@@ -382,7 +383,11 @@ class DebianPackageUpdater:
                 "target_version": candidate_metadata["version"]}
 
     def transaction_status(self, prepared_id: str | None = None) -> dict[str, Any] | None:
-        if not self.transactions_dir.is_dir():
+        try:
+            if not self.transactions_dir.is_dir():
+                return None
+        except PermissionError:
+            # The unprivileged service cannot read the package manager's private cache.
             return None
         latest: tuple[float, Path, dict[str, Any]] | None = None
         if prepared_id is not None:

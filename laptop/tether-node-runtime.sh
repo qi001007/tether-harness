@@ -38,26 +38,30 @@ export TETHER_NODE_DATA_DIR="${TETHER_NODE_DATA_DIR:-$PREFIX}"
 export TETHER_NODE_UPDATE_OWNER="${TETHER_NODE_UPDATE_OWNER:-bundle_installer}"
 export TETHER_AGENTS_RUNTIME_DIR="$SOURCE_ROOT/tether/node/bin/agents-runtime"
 export TETHER_HERDR_RUNTIME_DIR="$SOURCE_ROOT/tether/node/bin"
-export TETHER_DSH_RUNTIME_DIR="$COMPONENTS/dsh"
-export TETHER_NODEJS_EXE="$COMPONENTS/nodejs/bin/node"
-export TETHER_MESHCENTRAL_ROOT="$COMPONENTS/meshcentral"
-export TETHER_MESHAGENT_EXE="$(find "$COMPONENTS/meshagent/linux-x64" -type f -name 'meshagent_x86-64' -print -quit 2>/dev/null || true)"
 export TETHER_SFTPGO_COMPONENT_DIR="$COMPONENTS/sftpgo"
 export TETHER_CADDY="$(find_component caddy caddy)"
 export TETHER_RCLONE="$(find_component rclone rclone)"
 export TETHER_EASYTIER_CORE="$(find_component easytier easytier-core)"
 export TETHER_EASYTIER_CLI="$(find_component easytier easytier-cli)"
-export TETHER_SOFFICE_EXE="$COMPONENTS/libreoffice/opt/libreoffice26.8/program/soffice"
+
 export TETHER_NATIVE_DSH_HOME="${TETHER_NATIVE_DSH_HOME:-$TETHER_NODE_DATA_DIR/dsh-home}"
 export TETHER_AGENT_HOME="${TETHER_AGENT_HOME:-$TETHER_NODE_DATA_DIR/agents}"
 
 if [ "$SHOW_HELP" != 1 ]; then
   [ -n "${TETHER_CONTROLLER:-}" ] || { echo "TETHER_CONTROLLER is missing; configure $ENV_FILE" >&2; exit 1; }
 fi
-[ -x "$TETHER_NODEJS_EXE" ] || { echo "bundled Node.js executable is missing" >&2; exit 1; }
-[ -f "$TETHER_MESHCENTRAL_ROOT/meshcentral.js" ] || { echo "bundled MeshCentral package is missing" >&2; exit 1; }
-[ -x "$TETHER_MESHAGENT_EXE" ] || { echo "bundled MeshAgent executable is missing" >&2; exit 1; }
-[ -x "$TETHER_SOFFICE_EXE" ] || { echo "bundled LibreOffice executable is missing" >&2; exit 1; }
+# The Pi build provides the Node, Codeg and transfer stack without desktop-only binaries.
+if [ "$(uname -m)" = x86_64 ]; then
+  export TETHER_DSH_RUNTIME_DIR="$COMPONENTS/dsh"
+  export TETHER_NODEJS_EXE="$COMPONENTS/nodejs/bin/node"
+  export TETHER_MESHCENTRAL_ROOT="$COMPONENTS/meshcentral"
+  export TETHER_MESHAGENT_EXE="$(find "$COMPONENTS/meshagent/linux-x64" -type f -name 'meshagent_x86-64' -print -quit 2>/dev/null || true)"
+  export TETHER_SOFFICE_EXE="$COMPONENTS/libreoffice/opt/libreoffice26.8/program/soffice"
+  [ -x "$TETHER_NODEJS_EXE" ] || { echo "bundled Node.js executable is missing" >&2; exit 1; }
+  [ -f "$TETHER_MESHCENTRAL_ROOT/meshcentral.js" ] || { echo "bundled MeshCentral package is missing" >&2; exit 1; }
+  [ -x "$TETHER_MESHAGENT_EXE" ] || { echo "bundled MeshAgent executable is missing" >&2; exit 1; }
+  [ -x "$TETHER_SOFFICE_EXE" ] || { echo "bundled LibreOffice executable is missing" >&2; exit 1; }
+fi
 
 WORKSPACE="${TETHER_NODE_WORKSPACE:-$TETHER_NODE_DATA_DIR/workspace}"
 WORKSPACES_ROOT="${TETHER_WORKSPACES_ROOT:-$TETHER_NODE_DATA_DIR/workspaces}"

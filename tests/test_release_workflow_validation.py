@@ -287,6 +287,7 @@ def test_release_matrix_workflow_is_manual_draft_only_and_tests_every_platform()
     assert targets == {
         "windows-x64": "windows-latest",
         "linux-x64": "ubuntu-22.04",
+        "linux-arm64": "ubuntu-22.04-arm",
         "macos-arm64": "macos-15",
         "macos-x64": "macos-15-intel",
     }
@@ -305,11 +306,11 @@ def test_release_matrix_workflow_is_manual_draft_only_and_tests_every_platform()
     assert assemble["permissions"] == {"actions": "read", "contents": "write"}
     release_action = next(step for step in assemble["steps"] if step.get("uses", "").startswith("softprops/action-gh-release@"))
     assert release_action["with"]["draft"] is True
-    assert release_action["with"]["prerelease"] is True
+    assert release_action["with"]["prerelease"] == "${{ inputs.channel == 'preview' }}"
     assert release_action["with"]["make_latest"] is False
     assert "TETHER_RELEASE_PRIVATE_KEY" in raw
-    assert "'platforms': platforms" in raw or "'platforms':" in raw
-    assert "schema': 1" in raw
+    assert "scripts/assemble_release_manifest.py matrix" in raw
+    assert "scripts/build_release.py --channel" in raw
     assert "TETHER_REQUIRE_SIGNED_RELEASE: '1'" in raw
     assert "gh release" not in raw and "hub-pin" not in raw
 

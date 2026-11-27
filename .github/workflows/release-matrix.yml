@@ -1,4 +1,5 @@
 name: Tether release matrix
+run-name: Tether ${{ inputs.version }} ${{ inputs.channel }}
 
 # Manual-only P0 matrix. Every build ends as a draft: this workflow never
 # publishes a release and never calls the Hub. Signing is off by default
@@ -34,6 +35,7 @@ env:
   VERSION: ${{ inputs.version }}
   CHANNEL: ${{ inputs.channel }}
   TAG: ${{ inputs.channel == 'stable' && format('v{0}', inputs.version) || format('v{0}-preview.1', inputs.version) }}
+  TETHER_RELEASE_CHANNEL: ${{ inputs.channel }}
   SIGN: ${{ inputs.sign && '1' || '0' }}
 
 jobs:
@@ -110,6 +112,7 @@ jobs:
       matrix:
         include:
           - { target: windows-x64, runner: windows-latest, platform: windows, arch: x64 }
+          - { target: linux-arm64, runner: ubuntu-22.04-arm, platform: linux, arch: arm64 }
           - { target: linux-x64, runner: ubuntu-22.04, platform: linux, arch: x64 }
           - { target: macos-arm64, runner: macos-15, platform: macos, arch: arm64 }
           - { target: macos-x64, runner: macos-15-intel, platform: macos, arch: x64 }
@@ -131,6 +134,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Check the dispatched version
+        shell: bash
         run: python scripts/release_pipeline.py status --expect "$VERSION"
       - name: Install Python and Node test dependencies
         shell: bash
@@ -139,6 +143,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e . pytest pytest-asyncio httpx cryptography 'PyYAML==6.0.2'
           npm ci --prefix packages/tether-ui
+          npm ci --prefix apps/tether-app
       - name: Run Python and JavaScript regressions
         shell: bash
         run: |
@@ -147,10 +152,10 @@ jobs:
           node --test --test-force-exit tests/test_*.mjs
           node --test --test-force-exit tests/test_*.cjs
       - name: Install pinned desktop packaging tools
+        if: matrix.target != 'linux-arm64'
         run: npm ci --prefix desktop/packaging
-      - name: Install APP production dependencies
-        run: npm ci --prefix apps/tether-app
       - name: Build the shared APP web UI
+        if: matrix.target != 'linux-arm64'
         shell: bash
         run: |
           set -euo pipefail
@@ -216,6 +221,7 @@ jobs:
           name: tether-pinned-codeg-web
           path: .runtime/codeg-web
       - name: Hydrate pinned Herdr runtime
+        if: matrix.target != 'linux-arm64'
         run: python scripts/hydrate_herdr_runtime.py --destination .runtime/herdr-runtime
       - name: Assemble pinned runtime components
         run: python desktop/packaging/prepare_runtime.py --target ${{ matrix.target }} --codeg-web .runtime/codeg-web --herdr-runtime .runtime/herdr-runtime
@@ -226,14 +232,17 @@ jobs:
           $python = if ($env:RUNNER_OS -eq 'Windows') { '.runtime/desktop-candidate/tether-python.exe' } else { '.runtime/desktop-candidate/tether-python' }
           $node = if ($env:RUNNER_OS -eq 'Windows') { '.runtime/desktop-candidate/components/nodejs/node.exe' } else { '.runtime/desktop-candidate/components/nodejs/bin/node' }
           if (!(Test-Path -LiteralPath $python -PathType Leaf)) { throw "Frozen Python runtime missing: $python" }
-          if (!(Test-Path -LiteralPath $node -PathType Leaf)) { throw "Bundled Node runtime missing: $node" }
+
           & $python -m tether.node.agent --help
           if ($LASTEXITCODE -ne 0) { throw "Frozen Python entry check failed with exit $LASTEXITCODE" }
           & $python -m tether.node.pair_cli --help
           if ($LASTEXITCODE -ne 0) { throw "Frozen Node pairing entry check failed with exit $LASTEXITCODE" }
-          & $node --version
-          if ($LASTEXITCODE -ne 0) { throw "Bundled Node entry check failed with exit $LASTEXITCODE" }
+          if ('${{ matrix.target }}' -ne 'linux-arm64') {
+            & $node --version
+            if ($LASTEXITCODE -ne 0) { throw "Bundled Node entry check failed with exit $LASTEXITCODE" }
+          }
       - name: Check the bundled DSH PTY and native dependencies
+        if: matrix.target != 'linux-arm64'
         shell: pwsh
         timeout-minutes: 2
         run: |
@@ -243,26 +252,10 @@ jobs:
           & $node desktop/packaging/check-dsh-native.js
           if ($LASTEXITCODE -ne 0) { throw "Bundled DSH native check failed with exit $LASTEXITCODE" }
       - name: Build standalone headless Linux Node runtime
-        if: matrix.target == 'linux-x64'
+        if: matrix.platform == 'linux'
+        env:
+          TETHER_HEADLESS_TARGET: ${{ matrix.target }}
         run: python desktop/packaging/build_headless_node.py
-      - name: Download and verify pinned nFPM
-        if: matrix.target == 'linux-x64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          nfpm_dir="$RUNNER_TEMP/nfpm-2.48.0"
-          mkdir -p "$nfpm_dir"
-          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
-            'https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz' \
-            -o "$nfpm_dir/nfpm.tar.gz"
-          echo '6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750  '"$nfpm_dir/nfpm.tar.gz" | sha256sum --check
-          tar -xzf "$nfpm_dir/nfpm.tar.gz" -C "$nfpm_dir" nfpm
-          chmod 0755 "$nfpm_dir/nfpm"
-          echo "NFPM_EXECUTABLE=$nfpm_dir/nfpm" >> "$GITHUB_ENV"
-          echo "NFPM_ARCHIVE=$nfpm_dir/nfpm.tar.gz" >> "$GITHUB_ENV"
-      - name: Build headless Debian package
-        if: matrix.target == 'linux-x64'
-        run: python desktop/packaging/build_headless_deb.py --nfpm "$NFPM_EXECUTABLE" --nfpm-archive "$NFPM_ARCHIVE"
       - name: Create macOS application icon
         if: matrix.platform == 'macos'
         shell: bash
@@ -313,7 +306,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ inputs.sign && secrets.WINDOWS_CERT_PASSWORD || '' }}
         run: python desktop/packaging/build_windows_release.py ${{ matrix.arch }}
       - name: Package installer
-        if: matrix.platform != 'windows'
+        if: matrix.platform != 'windows' && matrix.target != 'linux-arm64'
         env:
           CSC_LINK: ${{ inputs.sign && matrix.platform == 'macos' && secrets.MAC_CERT_P12_BASE64 || '' }}
           CSC_KEY_PASSWORD: ${{ inputs.sign && matrix.platform == 'macos' && secrets.MAC_CERT_PASSWORD || '' }}
@@ -350,7 +343,8 @@ jobs:
           channel = os.environ['CHANNEL']
           sign = os.environ['SIGN'] == '1'
           roots = [Path('.scratch/tether-desktop-candidates') / version / target]
-          headless = Path('.scratch/tether-desktop-candidates') / version / 'headless' / 'linux-x64'
+          roots[0].mkdir(parents=True, exist_ok=True)
+          headless = Path('.scratch/tether-desktop-candidates') / version / 'headless' / target
           if headless.is_dir():
               roots.append(headless)
           checksum_manifest = roots[0] / 'SHA256SUMS.json'
@@ -399,13 +393,15 @@ jobs:
             .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.AppImage
             .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.deb
             .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.yml
+            !.scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/builder-debug.yml
             .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.blockmap
             .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.delta
             .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/SHA256SUMS
             .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/SHA256SUMS.json
             .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/signing-status.json
-            .scratch/tether-desktop-candidates/${{ env.VERSION }}/headless/linux-x64/*
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/headless/${{ matrix.target }}/*
           if-no-files-found: error
+          include-hidden-files: true
           compression-level: 0
           retention-days: 7
 
@@ -413,7 +409,7 @@ jobs:
     name: Manifest and draft release
     needs: [build-codeg-web, package]
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     permissions:
       actions: read
       contents: write
@@ -430,110 +426,59 @@ jobs:
         with:
           pattern: tether-${{ env.VERSION }}-*
           path: .release-inputs
-      - name: Assemble signed schema 1 manifest
+      - name: Download and verify pinned nFPM
+        shell: bash
+        run: |
+          set -euo pipefail
+          nfpm_dir="$RUNNER_TEMP/nfpm-2.48.0"
+          mkdir -p "$nfpm_dir"
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            'https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz' \
+            -o "$nfpm_dir/nfpm.tar.gz"
+          echo '6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750  '"$nfpm_dir/nfpm.tar.gz" | sha256sum --check
+          tar -xzf "$nfpm_dir/nfpm.tar.gz" -C "$nfpm_dir" nfpm
+          chmod 0755 "$nfpm_dir/nfpm"
+          echo "NFPM_EXECUTABLE=$nfpm_dir/nfpm" >> "$GITHUB_ENV"
+          echo "NFPM_ARCHIVE=$nfpm_dir/nfpm.tar.gz" >> "$GITHUB_ENV"
+      - name: Package both native Linux archives as Debian assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in linux-x64 linux-arm64; do
+            name="Tether-node-runtime-${VERSION}-${target}.tar.gz"
+            archive="$(find ".release-inputs/tether-${VERSION}-${target}" -type f -name "$name" -print -quit)"
+            test -f "$archive"
+            TETHER_HEADLESS_TARGET="$target" python desktop/packaging/build_headless_deb.py \
+              --asset-dir "$(dirname "$archive")" --nfpm "$NFPM_EXECUTABLE" --nfpm-archive "$NFPM_ARCHIVE"
+          done
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-pinned-codeg-web
+          path: .release-codeg-web
+      - name: Build component ZIPs with the signed frozen plugin and sign the combined manifest
         env:
           TETHER_RELEASE_PRIVATE_KEY: ${{ secrets.TETHER_RELEASE_PRIVATE_KEY }}
           TETHER_REQUIRE_SIGNED_RELEASE: '1'
+        shell: bash
         run: |
-          python - <<'PY'
-          import base64
-          import hashlib
-          import json
-          import os
-          import shutil
-          import time
-          from pathlib import Path
-
-          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-          from tether.release import canonical_bytes, verify_signature
-
-          version = os.environ['VERSION']
-          channel = os.environ['CHANNEL']
-          tag = os.environ['TAG']
-          repository = os.environ['GITHUB_REPOSITORY']
-          inputs = Path('.release-inputs')
-          output = Path('release-assets')
-          output.mkdir()
-
-          def digest(path):
-              value = hashlib.sha256()
-              with path.open('rb') as stream:
-                  for block in iter(lambda: stream.read(1024 * 1024), b''):
-                      value.update(block)
-              return value.hexdigest()
-
-          def url(name):
-              return f'https://github.com/{repository}/releases/download/{tag}/{name}'
-
-          app_platforms = {}
-          node_platforms = {}
-          copies = []
-          for artifact in sorted(path for path in inputs.iterdir() if path.is_dir()):
-              prefix = f'tether-{version}-'
-              if not artifact.name.startswith(prefix):
-                  raise SystemExit(f'unexpected artifact name: {artifact.name}')
-              target = artifact.name[len(prefix):]
-              for path in sorted(artifact.rglob('*')):
-                  if not path.is_file():
-                      continue
-                  name = path.name
-                  if name in {'SHA256SUMS', 'SHA256SUMS.json'}:
-                      name = f'{name}-{target}'
-                  elif name == 'signing-status.json':
-                      name = f'signing-status-{target}.json'
-                  elif name == 'preview-mac.yml' and target.startswith('macos-'):
-                      # Keep both macOS updater manifests; publishing must merge them first.
-                      name = f'preview-mac-{target.rsplit("-", 1)[1]}.yml'
-                  copies.append((path, name))
-                  size = path.stat().st_size
-                  checksum = digest(path)
-                  if name.startswith('Tether-node-runtime-') and name.endswith('.tar.gz'):
-                      node_platforms[target] = {'url': url(name), 'size': size, 'sha256': checksum, 'format': 'tar.gz'}
-                  elif target.startswith('windows-') and name.endswith('.exe'):
-                      app_platforms[target] = {'url': url(name), 'size': size, 'sha256': checksum, 'format': 'exe'}
-                  elif target.startswith('macos-') and name.endswith('.dmg'):
-                      app_platforms[target] = {'url': url(name), 'size': size, 'sha256': checksum, 'format': 'dmg'}
-                  elif target.startswith('linux-') and name.endswith('.AppImage'):
-                      app_platforms[target] = {'url': url(name), 'size': size, 'sha256': checksum, 'format': 'AppImage'}
-
-          expected_app = {f'{os_name}-{arch}' for os_name in ('windows', 'linux', 'macos') for arch in ('x64', 'arm64')}
-          expected_app.discard('windows-arm64')
-          expected_app.discard('linux-arm64')
-          if set(app_platforms) != expected_app:
-              raise SystemExit(f'app platforms mismatch: {sorted(app_platforms)} vs {sorted(expected_app)}')
-          if set(node_platforms) != {'linux-x64'}:
-              raise SystemExit(f'node platforms mismatch: {sorted(node_platforms)}')
-
-          component = lambda platforms: {'version': version, 'protocol': 1, 'min_protocol': 1,
-                                         'min_updater': '0.2.1', 'platforms': platforms}
-          manifest = {'schema': 1, 'channel': channel,
-                      'released_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-                      'components': {'app': component(app_platforms), 'node': component(node_platforms)}}
-
-          material = os.environ.get('TETHER_RELEASE_PRIVATE_KEY', '').strip()
-          if not material:
-              raise SystemExit('TETHER_RELEASE_PRIVATE_KEY is required; an unsigned manifest is not publishable.')
-          seed = base64.b64decode(material.encode('ascii'), validate=True)
-          if len(seed) != 32:
-              raise SystemExit('TETHER_RELEASE_PRIVATE_KEY must contain a 32-byte Ed25519 seed')
-          key = Ed25519PrivateKey.from_private_bytes(seed)
-          manifest['signature'] = base64.b64encode(key.sign(canonical_bytes(manifest))).decode('ascii')
-          verify_signature(manifest)
-
-          seen = set()
-          for source, name in copies:
-              if name in seen:
-                  raise SystemExit(f'duplicate release asset name: {name}')
-              seen.add(name)
-              shutil.copy2(source, output / name)
-          (output / 'tether-update.json').write_text(
-              json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-          (output / 'SHA256SUMS').write_text(
-              ''.join(f'{digest(output / name)}  {name}\n' for name in sorted(seen) + ['tether-update.json']),
-              encoding='ascii')
-          print(json.dumps({'schema': 1, 'channel': channel, 'app': sorted(app_platforms),
-                            'node': sorted(node_platforms), 'assets': len(seen) + 2}, sort_keys=True))
-          PY
+          set -euo pipefail
+          python -m pip install 'PyYAML==6.0.2'
+          plugin="$(python -c "import json; print(json.load(open('version.json'))['components']['plugin'])")"
+          plugin_base="https://github.com/qi001007/tether-harness/releases/download/v$plugin"
+          frozen="$RUNNER_TEMP/frozen"
+          mkdir -p "$frozen" release-assets
+          for file in tether-update.json "tether-plugin-$plugin.zip"; do
+            curl --fail --location --retry 3 "$plugin_base/$file" -o "$frozen/$file"
+          done
+          python scripts/hydrate_herdr_runtime.py
+          x64_deb="$(find .release-inputs -type f -name "Tether-node-runtime-$VERSION-linux-x64.deb" -print -quit)"
+          python scripts/build_release.py --channel "$CHANNEL" --release-tag "$TAG" \
+            --node-deb "$x64_deb" --codeg-web .release-codeg-web \
+            --frozen-plugin-manifest "$frozen/tether-update.json" --frozen-plugin-archive "$frozen/tether-plugin-$plugin.zip" \
+            --output-dir "$RUNNER_TEMP/component-zips"
+          mv "$RUNNER_TEMP/component-zips"/{*.zip,*.sh,tether-update.json} release-assets/
+          python scripts/assemble_release_manifest.py matrix --inputs .release-inputs --dist release-assets \
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG" --version "$VERSION" --channel "$CHANNEL"
       - name: Upload the draft release (never publishes)
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
@@ -541,11 +486,11 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: Tether ${{ env.VERSION }} ${{ inputs.channel }} draft
           body: |
-            Four-platform ${{ inputs.channel }} draft built from `${{ github.sha }}`.
+            Four-desktop-platform and dual-architecture Linux Node ${{ inputs.channel }} draft built from `${{ github.sha }}`.
             Signing requested: `${{ inputs.sign }}`. See `signing-status.json` per platform.
             This draft is not published and the Hub is not touched.
           draft: true
-          prerelease: true
+          prerelease: ${{ inputs.channel == 'preview' }}
           make_latest: false
           overwrite_files: true
           fail_on_unmatched_files: true
