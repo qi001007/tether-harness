@@ -572,8 +572,32 @@ export function orderNetworkDevices(devices, appDeviceId) {
 }
 
 export function deviceAfterLocalIdentity(current, localDeviceId, manuallySelected, devices) {
-  const localDeviceExists = Array.isArray(devices) && devices.some((device) => device && device.device_id === localDeviceId)
-  return localDeviceExists && !manuallySelected ? localDeviceId : current
+  if (!localDeviceId || manuallySelected) return current
+  if (!Array.isArray(devices)) return localDeviceId
+  return devices.some((device) => device && device.device_id === localDeviceId) ? localDeviceId : current
+}
+
+export function hubUnavailableLocalState(current, localDeviceId, platform = '') {
+  if (!localDeviceId || (current && Array.isArray(current.devices))) return null
+  return {
+    devices: [{
+      device_id: localDeviceId,
+      name: '本机',
+      online: true,
+      local: true,
+      platform: String(platform || ''),
+      capabilities: {}
+    }],
+    edges: [],
+    user: null,
+    hubUnavailable: true
+  }
+}
+
+export function authRetryDelayMs(previous, recovered = false) {
+  if (recovered) return 15_000
+  const current = Number(previous) || 15_000
+  return Math.min(current * 2, 300_000)
 }
 
 export async function checkUpdateAvailability(check, isCurrent = () => true) {
@@ -2884,7 +2908,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       return !value || /^\?device_id=[A-Za-z0-9._-]{1,80}$/.test(String(value))
     }
 
-    function NativeSurface({ deviceId, online, visible, localDeviceId, deviceInfo = null, preload = false, layered = false, authReady = true }) {
+    function NativeSurface({ deviceId, online, visible, localDeviceId, deviceInfo = null, preload = false, layered = false, authReady = true, localOnly = false }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const [slow, setSlow] = React.useState(false)
@@ -3074,7 +3098,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const surfaceStateRef = React.useRef(currentState)
       surfaceStateRef.current = currentState
       // 本机直连失败后，本次设备挂载内不再重试直连，交回主进程 Hub 票据路径。
-      const localDirectFailedRef = React.useRef(false)
       // mesh 探测失败后记下时间：8s 描述符轮询不再每次都重付一次 5s dial 成本。
       const meshProbeRef = React.useRef({ deviceId: '', failedAt: 0, reason: '' })
       const surfaceSourceKey = (() => {
@@ -3145,44 +3168,24 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
         }
         const isLocalTarget = !!(localDeviceId && id === localDeviceId)
-        // 本机目标优先走 APP 自身代理的节点控制台描述符（读 native-surface.json，
-        // 返回 http://127.0.0.1:<port>/?token=…），不再为同一台机器绕 Hub 换取票据。
-        // 描述符缺失或本地链路失败时继续走原来的主进程 Hub 票据路径。
+        // The APP opens its own DSH through the main-process local bootstrap.
+        // The bootstrap consumes the loopback authenticated_url inside the
+        // target workbench partition, so the partition receives dsh-auth
+        // without copying cookies across origins or routing through Hub.
         if (host && host.kind === 'app' && !EXPLICIT_AUTHORITY && isLocalTarget
-            && !localDirectFailedRef.current
-            && typeof window !== 'undefined' && window.location
-            && /^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/.test(window.location.origin)) {
-          let localDescriptor = null
-          let localFailure = null
+            && host.workbench && typeof host.workbench.openDshSurface === 'function') {
           try {
-            const localResponse = await fetch('/api/devices/' + encodeURIComponent(id) + '/dsh/surface', {
-              headers: { 'Cache-Control': 'no-store' }, cache: 'no-store', signal
-            })
-            const localData = await localResponse.json().catch(() => null)
-            const localUrl = localData && localData.available === true ? safeLocalDshSurfaceUrl(localData.url) : ''
-            if (localResponse.ok && localUrl) {
-              localDescriptor = { response: { ok: true, status: 200 }, data: {
-                available: true, url: localUrl, pid: Number(localData.pid) || 0,
-                updated_at: localData.updated_at, localDirect: true
-              } }
-            } else if (!localResponse.ok) {
-              localFailure = { response: { ok: false, status: localResponse.status }, data: localData || {} }
-            } else {
-              localFailure = { response: { ok: false, status: 502 }, data: { detail: { code: 'descriptor_invalid' } } }
-            }
+            const service = await host.workbench.openDshSurface(id)
+            return { response: { ok: true, status: 200 }, data: { nativeService: service } }
           } catch (error) {
             if (signal && signal.aborted) throw error
+            return { response: { ok: false, status: 503 }, data: { detail: {
+              code: 'surface_error', message: String(error && error.message || error).slice(0, 180)
+            } } }
           }
-          if (localDescriptor) return localDescriptor
-          // The DSH web process can answer before its native-surface descriptor
-          // is written. Keep retrying the local fast path instead of mounting a
-          // Hub gateway frame that renders a dead "native surface request failed".
-          if (localFailure) return localFailure
-          if (signal && signal.aborted) {
-            const error = new Error('The operation was aborted')
-            error.name = 'AbortError'
-            throw error
-          }
+        }
+        if (localOnly) {
+          return { response: { ok: false, status: 503 }, data: { detail: { code: 'surface_error' } } }
         }
         // 跨节点阶段 1：远端目标先试 mesh（catalog ready + open('dsh')），
         // 失败/超时按 tryMeshDshService 里记的原因回落到下面的 Hub 网关路径。
@@ -3335,6 +3338,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!previous || previous.deviceId !== deviceId) return
         if (previous.loginState === result.state) return
         const reloadAfterLogin = previous.loginState !== 'logged_in' && result.state === 'logged_in'
+          && previous.status === 'native-document-loaded'
         setState((prev) => prev.deviceId === deviceId
           ? { ...prev, loginState: result.state, loginReason: result.reason, reloadAfterLogin } : prev)
         if (reloadAfterLogin) {
@@ -3348,7 +3352,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         retryCountRef.current = 0
         descriptorRetryCountRef.current = 0
         documentRetryCountRef.current = 0
-        localDirectFailedRef.current = false
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
         if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
       }, [deviceId])
@@ -3426,13 +3429,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             }
             if (data && data.nativeService) {
               const service = data.nativeService
-              const nativeEndpoint = safeDshNativeEndpoint(service && service.endpoint)
+              const localService = service && service.localDirect === true
+              const nativeEndpoint = localService
+                ? safeLocalDshSurfaceUrl(service.endpoint)
+                : safeDshNativeEndpoint(service && service.endpoint)
               if (!service || service.targetId !== deviceId || service.serviceId !== 'dsh-native' || !service.grantId
                   || !/^persist:tether-wb-[a-f0-9]{40}$/.test(service.partition)
                   || !nativeEndpoint) throw new Error('主进程没有返回有效的隔离 DSH 会话。')
               if (current) setState({ deviceId, status: 'native-document-loading', url: nativeEndpoint,
-                grantId: service.grantId, partition: service.partition, sourceKey: surfaceSourceKey,
-                identity: safeSurfaceIdentity(service.surface || data), loginState: 'unknown' })
+                grantId: service.grantId, partition: service.partition, localDirect: localService,
+                sourceKey: surfaceSourceKey, identity: safeSurfaceIdentity(service.surface || data), loginState: 'unknown' })
               return
             }
             if (!response.ok) {
@@ -3501,7 +3507,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             setState({ deviceId, status: 'error', url: '', message: error.message, code: error.surfaceCode || '' })
           })
         return () => { current = false; controller.abort() }
-      }, [deviceId, online, visible, preload, attempt, localDeviceId, surfaceSourceKey, authReady])
+      }, [deviceId, online, visible, preload, attempt, localDeviceId, surfaceSourceKey, authReady, localOnly])
       React.useEffect(() => {
         if (!authReady || !deviceId || !online || !visible || typeof document === 'undefined') return undefined
         let alive = true
@@ -3573,7 +3579,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (pollFlightRef.current) pollFlightRef.current.abort()
           pollFlightRef.current = null
         }
-      }, [deviceId, online, visible, localDeviceId, surfaceSourceKey, authReady])
+      }, [deviceId, online, visible, localDeviceId, surfaceSourceKey, authReady, localOnly])
 
       React.useEffect(() => {
         if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
@@ -4296,7 +4302,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       )
     }
 
-    function SurfaceDeck({ devices, deviceId, localDeviceId, visible, authReady = true }) {
+    function SurfaceDeck({ devices, deviceId, localDeviceId, visible, authReady = true, localOnly = false }) {
       const [recent, setRecent] = React.useState(() => {
         try {
           const raw = JSON.parse(localStorage.getItem('tether.recentSurfaces') || '[]')
@@ -4323,18 +4329,19 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         })
       }, [deviceId, authReady])
       const online = new Map((devices || []).map((item) => [item.device_id, item]))
-      const wanted = (authReady ? [deviceId, ...(keep ? recent : [])] : [])
-        .filter((item, index, all) => item && all.indexOf(item) === index)
+      const mountedIds = localOnly ? [localDeviceId]
+        : authReady ? [deviceId, ...(keep ? recent : [])] : []
+      const wanted = mountedIds.filter((item, index, all) => item && all.indexOf(item) === index)
       let ids = mountedRef.current.filter((id) => wanted.includes(id))
-      if (authReady && deviceId && !ids.includes(deviceId)) {
+      if (wanted.length && !ids.includes(wanted[0])) {
         ids = ids.slice(-2)
-        ids.push(deviceId)
+        ids.push(wanted[0])
       }
-      for (const id of wanted) {
+      for (const id of wanted.slice(1)) {
         if (ids.length >= 3) break
         if (!ids.includes(id)) ids.push(id)
       }
-      if (authReady && keep) {
+      if (authReady && !localOnly && keep) {
         const spare = (devices || [])
           .filter((item) => item && item.online && item.capabilities && item.capabilities.dsh_surface
             && !ids.includes(item.device_id))
@@ -4359,7 +4366,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           preload: true,
           layered: true,
           localDeviceId,
-          authReady
+          localOnly,
+          authReady: authReady || localOnly
         })))
     }
 
@@ -4691,6 +4699,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }).catch(() => {})
         return () => { active = false }
       }, [host])
+      const deviceSnapshot = state || hubUnavailableLocalState(state, appLocalDevice, desktopPlatform)
       const [localDsh, setLocalDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
       const localDshTargetRef = React.useRef('')
@@ -5686,7 +5695,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               setHubStatus('unknown')
               setHubError('')
               setState(null)
-              setDeviceId('')
+              setDeviceId(appLocalDeviceRef.current || '')
               if (error && error.code === 'oidc_identity_unbound') setIdentityBindRequired(true)
               const message = error && error.code === 'oidc_identity_unbound'
                 ? '当前登录身份尚未关联 Tether 账号，请在弹出的对话框中选择创建新账号或关联已有账号。'
@@ -5716,19 +5725,26 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!desktopAuthRequired || !host.workbench || typeof host.workbench.authStatus !== 'function') return undefined
         let alive = true
         let retryTimer = null
+        let retryDelay = 15_000
+        const scheduleRetry = () => {
+          if (retryTimer !== null) window.clearTimeout(retryTimer)
+          retryTimer = window.setTimeout(() => {
+            retryTimer = null
+            if (alive) checkAuthStatus()
+          }, retryDelay)
+          retryDelay = authRetryDelayMs(retryDelay)
+        }
         const checkAuthStatus = () => host.workbench.authStatus().then((auth) => {
           if (!alive) return
           if (auth && auth.retryable) {
             hubAuthRequiredRef.current = false
             setStateLoading(false)
-            setStateRefreshError('登录状态暂时无法刷新，正在重试。')
-            retryTimer = window.setTimeout(() => {
-              retryTimer = null
-              if (alive) checkAuthStatus()
-            }, 15000)
+            setStateRefreshError('登录状态暂时无法刷新，正在退避重试。')
+            scheduleRetry()
             return
           }
           const authenticated = !!(auth && auth.authenticated)
+          retryDelay = 15_000
           workbenchAuthReadyRef.current = authenticated
           setWorkbenchAuthReady(authenticated)
           hubAuthRequiredRef.current = !authenticated
@@ -5739,7 +5755,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             void loadState(true)
           } else {
             setState(null)
-            setDeviceId('')
+            setDeviceId(appLocalDeviceRef.current || '')
             setStateLoading(false)
             setStateRefreshError(auth && auth.identityUnbound
               ? '当前 Casdoor 身份尚未关联 Tether 账号，请选择创建新账号或关联已有账号。'
@@ -5751,9 +5767,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setWorkbenchAuthReady(false)
           hubAuthRequiredRef.current = true
           setState(null)
-          setDeviceId('')
+          setDeviceId(appLocalDeviceRef.current || '')
           setStateLoading(false)
-          setStateRefreshError('无法确认 Hub 登录状态：' + String(error && error.message || error))
+          setStateRefreshError('无法确认 Hub 登录状态：' + String(error && error.message || error) + '（正在退避重试）')
+          scheduleRetry()
         })
         checkAuthStatus()
         return () => {
@@ -6037,9 +6054,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       React.useEffect(() => { hideHoverTip() }, [deviceId, view])
       React.useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
 
-      const device = state && state.devices.find((d) => d.device_id === deviceId)
+      const device = deviceSnapshot && deviceSnapshot.devices.find((d) => d.device_id === deviceId)
       const editableFile = file && file.editable === true && !file.truncated
-      const updateStatus = updateTriggerState(updateInfo, updateErrors, updateRefreshing, state && state.devices, anyUpdateRunning)
+      const updateStatus = updateTriggerState(updateInfo, updateErrors, updateRefreshing, deviceSnapshot && deviceSnapshot.devices, anyUpdateRunning)
       const updateStatusColor = updateStatus === 'available' ? C.red
         : updateStatus === 'failed' ? C.amber
           : updateStatus === 'current' ? C.green : C.mute
@@ -7978,7 +7995,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         )
       }
 
-      const localDeviceRecord = ((state && state.devices) || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}
+      const localDeviceRecord = ((deviceSnapshot && deviceSnapshot.devices) || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}
       const localCaps = localDeviceRecord.capabilities || {}
       if (!hubLoggedIn && !(host && host.kind === 'app' && !EXPLICIT_AUTHORITY)) {
         return h(Connection.LoginScreen, {
@@ -8005,16 +8022,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const liveHubStatus = hubBusy ? 'checking'
         : (stateOkAtRef.current && Date.now() - stateOkAtRef.current < 8000 ? 'online'
           : (hubStatus === 'offline' ? 'offline' : 'checking'))
-      const selectedUpdateTarget = (state?.devices || []).find((item) => item.device_id === deviceId)
+      const selectedUpdateTarget = (deviceSnapshot?.devices || []).find((item) => item.device_id === deviceId)
       const topbarUpdateOrigin = host?.kind === 'dsh' ? 'plugin' : deviceUpdateOriginFor(updateInfo, deviceId, selectedUpdateTarget?.capabilities)
       const settingsUpdate = (() => {
         const localId = appLocalDevice || deviceId
-        const devices = (state && state.devices) || []
+        const devices = (deviceSnapshot && deviceSnapshot.devices) || []
         const byId = new Map(devices.map((item) => [item.device_id, item]))
         const localTarget = byId.get(localId)
         const localProduct = host && host.kind === 'app' ? 'desktop' : host && host.kind === 'dsh' ? 'dsh' : ''
         const connected = new Set([localId])
-        for (const edge of (state && state.edges) || []) {
+        for (const edge of (deviceSnapshot && deviceSnapshot.edges) || []) {
           if (!edge) continue
           if (edge.from === localId) connected.add(edge.to)
           else if (edge.to === localId) connected.add(edge.from)
@@ -8115,11 +8132,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h(TetherMark, { size: 22 }),
             h('strong', { style: { fontSize: 15 } }, 'Tether')),
           device ? h(DeviceSwitcher, {
-            devices: (state && state.devices) || [],
+            devices: (deviceSnapshot && deviceSnapshot.devices) || [],
             value: deviceId,
             onChange: selectDevice,
             onOpenNetwork: () => selectPanel('network')
-          }) : h('span', { style: { color: C.mute } }, state
+          }) : h('span', { style: { color: C.mute } }, deviceSnapshot
             ? '暂无设备'
             : (stateLoading ? '正在读取设备状态…' : '设备列表暂不可用')),
           device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
@@ -8209,7 +8226,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             treeSelected
           }),
           h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative' } },
-            !state ? h('div', { style: { position: 'absolute', inset: 0, zIndex: 15, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10,
+            !deviceSnapshot ? h('div', { style: { position: 'absolute', inset: 0, zIndex: 15, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10,
               padding: 24, background: C.bg, color: C.sub, textAlign: 'center' } },
               h('div', { style: { fontSize: 15, fontWeight: 600, color: C.ink } },
                 identityBindRequired ? '需要完成账号关联' : hubAuthRequiredRef.current
@@ -8252,11 +8269,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                   onClick: identityBindMode === 'register' ? () => void registerNewIdentity() : undefined,
                   style: { height: 34, border: 0, borderRadius: 7, background: C.primary, color: C.onPrimary, fontSize: 12, cursor: identityBindBusy ? 'default' : 'pointer', opacity: identityBindBusy ? 0.6 : 1 } },
                 identityBindBusy ? '正在处理…' : identityBindMode === 'bind' ? '绑定并继续' : '创建新账号并继续') : null)) : null,
-            h(SurfaceDeck, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice, visible: view === 'chat', authReady: workbenchAuthReady }),
+            h(SurfaceDeck, { devices: (deviceSnapshot && deviceSnapshot.devices) || [], deviceId, localDeviceId: appLocalDevice, visible: view === 'chat', authReady: workbenchAuthReady, localOnly: !state && !!appLocalDevice }),
             view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()
               : view === 'transfer' ? h(createTransferPage, {
                 React, Glyph, api, post, C,
-                devices: (state && state.devices) || [],
+                devices: (deviceSnapshot && deviceSnapshot.devices) || [],
                 localDevice: appLocalDevice,
                 userId: state?.user?.user_id,
                 hubOnly: host && host.kind === 'app' && !EXPLICIT_AUTHORITY,
@@ -8270,7 +8287,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 key: ACTIVE_BASE_GENERATION + '|' + String((state && state.user && (state.user.id || state.user.email)) || accountName || hubEmail || ''),
                 React, Glyph, post, api, C, host,
                 isActive: view === 'agents',
-                devices: (state && state.devices) || [],
+                devices: (deviceSnapshot && deviceSnapshot.devices) || [],
                 localDevice: appLocalDevice,
                 activeDevice: deviceId,
                 onDeviceChange: selectDevice,

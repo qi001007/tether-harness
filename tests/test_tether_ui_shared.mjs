@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict'
+import {
+  authRetryDelayMs,
+  deviceAfterLocalIdentity,
+  hubUnavailableLocalState
+} from '../packages/tether-ui/src/app.js'
+
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const shared = fs.readFileSync(path.join(root, 'packages/tether-ui/src/app.js'), 'utf8')
+const shared = fs.readFileSync(path.join(root, 'packages/tether-ui/src/app.js'), 'utf8').replace(/\r\n/g, '\n')
 const plugin = fs.readFileSync(path.join(root, 'packages/dsh-plugin-tether-client/lib/client.js'), 'utf8')
-const connectionPanel = fs.readFileSync(path.join(root, 'packages/tether-ui/src/connection-panel.js'), 'utf8')
+const connectionPanel = fs.readFileSync(path.join(root, 'packages/tether-ui/src/connection-panel.js'), 'utf8').replace(/\r\n/g, '\n')
 const settingsPanel = fs.readFileSync(path.join(root, 'packages/tether-ui/src/settings-panel.js'), 'utf8')
 const transferPage = fs.readFileSync(path.join(root, 'packages/tether-ui/src/transfer-page.js'), 'utf8')
 const monacoRuntime = fs.readFileSync(path.join(root, 'packages/tether-ui/src/monaco-runtime.js'), 'utf8')
@@ -938,7 +944,7 @@ test('the app keeps the three most recent surfaces mounted instead of re-downloa
   assert.match(shared, /preload: true/)
   assert.match(shared, /layered: true/)
   assert.match(shared, /mountedRef\.current\.filter\(\(id\) => wanted\.includes\(id\)\)/)
-  assert.match(shared, /ids = ids\.slice\(-2\)[\s\S]*?ids\.push\(deviceId\)/)
+  assert.match(shared, /ids = ids\.slice\(-2\)[\s\S]*?ids\.push\(wanted\[0\]\)/)
   assert.match(shared, /visibility: visible \? 'visible' : 'hidden'/)
   assert.doesNotMatch(shared, /visible && id === deviceId \? 'flex' : 'none'/)
   assert.match(shared, /tether-surfaces-pref/)
@@ -998,7 +1004,7 @@ test('one directory cache serves every explorer entry point', async () => {
 })
 
 test('mapped DSH directory picks route to the Tether host explorer only under tether_native', () => {
-  const snippet = fs.readFileSync(path.join(root, 'tether/node/tether_dsh_directory_flow.js'), 'utf8')
+  const snippet = fs.readFileSync(path.join(root, 'tether/node/tether_dsh_directory_flow.js'), 'utf8').replace(/\r\n/g, '\n')
   const indented = snippet.trimEnd().split('\n').map((line) => (line ? '            ' + line : line)).join('\n')
   assert.ok(snippet.includes('tether-host-directory-flow v2'), 'bridge carries the version marker')
   assert.ok(plugin.includes(indented), 'plugin bundle embeds the same bridge the proxy injects')
@@ -1026,4 +1032,31 @@ test('mapped DSH directory picks route to the Tether host explorer only under te
   const agents = fs.readFileSync(path.join(root, 'packages/tether-ui/src/agents-page.js'), 'utf8')
   assert.match(agents, /import \{ TetherFolderPickDialog \} from '\.\/tether-folder-pick-dialog\.js'/)
   assert.doesNotMatch(agents, /export function TetherFolderPickDialog/)
+})
+
+test('Hub outage keeps only the local device available without inventing Hub identity', () => {
+  const fallback = hubUnavailableLocalState(null, 'DEVICE-LOCAL', 'Windows')
+  assert.deepEqual(fallback.devices.map((item) => item.device_id), ['DEVICE-LOCAL'])
+  assert.equal(fallback.devices[0].online, true)
+  assert.equal(fallback.user, null)
+  assert.equal(fallback.hubUnavailable, true)
+  assert.equal(hubUnavailableLocalState({ devices: [{ device_id: 'DEVICE-REMOTE' }] }, 'DEVICE-LOCAL'), null)
+  assert.equal(deviceAfterLocalIdentity('', 'DEVICE-LOCAL', false, undefined), 'DEVICE-LOCAL')
+})
+
+test('auth status retries back off to a five-minute ceiling and reset on recovery', () => {
+  assert.deepEqual([30000, 60000, 120000, 240000, 300000, 300000, 300000], [
+    authRetryDelayMs(15000), authRetryDelayMs(30000), authRetryDelayMs(60000),
+    authRetryDelayMs(120000), authRetryDelayMs(240000), authRetryDelayMs(300000),
+    authRetryDelayMs(300000)
+  ])
+  assert.equal(authRetryDelayMs(300000, true), 15000)
+})
+
+test('SurfaceDeck mounts only the local target while Hub authentication is unavailable', () => {
+  assert.match(shared, /function SurfaceDeck\(\{[^}]*localOnly = false[^}]*\}\)/)
+  assert.match(shared, /const mountedIds = localOnly \? \[localDeviceId\]/)
+  assert.match(shared, /const deviceSnapshot = state \|\| hubUnavailableLocalState\(state, appLocalDevice, desktopPlatform\)/)
+  assert.match(shared, /!deviceSnapshot \? h\('div'/)
+  assert.match(shared, /if \(localOnly\) \{\s*return [^\n]+code: 'surface_error'/)
 })

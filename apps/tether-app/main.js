@@ -501,6 +501,16 @@ async function createWindow() {
       }
     },
     getLocalDeviceId: () => supervisor.device,
+    getLocalNodeApiBase: () => supervisor.hasLocalNodeApi()
+      ? 'http://127.0.0.1:' + supervisor.consolePort : '',
+    localApiSession: {
+      fetch: (url, init = {}) => fetch(url, {
+        ...init,
+        headers: { ...(init.headers || {}), Authorization: 'Bearer ' + supervisor.localApiToken },
+        credentials: 'omit',
+        redirect: 'error'
+      })
+    },
     // The packaged Node is a frozen PyInstaller executable, so it cannot be
     // patched in place. Its local runtime state is the one source the APP can
     // read for its own Codeg without requiring a mesh route.
@@ -523,7 +533,8 @@ async function createWindow() {
       return getLocalMeshRoute({ port: supervisor.consolePort, device: supervisor.device,
         token: supervisor.localApiToken, networkId })
     },
-    getActorId: async () => {
+    getActorId: async (targetId) => {
+      if (supervisor.device && targetId === supervisor.device) return workbenchActorId || 'local:' + supervisor.device
       const response = await controllerFetch(new URL('/api/auth/me', controller).toString(), { redirect: 'error' })
       if (!response.ok) throw new Error(response.status === 401 ? 'Controller login required' : 'Controller identity unavailable')
       const user = await response.json()
@@ -621,6 +632,7 @@ async function createWindow() {
       }
     }
     const navigation = workbenchPolicy.managed && workbenchPolicy.serviceId === 'dsh-native'
+      && !workbenchPolicy.localSurface
       ? createExactEndpointNavigationGuard(workbenchPolicy.endpoint, contents.getURL())
       : createDshWebNavigationGuard(contents.getURL())
     contents.setWindowOpenHandler(({ url }) => {

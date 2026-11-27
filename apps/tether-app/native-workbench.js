@@ -35,6 +35,32 @@ function apiUrl(base, targetId, operation) {
   return new URL('/api/devices/' + encodeURIComponent(targetId) + '/fs/' + operation, base).toString()
 }
 
+function surfaceApiUrl(base, targetId) {
+  return new URL('/api/devices/' + encodeURIComponent(targetId) + '/dsh/surface', base).toString()
+}
+
+function localDshSurfaceBootstrap(descriptor) {
+  if (!descriptor || descriptor.available !== true) return null
+  const authValue = typeof descriptor.authenticated_url === 'string' ? descriptor.authenticated_url : descriptor.url
+  if (typeof authValue !== 'string') return null
+  let origin, auth
+  try {
+    auth = new URL(authValue)
+    origin = new URL(typeof descriptor.origin === 'string' ? descriptor.origin : auth.origin)
+  } catch (_) { return null }
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(origin.hostname.toLowerCase())
+  const token = auth.searchParams.get('token')
+  const expected = new URL('/?tether_native=1', origin.origin)
+  if (origin.protocol !== 'http:' || !loopback || origin.username || origin.password || origin.hash
+      || !Number.isInteger(Number(origin.port)) || Number(origin.port) <= 0 || Number(origin.port) > 65535
+      || auth.origin !== origin.origin || auth.pathname !== '/' || auth.hash || auth.username || auth.password
+      || [...auth.searchParams.keys()].length !== 1 || !token || !/^[A-Za-z0-9_-]{16,512}$/.test(token)) return null
+  return {
+    origin, auth, endpoint: expected, pid: Number(descriptor.pid) || 0,
+    profile: typeof descriptor.profile === 'string' ? descriptor.profile : ''
+  }
+}
+
 function strictLegacyCodegUrl(value) {
   if (typeof value !== 'string') return null
   const match = /^http:\/\/((?:0|[1-9]\d{0,2})(?:\.(?:0|[1-9]\d{0,2})){3}):([1-9]\d{0,4})\/token\.html\?token=([^&#]+)$/.exec(value)
@@ -327,7 +353,7 @@ async function resetServiceSession(serviceSession) {
   if (typeof serviceSession.setProxy === 'function') await serviceSession.setProxy({ mode: 'direct' })
 }
 
-function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession, createBootstrapContents, getActorId, getLocalDeviceId, getSourceRoute, getLocalCodegRuntime = () => null, logSafe = () => {} }) {
+function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession, createBootstrapContents, getActorId, getLocalDeviceId, getSourceRoute, getLocalCodegRuntime = () => null, getLocalNodeApiBase = () => '', localApiSession = null, logSafe = () => {} }) {
   if (!controllerUrl || !loginSession || typeof loginSession.fetch !== 'function'
       || typeof getServiceSession !== 'function' || typeof createBootstrapContents !== 'function' || typeof getActorId !== 'function'
       || typeof getLocalDeviceId !== 'function' || typeof getSourceRoute !== 'function') {
@@ -348,15 +374,79 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   const UI_ACTIVE_WINDOW_MS = 30 * 60 * 1000
   const tupleKey = (actorId, targetId, serviceId) => [actorId, targetId, serviceId].join('\u0000')
 
+  async function nodeApiEndpoint(targetId, operation) {
+    const localDeviceId = await getLocalDeviceId()
+    const localBase = typeof getLocalNodeApiBase === 'function' ? getLocalNodeApiBase() : ''
+    if (localDeviceId && targetId === localDeviceId && localApiSession && typeof localApiSession.fetch === 'function') {
+      let parsed
+      try { parsed = new URL(localBase) } catch (_) { parsed = null }
+      if (parsed && parsed.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)
+          && !parsed.username && !parsed.password && !parsed.pathname.replace(/\/$/, '')) {
+        return { session: localApiSession, url: apiUrl(parsed.origin, targetId, operation) }
+      }
+    }
+    return { session: loginSession, url: apiUrl(base, targetId, operation) }
+  }
+
+  async function nodeCall(targetId, operation, body = {}, options = {}) {
+    const endpoint = await nodeApiEndpoint(targetId, operation)
+    return postJson(endpoint.session.fetch.bind(endpoint.session), endpoint.url, body, options)
+  }
+
+  async function localDshSurfaceDescriptor(targetId) {
+    const localDeviceId = await getLocalDeviceId()
+    const localBase = typeof getLocalNodeApiBase === 'function' ? getLocalNodeApiBase() : ''
+    if (!localDeviceId || targetId !== localDeviceId || !localApiSession || typeof localApiSession.fetch !== 'function') return null
+    let parsed
+    try { parsed = new URL(localBase) } catch (_) { return null }
+    if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname.toLowerCase())
+        || parsed.username || parsed.password || parsed.pathname.replace(/\/$/, '')) return null
+    const response = await localApiSession.fetch(surfaceApiUrl(parsed.origin, targetId), {
+      method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
+    })
+    if (!response.ok) throw new Error('本机 DSH surface 授权失败（HTTP ' + response.status + '）。')
+    return response.json()
+  }
+
+  async function openLocalDshSurface(targetId, serviceId, actorId, generation) {
+    const key = tupleKey(actorId, targetId, serviceId)
+    const descriptor = localDshSurfaceBootstrap(await localDshSurfaceDescriptor(targetId))
+    if (!descriptor) throw new Error('本机 DSH surface 描述符无效。')
+    const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation + '\u0000dsh-surface').slice(0, 40)
+    const serviceSession = getServiceSession(partition)
+    if (!serviceSession || !serviceSession.cookies || typeof serviceSession.cookies.get !== 'function') {
+      throw new Error('Electron 服务隔离会话不可用。')
+    }
+    if ((actorGenerations.get(actorId) || 0) !== generation) throw new Error('工作台账号已切换，请重新打开服务。')
+    managedSessions.add(serviceSession)
+    const grantId = crypto.randomBytes(20).toString('hex')
+    const record = {
+      actorId, targetId, serviceId, dshSurface: true, localSurface: true, generation, grantId,
+      endpoint: descriptor.endpoint, bootstrapUrl: descriptor.auth,
+      serviceSession, partition, legacy: true, lastUiAt: 0,
+      descriptor: { pid: descriptor.pid, origin: descriptor.origin.origin },
+      public: { targetId, serviceId, grantId, endpoint: descriptor.auth.toString(), partition,
+        nativeEndpoint: descriptor.endpoint.toString(), localDirect: true,
+        surface: { origin: descriptor.origin.origin, pid: descriptor.pid,
+          profile: descriptor.profile, instance_kind: descriptor.profile === 'desktop' ? 'desktop' : 'node-bundled-web' } }
+    }
+    active.set(key, record)
+    return record.public
+  }
+
   async function openDshSurface(targetId, serviceId = 'dsh-native') {
     if (typeof targetId !== 'string' || !targetId || targetId.length > 200) throw new TypeError('invalid target')
     if (serviceId !== 'dsh-native' && serviceId !== 'dsh') throw new TypeError('invalid DSH surface service')
-    const actorId = await getActorId()
+    const actorId = await getActorId(targetId)
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
     const key = tupleKey(actorId, targetId, serviceId)
     const generation = actorGenerations.get(actorId) || 0
     const activeRecord = active.get(key)
     if (activeRecord) await close(targetId, serviceId, activeRecord.grantId)
+    const localDeviceId = await getLocalDeviceId()
+    if (localDeviceId && targetId === localDeviceId) {
+      return openLocalDshSurface(targetId, serviceId, actorId, generation)
+    }
     const response = await loginSession.fetch(new URL('/api/devices/' + encodeURIComponent(targetId) + '/dsh/surface', base).toString(), {
       method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
     })
@@ -466,7 +556,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
 
   async function catalog(targetId, { signal } = {}) {
     if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
-    const actorId = await getActorId()
+    const actorId = await getActorId(targetId)
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
     const cacheKey = tupleKey(actorId, targetId, 'catalog')
     const generation = actorGenerations.get(actorId) || 0
@@ -474,14 +564,14 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (cached) return cached.value
     let result
     try {
-      result = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_catalog'), {}, { signal })
+      result = await nodeCall(targetId, 'service_catalog', {}, { signal })
     } catch (error) {
       if (!error || error.code !== 'bad_op') throw error
       if ((actorGenerations.get(actorId) || 0) !== generation) throw new Error('工作台账号已切换，请重新打开服务。')
       const reason = '目标节点版本过旧，请升级节点后重试。'
       let codeg
       try {
-        const status = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'agents_runtime_status'), {}, { signal })
+        const status = await nodeCall(targetId, 'agents_runtime_status', {}, { signal })
         codeg = legacyCodegService(status, targetId)
       } catch (statusError) {
         codeg = { id: 'codeg', state: 'failed', reason: '无法读取旧节点 Codeg 状态。',
@@ -508,7 +598,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
 
   async function open(targetId, serviceId, prefetchedCatalog = null) {
     if (typeof targetId !== 'string' || !targetId || !SERVICE_IDS.has(serviceId)) throw new TypeError('invalid target or service')
-    const actorId = await getActorId()
+    const actorId = await getActorId(targetId)
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
     if (clearingActors.has(actorId)) throw new Error('工作台授权正在清理，请稍后重试。')
     const key = tupleKey(actorId, targetId, serviceId)
@@ -709,7 +799,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
 
   async function openLegacyCodeg(targetId, options = {}) {
     if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
-    const actorId = await getActorId()
+    const actorId = await getActorId(targetId)
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
     if (options.expectedActorId != null && options.expectedActorId !== actorId) {
       throw new Error('工作台账号已切换，请重新打开服务。')
@@ -818,20 +908,18 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         if (runtimePort !== port || !token) return null
         return strictLegacyCodegUrl('http://127.0.0.1:' + port + '/token.html?token=' + encodeURIComponent(token))
       }
-      let status = await postJson(loginSession.fetch.bind(loginSession),
-        apiUrl(base, targetId, 'agents_runtime_status'), {})
+      let status = await nodeCall(targetId, 'agents_runtime_status')
       let localFallbackUrl = localCodegFallbackUrl(status)
       let current = legacyCodegService(status, targetId, { allowLoopback: allowModernLocal, fallbackUrl: localFallbackUrl })
       if ((allowModernLocal || modernOwnerProof) && current.state === 'stopped') {
         if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
           throw new Error('工作台账号已切换，请重新打开服务。')
         }
-        await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'agents_runtime_start'), {})
+        await nodeCall(targetId, 'agents_runtime_start')
         if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
           throw new Error('工作台账号已切换，请重新打开服务。')
         }
-        status = await postJson(loginSession.fetch.bind(loginSession),
-          apiUrl(base, targetId, 'agents_runtime_status'), {})
+        status = await nodeCall(targetId, 'agents_runtime_status')
         localFallbackUrl = localCodegFallbackUrl(status)
         current = legacyCodegService(status, targetId, { allowLoopback: allowModernLocal, fallbackUrl: localFallbackUrl })
       }
@@ -973,7 +1061,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (record.dshSurface === true) {
       let committedUrl
       try { committedUrl = new URL(currentUrl) } catch (_) { throw new Error('工作台 guest 与活动授权不匹配。') }
-      if (!record.endpoint || committedUrl.href !== record.endpoint.href) {
+      if (!record.endpoint || (committedUrl.href !== record.endpoint.href
+          && !(record.localSurface === true && record.bootstrapUrl && committedUrl.href === record.bootstrapUrl.href))) {
         throw new Error('工作台 guest 与活动授权不匹配。')
       }
       return record
@@ -993,7 +1082,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     const record = managedGuestRecord(contents)
     if (!record) return { managed: false }
     if (record.dshSurface === true) {
-      return { managed: true, serviceId: 'dsh-native', endpoint: record.endpoint.href }
+      return { managed: true, serviceId: 'dsh-native', endpoint: record.endpoint.href,
+        localSurface: record.localSurface === true }
     }
     return { managed: true, serviceId: record.serviceId }
   }
@@ -1012,7 +1102,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   }
 
   async function close(targetId, serviceId, grantId) {
-    const actorId = await getActorId()
+    const actorId = await getActorId(targetId)
     const record = active.get(tupleKey(actorId, targetId, serviceId))
     const recordGrantId = record && record.legacy === true ? record.grantId : record && record.descriptor && record.descriptor.grant_id
     if (!record || !grantId || recordGrantId !== grantId) throw new Error('找不到本次工作台授权视图。')
@@ -1082,7 +1172,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   }
 
   async function view(targetId, serviceId, visible) {
-    const actorId = await getActorId()
+    const actorId = await getActorId(targetId)
     const record = active.get(tupleKey(actorId, targetId, serviceId))
     if (!record) throw new Error('工作台授权不存在或已关闭。')
     if (record.legacy === true) {
@@ -1111,7 +1201,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (typeof request.path !== 'string' && !['drives', 'workspaces'].includes(operation)) {
       throw new TypeError('invalid files path')
     }
-    const actorId = await getActorId()
+    const actorId = await getActorId(targetId)
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
     const generation = actorGenerations.get(actorId) || 0
     const rootOperation = ['drives', 'workspaces'].includes(operation)
@@ -1263,6 +1353,11 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     for (const record of active.values()) {
       if (record.partition !== partition || record.endpoint.origin !== parsed.origin) continue
       if (record.dshSurface === true) {
+        if (record.localSurface === true) {
+          const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname.toLowerCase())
+          return parsed.protocol === 'http:' && loopback && !parsed.username && !parsed.password
+            && (parsed.href === record.endpoint.href || parsed.href === record.bootstrapUrl.href)
+        }
         return parsed.protocol === 'https:' && !parsed.username && !parsed.password && parsed.href === record.endpoint.href
       }
       if (record.legacy === true) return parsed.protocol === 'http:' && !parsed.username && !parsed.password
@@ -1319,7 +1414,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
 
   async function accountStatus(targetId) {
     if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
-    const actorId = await getActorId()
+    const actorId = await getActorId(targetId)
     if (typeof actorId !== 'string' || !actorId) return { ok: true, state: 'unknown', reason: 'identity_unavailable' }
     const generation = actorGenerations.get(actorId) || 0
     try {

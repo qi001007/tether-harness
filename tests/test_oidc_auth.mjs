@@ -551,14 +551,30 @@ test('temporary refresh failures preserve the encrypted file and a later status 
   })
   const auth = makeAuth('https://issuer.invalid', storageFile, { safeStorage, fetchImpl })
   t.after(() => auth.close())
-  assert.equal((await auth.initialize()).state, 'retryable')
-  assert.deepEqual(readFileSync(storageFile), original)
-  assert.equal((await auth.ensureSession()).state, 'retryable')
-  assert.deepEqual(readFileSync(storageFile), original)
-  assert.equal((await auth.ensureSession()).state, 'retryable')
-  assert.deepEqual(readFileSync(storageFile), original)
-  assert.equal((await auth.ensureSession()).state, 'authenticated')
-  assert.equal(auth.authorizationHeader(), 'Bearer recovered-id')
+  const realNow = Date.now
+  let first
+  let second
+  let third
+  let fourth
+  try {
+    assert.equal((await auth.initialize()).state, 'retryable')
+    assert.deepEqual(readFileSync(storageFile), original)
+    first = await auth.ensureSession()
+    assert.equal(first.state, 'retryable')
+    assert.deepEqual(readFileSync(storageFile), original)
+    second = await auth.ensureSession()
+    assert.equal(second.state, 'retryable')
+    assert.equal(refreshCalls, 1, 'the second immediate check stays inside the refresh backoff')
+    Date.now = () => realNow() + 16_000
+    third = await auth.ensureSession()
+    assert.equal(third.state, 'retryable')
+    assert.deepEqual(readFileSync(storageFile), original)
+    Date.now = () => realNow() + 47_000
+    fourth = await auth.ensureSession()
+    assert.equal(fourth.state, 'authenticated')
+  } finally {
+    Date.now = realNow
+  }
   assert.equal(refreshCalls, 3)
 })
 
@@ -669,4 +685,54 @@ test('logout while refresh is in flight cannot restore the session file', async 
   assert.equal((await request).status, 401)
   assert.equal(auth.status().state, 'unauthenticated')
   assert.equal(existsSync(storageFile), false)
+})
+
+test('transient OIDC refresh failures back off instead of hammering the token endpoint', async (t) => {
+  let approved = false
+  const fixture = await oidcFixture(async (form, response) => {
+    if (!approved && form.get('grant_type') === 'urn:ietf:params:oauth:grant-type:device_code') {
+      approved = true
+      response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        id_token: 'expired-id', access_token: 'expired-access',
+        refresh_token: 'refresh-token', expires_in: 1
+      }))
+      return
+    }
+    response.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'temporarily_unavailable' }))
+  }, null, async (_form, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+      device_code: 'private-device-code', user_code: 'ABCD', verification_uri: 'https://auth.example/activate',
+      expires_in: 60, interval: 1
+    }))
+  })
+  t.after(() => closeServer(fixture.server))
+  const dir = mkdtempSync(join(tmpdir(), 'tether-oidc-backoff-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const auth = makeAuth(fixture.issuer, join(dir, 'session.bin'), { waitImpl: async () => {} })
+  t.after(() => auth.close())
+  const login = await auth.beginDeviceLogin()
+  await login.completion
+  const refreshCallsBefore = fixture.calls.filter((call) => call.url === '/token'
+    && call.body.includes('grant_type=refresh_token')).length
+  const callsBeforeRefresh = fixture.calls.filter((call) => call.url === '/token').length
+  assert.equal(callsBeforeRefresh, 1, 'device approval should have completed its only token poll')
+  const realNow = Date.now
+  let first
+  let second
+  try {
+    Date.now = () => realNow() + 10_000
+    first = await auth.ensureSession()
+    second = await auth.ensureSession()
+  } finally {
+    Date.now = realNow
+  }
+  assert.equal(first.state, 'retryable')
+  assert.equal(second.state, 'retryable')
+  const refreshCallsAfter = fixture.calls.filter((call) => call.url === '/token'
+    && call.body.includes('grant_type=refresh_token')).length
+  assert.equal(refreshCallsBefore, 0)
+  assert.equal(refreshCallsAfter, 1)
+  const refreshCallsAfterSecond = fixture.calls.filter((call) => call.url === '/token'
+    && call.body.includes('grant_type=refresh_token')).length
+  assert.equal(refreshCallsAfterSecond, 1, '退避窗口内第二次状态检查不得再打 token endpoint')
 })

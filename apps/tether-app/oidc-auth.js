@@ -86,6 +86,8 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
   let deviceLoginAbortController = null
   let closed = false
   let refreshPromise = null
+  let refreshAttempt = 0
+  let refreshRetryAt = 0
   let sessionGeneration = 0
   let storageUnavailable = false
 
@@ -113,6 +115,7 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
   function clearStorage() {
     sessionGeneration += 1
     session = null
+    resetRefreshBackoff()
     try { fs.rmSync(storageFile, { force: true }) } catch (error) { log('oidc-storage-clear-failed', error) }
   }
 
@@ -165,10 +168,20 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
     }
   }
 
+  function refreshBackoffMs(attempt) {
+    return Math.min(300_000, 15_000 * (2 ** Math.max(0, attempt - 1)))
+  }
+
+  function resetRefreshBackoff() {
+    refreshAttempt = 0
+    refreshRetryAt = 0
+  }
+
   async function refreshSession() {
     if (refreshPromise) return refreshPromise
     if (!session) return false
     if (!session.refresh_token) { clearStorage(); return false }
+    if (Date.now() < refreshRetryAt) return false
     const previous = session
     const generation = sessionGeneration
     const pending = (async () => {
@@ -179,10 +192,22 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
         persist(nextSession)
         session = nextSession
         sessionGeneration += 1
+        resetRefreshBackoff()
         return true
       } catch (error) {
-        log('oidc-refresh-failed', { code: String(error && error.code || 'refresh_failed').slice(0, 64) })
-        if (generation === sessionGeneration && session === previous && ['invalid_grant', 'invalid_token'].includes(error && error.code)) clearStorage()
+        if (generation !== sessionGeneration || session !== previous) return false
+        const transient = !(error && ['invalid_grant', 'invalid_token'].includes(error.code))
+        log('oidc-refresh-failed', {
+          code: String(error && error.code || 'refresh_failed').slice(0, 64),
+          attempt: refreshAttempt + 1,
+          retry_in_ms: transient ? refreshBackoffMs(refreshAttempt + 1) : 0
+        })
+        if (transient) {
+          refreshAttempt += 1
+          refreshRetryAt = Date.now() + refreshBackoffMs(refreshAttempt)
+        } else {
+          clearStorage()
+        }
         return false
       }
     })()
@@ -279,6 +304,7 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
         persist(authenticatedSession)
         sessionGeneration += 1
         session = authenticatedSession
+        resetRefreshBackoff()
         loginPending = false
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', connection: 'close' }).end('Sign-in complete. You can return to Tether.')
         resolveCompletion({ state: 'authenticated' })
@@ -405,6 +431,7 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
             persist(authenticatedSession)
             sessionGeneration += 1
             session = authenticatedSession
+            resetRefreshBackoff()
             loginPending = false
             resolveCompletion({ state: 'authenticated' })
             return

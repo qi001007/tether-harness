@@ -220,12 +220,13 @@ test('local target takes the loopback descriptor before the Hub ticket and falls
   assert.equal(safeLocalDshNativeUrl('http://127.0.0.1:60000/?tether_native=1', approved), '')
   assert.equal(safeLocalDshNativeUrl('http://127.0.0.1:59999/?tether_native=1&token=x', approved), '')
 
-  // The renderer asks its own APP proxy for the local descriptor and keeps the
-  // main-process Hub ticket only as the fallback; the direct guest re-enters the
-  // mapped page once after DSH's 303 token exchange.
-  assert.match(shared, /localDeviceId && id === localDeviceId[\s\S]*dsh\/surface/)
-  assert.match(shared, /data\.localDirect/)
-  assert.match(shared, /partition: 'persist:tether-dsh-local', localDirect: true/)
+  // The renderer delegates the local fast path to the main process. The local
+  // bootstrap consumes authenticated_url inside the stable workbench partition,
+  // then the direct guest re-enters the mapped page after DSH's 303 exchange.
+  assert.match(shared, /isLocalTarget[\s\S]*const service = await host\.workbench\.openDshSurface\(id\)/)
+  assert.match(shared, /data\.nativeService[\s\S]*service\.localDirect === true/)
+  assert.match(shared, /safeLocalDshSurfaceUrl\(service\.endpoint\)/)
+  assert.match(shared, /partition: service\.partition, localDirect: localService/)
   assert.match(shared, /safeLocalDshNativeUrl\(guest\.getURL\(\), state\.url\)/)
   assert.match(shared, /landed\.searchParams\.get\('tether_native'\) === '1'/)
   assert.match(shared, /guest\.loadURL\(approvedUrl\.origin \+ '\/\?tether_native=1'\)/)
@@ -251,7 +252,7 @@ test('hidden bootstrap navigation receives the ticket but public result and mana
     loadURL: async () => { loadCalls += 1 }
   }
   const policy = workbench.guestPolicy(attachedGuest)
-  assert.deepEqual(policy, { managed: true, serviceId: 'dsh-native', endpoint: opened.endpoint })
+  assert.deepEqual(policy, { managed: true, serviceId: 'dsh-native', endpoint: opened.endpoint, localSurface: false })
   assert.equal(JSON.stringify(policy).includes('ticket'), false)
   assert.equal(JSON.stringify(policy).includes('one-time-secret'), false)
   assert.deepEqual(workbench.guestPolicy({ session: {}, getURL: () => '' }), { managed: false })
@@ -377,7 +378,7 @@ test('OIDC Controller fetch delegates Bearer injection to oidcAuth while legacy 
   assert.match(oidcAuthSource, /async function fetchWithAuth[\s\S]*?await ensureSession\(\)[\s\S]*?Authorization: `Bearer \$\{token\}`/)
   const nativeWorkbench = main.slice(main.indexOf('nativeWorkbench = createNativeWorkbench'), main.indexOf('const { createWebServer }'))
   const hubRequest = main.slice(main.indexOf("handleTrusted('tether:hub-request'"), main.indexOf("handleTrusted('tether:app-info'"))
-  assert.match(nativeWorkbench, /getActorId:\s*async \(\) => \{\s*const response = await controllerFetch\(new URL\('\/api\/auth\/me', controller\)\.toString\(\), \{ redirect: 'error' \}\)/)
+  assert.match(nativeWorkbench, /getActorId:\s*async \(targetId\) => \{[\s\S]*?const response = await controllerFetch\(new URL\('\/api\/auth\/me', controller\)\.toString\(\), \{ redirect: 'error' \}\)/)
   assert.doesNotMatch(nativeWorkbench, /getActorId:[\s\S]*?workbenchLoginSession\.fetch/)
   assert.match(hubRequest, /const response = await controllerFetch\(target\.toString\(\), \{\s*method,\s*headers:/)
   assert.doesNotMatch(hubRequest, /workbenchLoginSession\.fetch/)
@@ -417,7 +418,8 @@ test('renderer confirms desktop auth before loading Hub state or creating native
   assert.match(shared, /host\.workbench\.authStatus\(\)\.then/)
   assert.match(shared, /if \(!authReady\).*?fetchSurfaceDescriptor/s)
   assert.match(shared, /if \(!authReady \|\| !deviceId \|\| !online \|\| !visible/)
-  assert.match(shared, /if \(authReady && deviceId && !ids\.includes\(deviceId\)\)/)
-  assert.match(shared, /if \(authReady && keep\)/)
+  assert.match(shared, /const mountedIds = localOnly \? \[localDeviceId\]/)
+  assert.match(shared, /wanted\.length && !ids\.includes\(wanted\[0\]\)/)
+  assert.match(shared, /if \(authReady && !localOnly && keep\)/)
   assert.match(shared, /visible: view === 'chat', authReady: workbenchAuthReady/)
 })

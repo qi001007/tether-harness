@@ -252,3 +252,63 @@ test('the Hub DSH surface reuses one stable partition per actor, target, and gen
     SocksClient.createConnection = original
   }
 })
+
+function localDshFixture() {
+  const requests = []
+  const sessionCalls = { cleared: 0, closed: 0 }
+  const origin = 'http://127.0.0.1:50669'
+  const token = 'a'.repeat(43)
+  const descriptor = {
+    available: true, url: `${origin}/?token=${token}`,
+    pid: 9400, updated_at: Date.now() / 1000
+  }
+  const session = {
+    setProxy: async () => {}, closeAllConnections: async () => { sessionCalls.closed += 1 },
+    clearStorageData: async () => { sessionCalls.cleared += 1 },
+    cookies: { get: async () => [{ name: 'dsh-auth-test', value: 'redacted-cookie', domain: '127.0.0.1', path: '/' }] }
+  }
+  const localApiSession = {
+    fetch: async (url, options = {}) => {
+      const path = new URL(url).pathname
+      requests.push({ path, method: options.method || 'GET', host: new URL(url).host })
+      if (path === '/api/devices/local-1/dsh/surface') return response(200, descriptor)
+      throw new Error('unexpected local request: ' + path)
+    }
+  }
+  const workbench = createNativeWorkbench({
+    controllerUrl: 'https://controller.test',
+    loginSession: { fetch: async () => { throw new Error('local DSH bootstrap must not use Hub loginSession') } },
+    getServiceSession: () => session,
+    createBootstrapContents: () => {
+      throw new Error('local DSH must let the guest consume authenticated_url')
+    },
+    getActorId: async () => 'owner-1',
+    getLocalDeviceId: async () => 'local-1',
+    getSourceRoute: async () => { throw new Error('local DSH bootstrap must not request a mesh route') },
+    getLocalNodeApiBase: () => 'http://127.0.0.1:18894',
+    localApiSession
+  })
+  return { workbench, requests, sessionCalls }
+}
+
+test('local DSH bootstrap hands authenticated_url to the workbench partition without Hub', async () => {
+  const state = localDshFixture()
+  const opened = await state.workbench.openDshSurface('local-1')
+  assert.equal(opened.localDirect, true)
+  assert.equal(opened.endpoint, 'http://127.0.0.1:50669/?token=' + 'a'.repeat(43))
+  assert.equal(opened.nativeEndpoint, 'http://127.0.0.1:50669/?tether_native=1')
+  assert.match(opened.partition, /^persist:tether-wb-[a-f0-9]{40}$/)
+  assert.equal(state.requests.filter((item) => item.path === '/api/devices/local-1/dsh/surface').length, 1)
+  assert.equal(state.workbench.allowGuest(opened.partition, opened.endpoint), true,
+    'the guest must consume authenticated_url inside the target wb partition')
+  assert.equal(state.workbench.allowGuest(opened.partition, opened.nativeEndpoint), true,
+    'the 303 landing may re-enter the exact tether_native page in the same partition')
+  assert.equal(state.workbench.allowGuest(opened.partition, 'http://127.0.0.1:50669/'), false)
+
+  const second = await state.workbench.openDshSurface('local-1')
+  assert.equal(second.partition, opened.partition, 'local DSH uses the stable actor/target partition')
+
+  await state.workbench.close('local-1', 'dsh-native', second.grantId)
+  assert.equal(state.sessionCalls.cleared, 2, 'reopen and close must both clear the local DSH credentials')
+  assert.equal(state.sessionCalls.closed, 2)
+})
