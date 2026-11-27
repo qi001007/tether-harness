@@ -512,7 +512,20 @@ DeepSeek Harness profile.
     manifest_path = stage / "tether-update.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    staged_artifacts = ((plugin,) if frozen is None else ()) + (app, node) + ((node_deb_stage,) if node_deb_stage else ()) + (manifest_path,)
+    # The public one-command entry is `curl …/install.sh | bash`, and it fetches
+    # install-node.sh from the same release. Both therefore have to be release
+    # assets, or the served script has no upstream to pull from and the copy on
+    # the Hub stays an unversioned artifact nobody owns.
+    installer_stages = []
+    for name in ("install.sh", "install-node.sh"):
+        source = ROOT / "laptop" / name
+        if not source.is_file():
+            raise SystemExit(f"missing installer source: laptop/{name}")
+        destination = stage / name
+        destination.write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
+        installer_stages.append(destination)
+
+    staged_artifacts = ((plugin,) if frozen is None else ()) + (app, node) + ((node_deb_stage,) if node_deb_stage else ()) + tuple(installer_stages) + (manifest_path,)
     final_artifacts = []
     for archive in staged_artifacts:
         destination = output_dir / archive.name

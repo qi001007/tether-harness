@@ -259,6 +259,10 @@ def test_standalone_plugin_archive_passes_offline_installer_preflight(tmp_path: 
     monkeypatch.setattr(module, "add_tree", add_tree_with_fixture)
     monkeypatch.setattr(module, "add_file", add_file_with_fixture)
     module.main([])
+    for name in ("install.sh", "install-node.sh"):
+        content = (module.OUT / name).read_bytes()
+        assert content == (ROOT / "laptop" / name).read_bytes().replace(b"\r\n", b"\n")
+        assert content.startswith(b"#!") and b"\r" not in content
     version = module.VERSION
 
     app_archive_path = module.OUT / f"tether-app-{version}.zip"

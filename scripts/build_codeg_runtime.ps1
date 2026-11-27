@@ -19,8 +19,14 @@ try {
   # An exported source under .runtime must not inherit the enclosing Tether checkout.
   $env:GIT_CEILING_DIRECTORIES = (Split-Path $source -Parent).Replace('\', '/')
   $revision = (& git -C $source rev-parse HEAD 2>$null | Select-Object -First 1)
-  if ($LASTEXITCODE -eq 0 -and $revision -ne $expectedRevision) {
-    throw "Expected Codeg revision $expectedRevision, found $revision"
+  # A source export without its own .git used to slip through here: rev-parse failed,
+  # the check was skipped, and the pinned-revision guarantee silently became a no-op.
+  if ($LASTEXITCODE -ne 0 -or -not $revision) {
+    throw "Cannot verify the Codeg revision: $source is not a git checkout. " +
+      "Expected revision $expectedRevision. Clone the pinned commit instead of exporting a tarball."
+  }
+  if ($revision.Trim() -ne $expectedRevision) {
+    throw "Expected Codeg revision $expectedRevision, found $($revision.Trim())"
   }
 
   & git -C $source apply --ignore-space-change --whitespace=nowarn --check $patch

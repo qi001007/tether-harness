@@ -16,13 +16,19 @@ from pathlib import Path
 from typing import Any
 
 from .mesh_runtime import MeshRuntimeError, secure_private_directory
+from ..updates import debian_architecture
 
 PACKAGE = "tether-node"
-ARCHITECTURE = "amd64"
 OWNER = "deb_package_manager"
+DEB_ARCHITECTURES = ("amd64", "arm64")
 PREPARED_ID_RE = re.compile(r"^[a-f0-9]{32}$")
 VERSION_RE = re.compile(r"^[A-Za-z0-9.+:~_-]{1,128}$")
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+
+
+def deb_filename(version: str, architecture: str) -> str:
+    """Compose the dpkg cache file name for one version and architecture."""
+    return f"{PACKAGE}_{version}_{architecture}.deb"
 
 
 class DebianPackageUpdateError(RuntimeError):
@@ -41,6 +47,7 @@ class DebianPackageUpdater:
                       os.environ.get("TETHER_NODE_UPDATE_OWNER", "")).strip().lower()
         self.packages_dir = self.data_dir / "packages"
         self.transactions_dir = self.packages_dir / "transactions"
+        self.architecture = debian_architecture() or ""
 
     def _run(self, argv: list[str], *, timeout: float = 10.0) -> subprocess.CompletedProcess[str]:
         try:
@@ -87,7 +94,7 @@ class DebianPackageUpdater:
             reason = "unsupported_platform"
         elif os.geteuid() != 0:
             reason = "root_required"
-        elif platform.machine().lower() not in {"x86_64", "amd64"}:
+        elif self.architecture not in DEB_ARCHITECTURES:
             reason = "unsupported_architecture"
         elif not shutil.which("dpkg-deb") or not shutil.which("dpkg") or not shutil.which("dpkg-query"):
             reason = "dpkg_unavailable"
@@ -97,14 +104,14 @@ class DebianPackageUpdater:
             reason = "systemd_unavailable"
         elif current is None:
             reason = "package_not_installed"
-        elif current["architecture"] != ARCHITECTURE:
+        elif current["architecture"] != self.architecture:
             reason = "unsupported_architecture"
         elif not self._systemd_owner():
             reason = "node_service_identity_mismatch"
         elif transaction and transaction.get("state") == "rollback_failed":
             reason = "package_recovery_required"
         return {"available": not reason, "reason": reason or None,
-                "package": PACKAGE, "architecture": ARCHITECTURE,
+                "package": PACKAGE, "architecture": self.architecture,
                 "current_version": current["version"] if current else None,
                 "transaction": transaction}
 
@@ -196,7 +203,7 @@ class DebianPackageUpdater:
         if sha256 is not None and actual_hash != sha256:
             raise DebianPackageUpdateError("deb_hash_mismatch", "Prepared Debian package hash does not match")
         fields = self._deb_fields(path)
-        if (fields["package"] != PACKAGE or fields["architecture"] != ARCHITECTURE
+        if (fields["package"] != PACKAGE or fields["architecture"] != self.architecture
                 or fields["version"] != version):
             raise DebianPackageUpdateError("deb_identity_mismatch",
                                            "Debian package name, version, or architecture does not match")
@@ -214,7 +221,7 @@ class DebianPackageUpdater:
         if not isinstance(metadata, dict):
             raise DebianPackageUpdateError("prepared_invalid", "Prepared Debian update metadata is invalid")
         if (metadata.get("prepared_id") != prepared_id or metadata.get("package") != PACKAGE
-                or metadata.get("architecture") != ARCHITECTURE):
+                or metadata.get("architecture") != self.architecture):
             raise DebianPackageUpdateError("prepared_not_deb", "Prepared update is not a Tether Debian package")
         version, sha256, size = metadata.get("version"), metadata.get("sha256"), metadata.get("size")
         if not isinstance(version, str) or not VERSION_RE.fullmatch(version):
@@ -239,7 +246,7 @@ class DebianPackageUpdater:
         version = installed["version"]
         if not VERSION_RE.fullmatch(version):
             raise DebianPackageUpdateError("installed_version_invalid", "Installed package version is invalid")
-        target = self.packages_dir / f"{PACKAGE}_{version}_{ARCHITECTURE}.deb"
+        target = self.packages_dir / deb_filename(version, self.architecture)
         candidates = [target]
         apt_cache = Path("/var/cache/apt/archives")
         if apt_cache.is_dir():
@@ -319,7 +326,7 @@ class DebianPackageUpdater:
                                            "This prepared package transaction is terminal; prepare a new update")
 
         installed = self._installed()
-        if installed is None or installed["architecture"] != ARCHITECTURE:
+        if installed is None or installed["architecture"] != self.architecture:
             raise DebianPackageUpdateError("package_not_installed", "The managed Tether Node package is not installed")
         candidate, metadata = self._prepared_deb(manager, prepared_id)
         if metadata["version"] == installed["version"]:
@@ -339,7 +346,7 @@ class DebianPackageUpdater:
         unit = f"tether-node-update-{prepared_id[:20]}"
         marker_path = transaction_dir / "transaction.json"
         marker = {"schema": 1, "prepared_id": prepared_id, "package": PACKAGE,
-                  "architecture": ARCHITECTURE, "state": "scheduled", "unit": unit,
+                  "architecture": self.architecture, "state": "scheduled", "unit": unit,
                   "previous": {"version": previous_metadata["version"],
                                "sha256": previous_metadata["sha256"], "path": str(previous)},
                   "candidate": {"version": candidate_metadata["version"],

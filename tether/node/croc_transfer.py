@@ -33,6 +33,13 @@ class CrocError(RuntimeError):
         self.code = code
 
 
+# Bundled croc binaries are named for the architecture they were built for. An
+# arm64 host may only use the arm64 one: on Linux a wrong-arch binary is a hard
+# Exec format error, not a slower path.
+LINUX_BUNDLED_ARCHITECTURES = {"x86_64": "croc-linux-x64", "amd64": "croc-linux-x64",
+                               "arm64": "croc-linux-arm64", "aarch64": "croc-linux-arm64"}
+
+
 def _units(text: str) -> int:
     match = SPEED.search(text)
     if not match:
@@ -153,7 +160,11 @@ class CrocTransfer:
             elif self.platform == "darwin":
                 candidates = ["croc-darwin-arm64", "croc-darwin-x64"] if machine in ("arm64", "aarch64") else ["croc-darwin-x64", "croc-darwin-arm64"]
             elif self.platform == "linux":
-                candidates = ["croc-linux-arm64", "croc-linux-x64"] if machine in ("arm64", "aarch64") else ["croc-linux-x64", "croc-linux-arm64"]
+                # A bundled croc is named for the architecture it was built for.
+                # Running croc-linux-x64 on aarch64 is a hard Exec format error, so
+                # the host architecture is the only bundled candidate allowed here;
+                # macOS keeps its cross-arch entry because Rosetta actually runs it.
+                candidates = [LINUX_BUNDLED_ARCHITECTURES.get(machine, "")]
             else:
                 candidates = ["croc"]
             candidates.append("croc.exe" if self.platform == "nt" else "croc")
