@@ -1,13 +1,14 @@
 # Linux / macOS Node 安装（现行）
 
-以发布产线产物为准（[RELEASE_PIPELINE.md](RELEASE_PIPELINE.md)、[INSTALL_MATRIX.md](INSTALL_MATRIX.md)）。0.3.5 时代的 `laptop/install-node.sh`、手工 venv 和公网镜像安装脚本已停止维护，旧命令不要再用。
+以发布产线产物为准（[RELEASE_PIPELINE.md](RELEASE_PIPELINE.md)、[INSTALL_MATRIX.md](INSTALL_MATRIX.md)）。
 
-## Linux x64
+## Linux x64 / arm64
 
-- 服务器/无桌面机器：安装 `Tether-node-runtime-<v>-linux-x64.deb`（或 tar.gz），由包内 systemd unit 启动；控制通道地址与设备令牌在首次登录流程中下发，不写进公开文档。
-- 有桌面环境：优先安装 APP 的 AppImage/deb，由 APP 管理本机 Node。
+- 服务器/无桌面机器：安装 `Tether-node-runtime-<v>-linux-<架构>.deb`（或 tar.gz），由包内 systemd unit 启动；控制通道地址与设备令牌在首次登录流程中下发，不写进公开文档。
+- x64 有桌面环境时优先安装 APP 的 AppImage/deb，由 APP 管理本机 Node。
 - Node 以普通用户或独立服务账号运行，只把配置和令牌文件设为 600；不要手工把节点控制端口暴露到公网。
-- 更新由 Hub 作业驱动；回滚保留上一版本目录和包。
+- DEB 由管理员使用 APT 升级。源码安装在当前 venv 更新依赖，校验失败时随 Node 事务恢复。
+- `laptop/install-node.sh --systemd` 默认创建或使用 `tether` 服务账号，`--user` 可指定其他非 root 账号。首次安装采用 readonly 策略，默认可写目录是安装前缀下的 workspace。
 
 ## macOS
 

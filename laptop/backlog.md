@@ -1,5 +1,7 @@
 # 变更记录
 
+- 2026-11-27 · systemd 安装默认使用 tether 账号与工作区写入策略。
+
 - 2026-11-07：Node 网络归档使用同目录临时文件，针对短响应/连接重置最多重试 3 次；通过 ZIP 完整性校验后才替换目标包，失败不覆盖旧包。默认 latest 从 GitHub 最新发布 manifest 解析并从正式 release 下载，显式 `--base-url` 仍读镜像 `version.json`。
 
 - 2026-10-28：移除局域网 Controller 和示例 token 默认值；bootstrap 从 `.env` 复用 Hub 与 Node 配置，缺项时给出修复方式，不要求 DeepSeek API key，也不显示 token。

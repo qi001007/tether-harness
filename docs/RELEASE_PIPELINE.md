@@ -1,5 +1,11 @@
 # 发布产线
 
+## 阶段 1B 发布约定
+
+矩阵生成四个桌面目标及 Linux x64、arm64 两种 Node tar.gz 和 DEB。装配任务生成 APP、Node 的更新 ZIP，沿用已验签插件的独立版本与下载地址，将平台制品与两种 DEB 的 SHA-256 写入同一份 Ed25519 签名清单。stable 的 Electron 清单使用 latest 前缀，preview 使用 preview 前缀，两个 macOS 架构共用一份频道清单。
+
+批准 pin 后，已缓存的版本直接切换。Hub 尚未识别版本时先刷新索引，缺制品时调用 prepare，成功后重试 pin。保留五项本地发布检查。
+
 ## 本地发布检查（2026-11-27）
 
 运行 `python scripts/release_gate.py run` 检查 pnpm 打包依赖、桌面入口唯一性、版本源一致性、Node 更新事务回滚，以及清单装配与发布编排冒烟。要核验已组装的 pnpm 入口和启动器，可加 `--runtime <装配目录>`。日志和判定保存在 `.scratch/release-gate/<版本>/`。

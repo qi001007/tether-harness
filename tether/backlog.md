@@ -1,4 +1,6 @@
 # Tether Python 后端变更记录
+
+- 2026-11-27 · 源码 Node 接受已签名 preview 清单，在 venv 安装依赖并随事务回滚。
 - 2026-11-07：更新器区分APP磁盘安装版本与可信运行版本；支持同版本完整重试pending APP更新，并仅在新的真实APP进程启动并报告目标版本后清除restart_required；旧pending记录缺少from_version时显示未知，不以崩溃进程的记录冒报运行版本。
 - 2026-11-07：为 0.4.6 候选同步 `version.json` 与 `pyproject.toml` 的 APP/Node 版本；插件保持官方稳定 0.2.93。
 - 2026-11-07：更新器 JSON 读取支持 UTF-8 BOM，兼容旧 APP `version.json` 并允许标准 APP 更新器 prepare。

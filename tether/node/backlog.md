@@ -1,5 +1,7 @@
 # 修改记录
 
+- 2026-11-27 · 保护 Linux 系统目录，断线重试加入抖动并延长至 60 秒，非特权 DEB 返回管理员升级状态。
+
 - 2026-11-25：Node 未显式配置 `TETHER_DEVICE` 时改用主机名派生 ID，不再把所有机器默认注册成 `DESKTOP-LOCAL`；显式配置仍优先，避免 2/10/100+ 设备身份碰撞。
 - 2026-11-24：`fs_service._agents_runtime_surface` 在状态中新增 `loopback_url`（`http://127.0.0.1:<port>/token.html?token=…`），远端 `url` 仍保持 fail-closed；用于 APP 本机 Codeg 直连，避免 managed mesh `--no-tun` 下 `AppCatalog` 无 10.144 接口导致 URL 为空。已安装 0.5.15 的 `tether-python.exe` 是 PyInstaller 冻结包，源码补丁需下次重建 exe 才生效；本机实测走 APP 侧回退。单测 `tests/test_fs_service.py` 58 passed。
 - 2026-11-23：文档清理同步 `description.md`：补文件面（transfer_jobs → 私网 SFTPGo / 限时 SFTP 转发，croc 不再是默认）与组网 supervisor 说明；默认页为映射 DSH，Codeg 内置自动登录、共用工作区自动同步。

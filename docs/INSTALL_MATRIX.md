@@ -1,6 +1,6 @@
 # 安装矩阵（现行形态）
 
-本页只描述客户端制品的打包形态；产线、版本和草稿流程以 [RELEASE_PIPELINE.md](RELEASE_PIPELINE.md) 为准，签名边界见 [SIGNING.md](SIGNING.md)。0.3.6 时代的 ZIP 源包与公网镜像安装脚本已停止维护，需要时查 git 历史。
+本页只描述客户端制品的打包形态；产线、版本和草稿流程以 [RELEASE_PIPELINE.md](RELEASE_PIPELINE.md) 为准，签名边界见 [SIGNING.md](SIGNING.md)。
 
 ## 制品
 
@@ -9,13 +9,13 @@
 | Tether APP（Electron） | Windows x64 NSIS 安装器 | `Tether-<v>-win-x64.exe` |
 | Tether APP | macOS arm64 / x64 | `Tether-<v>-mac-<arch>.dmg`（附 zip） |
 | Tether APP | Linux x64 | `Tether-<v>-linux-x64.AppImage` / `.deb` |
-| Node（headless） | Linux x64 | `Tether-node-runtime-<v>-linux-x64.tar.gz` / `.deb` |
+| Node（headless） | Linux x64、arm64 | `Tether-node-runtime-<v>-linux-{x64,arm64}.tar.gz` / `.deb` |
 | 更新清单 | 全部 | `latest.yml` / `preview*.yml` + schema 1 组件清单 |
 
 - 版本号唯一来源是仓库根 `version.json`；`scripts/release_pipeline.py bump` 同步四处版本，默认 dry-run。
 - Windows 安装器默认 unsigned（`SIGN=0`），发布信任来自 Ed25519 签名的更新清单与 SHA-256；没有 Authenticode 证书时不冒充已签名。
-- 旧版单包字段（`tether-app-<v>.zip`、`tether-node-<v>.zip`、顶层 `url/sha256/size`）仍由 `scripts/build_release.py` 在 promote 前合并，兼容旧客户端。
-- ARM64 仅登记 Node-only / Linux，不在本轮构建范围；win-arm64 与 ARM64 DSH 不可行，原因见 RELEASE_PIPELINE §2。
+- 旧版单包字段（`tether-app-<v>.zip`、`tether-node-<v>.zip`、顶层 `url/sha256/size`）由矩阵的清单装配步骤生成，兼容旧客户端。
+- Linux arm64 构建 Node-only；win-arm64 与 ARM64 DSH 不可行，原因见 RELEASE_PIPELINE §2。
 
 ## 安装入口
 

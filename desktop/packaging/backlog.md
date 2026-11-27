@@ -1,4 +1,6 @@
 # 桌面候选打包记录
+
+- 2026-11-27 · 生成目标架构对应的 Node 运行时、DEB 与桌面更新频道文件。
 - 2026-11-25：LibreOffice 候选下载改为三次有界重试并先核对 `Content-Length`；0.5.15 CI 在 macOS x64 命中临时镜像篡改，固定 SHA 仍保持真源值，不放宽校验。
 - 2026-11-24：0.5.15 安装包不可发布：managed mesh `--no-tun` 下本机 Codeg 的 `agents_runtime_status.url` 为空，APP 本地路径判失败；已安装实例用 app.asar 本机回退修复（备份 `.scratch/codeg-fix-20261124/backup/app.asar`），源码修复（node `loopback_url` + app fallback）待下次重建；冻结 `tether-python.exe` 必须随包重打才能覆盖。
 - 2026-11-24：0.5.14 的 app.asar 缺 `data-maintenance.js`——`files` 显式白名单没跟着 `main.js` 的 require 更新，装完启动即 `Cannot find module`。白名单补该文件；`tests/test_candidate_build.mjs` 改为从 `main.js`/`preload.js` 解析真实 require 图和 `__dirname` 子进程入口，要求全部落在白名单里；`afterPack` 直接读 asar 头核对白名单每个 JS。DSH runtime 同时随包 pnpm 11.28.5（`components/dsh/node_modules/pnpm` 加 `components/nodejs/pnpm.cmd`/`bin/pnpm`，由 `prepare_runtime.py` 生成），取代手工指向 `D:\DeepSeek Harness` 的 shim。

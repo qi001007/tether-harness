@@ -1,5 +1,7 @@
 # tether-app backlog
 
+- 2026-11-27 · 后台下载复用手动准备操作，退出或确认重启时安装。
+
 - 2026-11-24 Codeg 回归：0.5.15 本机 Codeg 打不开。managed mesh `--no-tun` 下节点没有 10.144 OS 接口，`_agents_runtime_surface` 的 `url` 为空；本地 Codeg 路径又要求严格 token URL，于是误判“旧节点 Codeg 运行状态不一致”。资源与进程本身正常（Codeg 0.42.0，`/api/health` 200）。已安装包是冻结的 `tether-python.exe`，改 `tether-source` 不生效，因此在 APP 侧增加仅本机的回退：从 `<managedNode.database>/agents-runtime/runtime.json` 读端口/token，构造 `http://127.0.0.1:<port>/token.html`；源码同时保留节点的 `loopback_url` 修复供下次重建。本机与 LAPTOP-01 页面实测通过；0.5.15 安装包仍不可发布。
 - 2026-11-23：文档清理同步 `description.md`：托盘、登录项和打包安装器已实现，删除“未做”旧口径；默认页为映射 DSH，Codeg 走 Agents 入口。
 - 2026-11-22：Electron 预下载允许原生任务继续运行，接受安装与真正重启前仍检查忙态。Windows 最近一次 APP 更新回执存入本机 `updates/windows-app-receipt.json`，只记录版本、时间、结果及实际观察到的下载方式和有效载荷。新版启动且本机更新桥就绪后标记完成。
