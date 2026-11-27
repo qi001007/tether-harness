@@ -19,6 +19,7 @@ const dshFlowFnPlugin = {
   }
 }
 await build({
+  preserveSymlinks: true,
   absWorkingDir: root,
   entryPoints: [path.join(root, 'web/main.js')],
   bundle: true,

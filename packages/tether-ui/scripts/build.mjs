@@ -6,6 +6,7 @@ import { bundledMonacoRuntime } from './monaco-build.mjs'
 const root = path.resolve(import.meta.dirname, '..', '..', '..')
 const uiRoot = path.join(root, 'packages/tether-ui')
 const cytoscapeBundle = await build({
+  preserveSymlinks: true,
   absWorkingDir: uiRoot,
   stdin: {
     contents: "import cytoscape from 'cytoscape'; window.__tetherCytoscape = cytoscape",
@@ -23,7 +24,7 @@ const pluginPath = path.join(root, 'packages/dsh-plugin-tether-client/lib/client
 const pluginVersion = JSON.parse(fs.readFileSync(path.join(root, 'packages/dsh-plugin-tether-client/package.json'), 'utf8')).version
 // 与 tether/node/native_surface.py 在途注入共用同一段源码，保证两条投递路径行为一致。
 const directoryFlowSnippet = fs.readFileSync(path.join(root, 'tether/node/tether_dsh_directory_flow.js'), 'utf8')
-  .trimEnd().split('\n').map((line) => (line ? '            ' + line : line)).join('\n')
+  .trimEnd().split(/\r?\n/).map((line) => (line ? '            ' + line : line)).join('\n')
 
 const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src', file), 'utf8')
   .replace(/^import .*$/gm, '')
@@ -172,7 +173,7 @@ ${directoryFlowSnippet}
     }
   }
 })
-`
+`.replace(/\r\n/g, '\n')
 
 if (process.argv.includes('--check')) {
   const current = fs.existsSync(pluginPath) ? fs.readFileSync(pluginPath, 'utf8') : ''

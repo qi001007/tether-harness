@@ -13,7 +13,7 @@ export function inlineCssPlugin() {
     setup(context) {
       context.onLoad({ filter: /\.css$/ }, async (args) => {
         const css = await fs.readFile(args.path, 'utf8')
-        const id = 'tether-monaco-' + crypto.createHash('sha256').update(args.path).digest('hex').slice(0, 12)
+        const id = 'tether-monaco-' + crypto.createHash('sha256').update(path.relative(uiRoot, args.path).split(path.sep).join('/')).digest('hex').slice(0, 12)
         return {
           loader: 'js',
           contents: `const css = ${JSON.stringify(css)};
@@ -30,6 +30,7 @@ export default css;`
 
 export async function editorWorkerSource() {
   const result = await build({
+    preserveSymlinks: true,
     entryPoints: [workerEntry], bundle: true, write: false, format: 'iife',
     platform: 'browser', target: ['chrome120'], minify: true, logLevel: 'silent'
   })
@@ -43,6 +44,7 @@ export async function monacoDefine() {
 
 export async function bundledMonacoRuntime() {
   const result = await build({
+    preserveSymlinks: true,
     entryPoints: [runtimeEntry], bundle: true, write: false, format: 'iife',
     globalName: 'TetherMonacoRuntime', platform: 'browser', target: ['chrome120'],
     define: await monacoDefine(), plugins: [inlineCssPlugin()], minify: true, logLevel: 'silent'
