@@ -19,6 +19,12 @@
 - License: Apache-2.0
 - The SVG brand marks under `packages/tether-ui/src/agent-icons/` are copied from Codeg's `docs/images/agents` and used only in the Tether agent catalog. See `packages/tether-ui/src/agent-icons/NOTICE.md`.
 
+## Codeg web frontend (internal fork)
+
+- Project: xintaofei/codeg (https://github.com/xintaofei/codeg), base `v0.42.0` (`e3171d69d208bdf37697b15e8b14f8c9b70825bf`)
+- License: Apache-2.0 (see `third_party/codeg/LICENSE` and `third_party/codeg/THIRD_PARTY_ORIGIN.json`)
+- Tether maintains the web frontend source under `third_party/codeg/` and builds the static runtime shipped in `tether/node/bin/agents-runtime/web/`.
+
 ## Codeg chat UI structure
 
 - Project: xintaofei/codeg (https://github.com/xintaofei/codeg)

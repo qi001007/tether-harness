@@ -1,0 +1,7 @@
+node_modules/
+.next/
+out/
+public/vs/
+public/pdfjs/
+public/token.html
+*.tsbuildinfo

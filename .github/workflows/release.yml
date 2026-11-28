@@ -23,18 +23,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Check out pinned Codeg source
-        uses: actions/checkout@v6
-        with:
-          repository: xintaofei/codeg
-          ref: e3171d69d208bdf37697b15e8b14f8c9b70825bf
-          path: .runtime/codeg-source
-          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: '24.12.0'
       - name: Install locked Codeg dependencies
-        working-directory: .runtime/codeg-source
+        working-directory: third_party/codeg
         env:
           COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
         run: corepack pnpm install --frozen-lockfile

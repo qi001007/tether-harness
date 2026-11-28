@@ -1,0 +1,132 @@
+"use client"
+
+import { useCallback, useMemo, useState } from "react"
+import { useTranslations } from "next-intl"
+import { FolderSearch, MonitorDot } from "lucide-react"
+
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { DirectoryBrowserDialog } from "@/components/shared/directory-browser-dialog"
+import { isDesktop, openFileDialog } from "@/lib/platform"
+import { requestTetherPick, tetherPickMode } from "@/lib/tether-folder-pick"
+import { getActiveRemoteConnectionId } from "@/lib/transport"
+
+interface DirectoryPathInputProps {
+  value: string
+  onValueChange: (path: string) => void
+  id?: string
+  placeholder?: string
+  disabled?: boolean
+  className?: string
+  /** Tooltip and accessible name for the picker button. */
+  browseLabel?: string
+  /** Title of the in-app browser; defaults to its own generic one. */
+  browserTitle?: string
+  /** Directory the in-app browser opens at; defaults to the user's home. */
+  initialPath?: string
+}
+
+/**
+ * Directory field with the picker folded into its trailing edge.
+ *
+ * Which picker opens depends on where the path has to resolve. Inside Tether
+ * the host's resource manager answers (the same explorer its chat uploads
+ * use), because that is the surface the user already browses their machine
+ * with. Elsewhere the OS dialog is used when the workspace is truly local, and
+ * the in-app browser otherwise — it walks the host that actually owns the
+ * filesystem. Either way a pick only fills the box in: committing it stays
+ * with the surrounding form, so the picker can never act on the user's behalf.
+ */
+export function DirectoryPathInput({
+  value,
+  onValueChange,
+  id,
+  placeholder,
+  disabled,
+  className,
+  browseLabel,
+  browserTitle,
+  initialPath,
+}: DirectoryPathInputProps) {
+  const t = useTranslations("DirectoryBrowser")
+  const [browserOpen, setBrowserOpen] = useState(false)
+  // Fixed for the window's lifetime: whether a Tether host is embedding us.
+  const tetherPicker = useMemo(() => Boolean(tetherPickMode()), [])
+
+  const nativePicker =
+    !tetherPicker && isDesktop() && getActiveRemoteConnectionId() === null
+  const label = browseLabel ?? t("title")
+
+  const handleBrowse = useCallback(async () => {
+    if (tetherPicker) {
+      const picked = await requestTetherPick({ kind: "folder" })
+      if (picked && picked[0]) onValueChange(picked[0])
+      return
+    }
+    if (!nativePicker) {
+      setBrowserOpen(true)
+      return
+    }
+    const selected = await openFileDialog({ directory: true, multiple: false })
+    if (!selected) return
+    const path = Array.isArray(selected) ? selected[0] : selected
+    if (path) onValueChange(path)
+  }, [tetherPicker, nativePicker, onValueChange])
+
+  return (
+    <>
+      {/* The app mounts no global tooltip provider — each surface brings its
+          own, and Radix throws without one. */}
+      <TooltipProvider delayDuration={200}>
+        <InputGroup className={className}>
+          <InputGroupInput
+            id={id}
+            value={value}
+            onChange={(e) => onValueChange(e.target.value)}
+            placeholder={placeholder}
+            disabled={disabled}
+          />
+          <InputGroupAddon align="inline-end" className="py-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <InputGroupButton
+                  size="icon-xs"
+                  variant="ghost"
+                  type="button"
+                  onClick={handleBrowse}
+                  disabled={disabled}
+                  aria-label={label}
+                >
+                  {nativePicker ? (
+                    <MonitorDot className="size-3.5" />
+                  ) : (
+                    <FolderSearch className="size-3.5" />
+                  )}
+                </InputGroupButton>
+              </TooltipTrigger>
+              <TooltipContent>{label}</TooltipContent>
+            </Tooltip>
+          </InputGroupAddon>
+        </InputGroup>
+      </TooltipProvider>
+
+      <DirectoryBrowserDialog
+        open={browserOpen}
+        onOpenChange={setBrowserOpen}
+        onSelect={onValueChange}
+        title={browserTitle}
+        initialPath={initialPath}
+      />
+    </>
+  )
+}

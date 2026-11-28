@@ -1,0 +1,9 @@
+{
+  "name": "codeg",
+  "upstream": "https://github.com/xintaofei/codeg",
+  "base_version": "0.42.0",
+  "base_commit": "e3171d69d208bdf37697b15e8b14f8c9b70825bf",
+  "license": "Apache-2.0",
+  "ownership": "internal-fork",
+  "notes": "Tether-owned Codeg web frontend source tree (server binaries remain upstream v0.42.0). Build via scripts/build_codeg_runtime.ps1."
+}

@@ -76,17 +76,11 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          repository: spacering-net/codeg
-          ref: e3171d69d208bdf37697b15e8b14f8c9b70825bf
-          path: .runtime/codeg-source
-          persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24.22.2'
       - name: Install the pinned Codeg dependencies
-        working-directory: .runtime/codeg-source
+        working-directory: third_party/codeg
         env:
           COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
         run: corepack pnpm install --frozen-lockfile

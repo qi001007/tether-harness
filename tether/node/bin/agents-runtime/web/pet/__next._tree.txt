@@ -1,7 +1,0 @@
-:HL["/_next/static/chunks/06q8lm6y95ac4.css","style"]
-:HL["/_next/static/chunks/2xgfiqcdbf4_k.css","style"]
-:HL["/_next/static/chunks/09qn_ue6by9--.css","style"]
-:HC["/",""]
-2:[["children",{"s":"__PAGE__","h":160}]]
-1:[["children",{"s":"pet","h":64,"c":"$Q2"}]]
-0:{"b":"pb8bqh_Tu1E8QjZYOtQYU","t":{"t":{"s":"","h":16,"c":"$Q1"}}}

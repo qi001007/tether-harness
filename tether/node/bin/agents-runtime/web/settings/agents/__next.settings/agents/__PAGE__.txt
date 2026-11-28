@@ -2,15 +2,15 @@
 3:"$Sreact.suspense"
 4:"/_next/static/chunks/1uj85egq1a6nm.js"
 5:"/_next/static/chunks/0z07yuxxf50el.js"
-6:"/_next/static/chunks/2us8r03xn_6af.js"
+6:"/_next/static/chunks/1dmk9n8ipp9u_.js"
 7:"/_next/static/chunks/0q66g20pd278z.js"
-8:"/_next/static/chunks/3d9kzgst8_f8e.js"
-9:"/_next/static/chunks/2x_q_qijj1fc8.js"
+8:"/_next/static/chunks/3ulg07m2n6uik.js"
+9:"/_next/static/chunks/239q6t67d8ab3.js"
 a:"/_next/static/chunks/1-r4gezai2gj9.js"
-b:"/_next/static/chunks/0b4l9ghf8ww69.js"
-c:"/_next/static/chunks/1dmk9n8ipp9u_.js"
+b:"/_next/static/chunks/3696veh6k_hbz.js"
+c:"/_next/static/chunks/2us8r03xn_6af.js"
 d:"/_next/static/chunks/0gi-m3qk25rzg.js"
-e:"/_next/static/chunks/1ys7y48pfydat.js"
+e:"/_next/static/chunks/3hx1kvw_99_3x.js"
 f:"/_next/static/chunks/35glzgxxpb48s.js"
 10:"/_next/static/chunks/2gcd_g-7sgbbo.js"
 11:"/_next/static/chunks/0jb7802xmafvz.js"
@@ -22,11 +22,11 @@ f:"/_next/static/chunks/35glzgxxpb48s.js"
 17:I[528163,["$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"default"]
 18:I[854421,["$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"default"]
 1f:I[227797,["$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"ClientPageRoot"]
-20:"/_next/static/chunks/0egntll7_96ie.js"
+20:"/_next/static/chunks/0dqhrjph91w_8.js"
 21:"/_next/static/chunks/0o6s48vc3v8kx.js"
 22:"/_next/static/chunks/2yqa2e0olxfdf.js"
 23:"/_next/static/chunks/0xjlga79o9ldr.js"
-24:"/_next/static/chunks/3e5wqdjlh6f8r.js"
+24:"/_next/static/chunks/0tli4m18n6bko.js"
 25:"/_next/static/chunks/1tfadiqkj898q.js"
 26:I[94976,["$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e","$f","$10","$11","$12","$20","$21","$22","$23","$24","$25"],"default"]
 29:I[271381,["$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"OutletBoundary"]
@@ -38,10 +38,10 @@ f:"/_next/static/chunks/35glzgxxpb48s.js"
 1a:X
 1d:X
 1d:C
-1e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$2","c",{"children":[["$","$L1f",null,{"Component":"$26","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@27","$@28"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/0egntll7_96ie.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/0o6s48vc3v8kx.js","async":true}],["$","script","script-2",{"src":"/_next/static/chunks/2yqa2e0olxfdf.js","async":true}],["$","script","script-3",{"src":"/_next/static/chunks/0xjlga79o9ldr.js","async":true}],["$","script","script-4",{"src":"/_next/static/chunks/3e5wqdjlh6f8r.js","async":true}],["$","script","script-5",{"src":"/_next/static/chunks/1tfadiqkj898q.js","async":true}]],["$","$L29",null,{"children":["$","$3",null,{"name":"Next.MetadataOutlet","children":"$@2a"}]}]]}],"p":"$@2b","v":null,"s":"$1a"}}]]
+1e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$2","c",{"children":[["$","$L1f",null,{"Component":"$26","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@27","$@28"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/0dqhrjph91w_8.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/0o6s48vc3v8kx.js","async":true}],["$","script","script-2",{"src":"/_next/static/chunks/2yqa2e0olxfdf.js","async":true}],["$","script","script-3",{"src":"/_next/static/chunks/0xjlga79o9ldr.js","async":true}],["$","script","script-4",{"src":"/_next/static/chunks/0tli4m18n6bko.js","async":true}],["$","script","script-5",{"src":"/_next/static/chunks/1tfadiqkj898q.js","async":true}]],["$","$L29",null,{"children":["$","$3",null,{"name":"Next.MetadataOutlet","children":"$@2a"}]}]]}],"p":"$@2b","v":null,"s":"$1a"}}]]
 1b:[["children",{"s":"agents","h":96,"d":{"r":["$","$2","c",{"children":[null,["$","$L17",null,{"parallelRouterKey":"children","template":["$","$L18",null,{}]}]]}],"p":"$@1c","v":"$1d","s":"$1a"},"c":"$Q1e"}]]
 1:[["children",{"s":"settings","h":64,"d":{"r":["$","$2","c",{"children":[[["$","script","script-0",{"src":"/_next/static/chunks/35glzgxxpb48s.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/2gcd_g-7sgbbo.js","async":true}],["$","script","script-2",{"src":"/_next/static/chunks/0jb7802xmafvz.js","async":true}],["$","script","script-3",{"src":"/_next/static/chunks/0s1mz9g_r3pw-.js","async":true}]],["$","$3",null,{"children":["$","$L14",null,{"children":["$","$L15",null,{"children":["$","$L16",null,{"children":["$","$L17",null,{"parallelRouterKey":"children","template":["$","$L18",null,{}]}]}]}]}]}]]}],"p":"$@19","v":null,"s":"$1a"},"c":"$Q1b"}]]
-0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$2","h",{"children":[null,["$","$L2d",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1, viewport-fit=cover"}],["$","meta","2",{"name":"theme-color","content":"#ffffff","media":"(prefers-color-scheme: light)"}],["$","meta","3",{"name":"theme-color","content":"#09090b","media":"(prefers-color-scheme: dark)"}],["$","meta","4",{"name":"color-scheme","content":"dark light"}]]}],["$","$L2f",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$3",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"codeg"}],["$","meta","1",{"name":"description","content":"AI Coding Agent Conversation Manager"}],["$","link","2",{"rel":"icon","href":"/icon-32x32.png","sizes":"32x32","type":"image/png"}],["$","link","3",{"rel":"icon","href":"/icon-192x192.png","sizes":"192x192","type":"image/png"}],["$","link","4",{"rel":"icon","href":"/icon-512x512.png","sizes":"512x512","type":"image/png"}],["$","link","5",{"rel":"icon","href":"/icon.svg","type":"image/svg+xml"}],["$","link","6",{"rel":"apple-touch-icon","href":"/icon-128x128.png","sizes":"128x128","type":"image/png"}],["$","link","7",{"rel":"apple-touch-icon","href":"/icon-192x192.png","sizes":"192x192","type":"image/png"}],["$","link","8",{"rel":"apple-touch-icon","href":"/icon-512x512.png","sizes":"512x512","type":"image/png"}],["$","$L30","9",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@31","v":null,"s":"$1a"}},"a":"$@32","u":"$@33","b":"YAjGCp15aCjyR7ZDjQZau"}
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$2","h",{"children":[null,["$","$L2d",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1, viewport-fit=cover"}],["$","meta","2",{"name":"theme-color","content":"#ffffff","media":"(prefers-color-scheme: light)"}],["$","meta","3",{"name":"theme-color","content":"#09090b","media":"(prefers-color-scheme: dark)"}],["$","meta","4",{"name":"color-scheme","content":"dark light"}]]}],["$","$L2f",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$3",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"codeg"}],["$","meta","1",{"name":"description","content":"AI Coding Agent Conversation Manager"}],["$","link","2",{"rel":"icon","href":"/icon-32x32.png","sizes":"32x32","type":"image/png"}],["$","link","3",{"rel":"icon","href":"/icon-192x192.png","sizes":"192x192","type":"image/png"}],["$","link","4",{"rel":"icon","href":"/icon-512x512.png","sizes":"512x512","type":"image/png"}],["$","link","5",{"rel":"icon","href":"/icon.svg","type":"image/svg+xml"}],["$","link","6",{"rel":"apple-touch-icon","href":"/icon-128x128.png","sizes":"128x128","type":"image/png"}],["$","link","7",{"rel":"apple-touch-icon","href":"/icon-192x192.png","sizes":"192x192","type":"image/png"}],["$","link","8",{"rel":"apple-touch-icon","href":"/icon-512x512.png","sizes":"512x512","type":"image/png"}],["$","$L30","9",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@31","v":null,"s":"$1a"}},"a":"$@32","u":"$@33","b":"sn4fSXyXISQsmu76OGdsY"}
 27:{}
 28:"$1e:0:1:d:r:props:children:0:props:serverProvidedParams:params"
 2a:null

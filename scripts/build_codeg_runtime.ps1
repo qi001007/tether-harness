@@ -1,50 +1,67 @@
 param(
-  [string]$SourcePath = (Join-Path (Split-Path $PSScriptRoot -Parent) '.runtime/codeg-source'),
-  [string]$ExportDirectory
+  [string]$SourcePath = (Join-Path (Split-Path $PSScriptRoot -Parent) 'third_party/codeg'),
+  [string]$ExportDirectory,
+  [string]$BuildId
 )
 
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $source = (Resolve-Path $SourcePath).Path
 $expectedVersion = '0.42.0'
-$expectedRevision = 'e3171d69d208bdf37697b15e8b14f8c9b70825bf'
-$patch = Join-Path $repo 'tether/node/agents-runtime-codeg.patch'
 $package = Get-Content (Join-Path $source 'package.json') -Raw | ConvertFrom-Json
 if ($package.version -ne $expectedVersion) {
   throw "Expected Codeg $expectedVersion, found $($package.version)"
 }
 
-$previousGitCeiling = $env:GIT_CEILING_DIRECTORIES
-try {
-  # An exported source under .runtime must not inherit the enclosing Tether checkout.
-  $env:GIT_CEILING_DIRECTORIES = (Split-Path $source -Parent).Replace('\', '/')
-  $revision = (& git -C $source rev-parse HEAD 2>$null | Select-Object -First 1)
-  # A source export without its own .git used to slip through here: rev-parse failed,
-  # the check was skipped, and the pinned-revision guarantee silently became a no-op.
-  if ($LASTEXITCODE -ne 0 -or -not $revision) {
-    throw "Cannot verify the Codeg revision: $source is not a git checkout. " +
-      "Expected revision $expectedRevision. Clone the pinned commit instead of exporting a tarball."
-  }
-  if ($revision.Trim() -ne $expectedRevision) {
-    throw "Expected Codeg revision $expectedRevision, found $($revision.Trim())"
-  }
+$nodeModules = Join-Path $source 'node_modules'
+if (-not (Test-Path -LiteralPath (Join-Path $nodeModules 'next/dist/bin/next'))) {
+  throw "Missing Codeg dependencies under $nodeModules. Run 'corepack pnpm install --frozen-lockfile' inside $source first."
+}
 
-  & git -C $source apply --ignore-space-change --whitespace=nowarn --check $patch
-  if ($LASTEXITCODE -eq 0) {
-    & git -C $source apply --ignore-space-change --whitespace=nowarn $patch
-    if ($LASTEXITCODE -ne 0) { throw 'Failed to apply the Tether Codeg patch' }
-  } else {
-    & git -C $source apply --ignore-space-change --whitespace=nowarn --reverse --check $patch
-    if ($LASTEXITCODE -ne 0) { throw 'Start from a clean checkout of the pinned Codeg commit' }
-  }
-} finally {
-  $env:GIT_CEILING_DIRECTORIES = $previousGitCeiling
+$gitCommit = ''
+try {
+  $rev = (& git -C $repo rev-parse --short=12 HEAD 2>$null | Select-Object -First 1)
+  if ($LASTEXITCODE -eq 0 -and $rev) { $gitCommit = $rev.Trim() }
+} catch { }
+if (-not $BuildId) {
+  $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss')
+  $BuildId = if ($gitCommit) { "tether-codeg-$expectedVersion-$gitCommit-$stamp" } else { "tether-codeg-$expectedVersion-$stamp" }
 }
 
 Push-Location $source
 try {
-  & node ./node_modules/next/dist/bin/next build
-  if ($LASTEXITCODE -ne 0) { throw "Codeg static build failed with exit $LASTEXITCODE" }
+  # Ensure Monaco & PDF.js static public assets (normally populated by pnpm postinstall) exist.
+  if (-not (Test-Path -LiteralPath (Join-Path $source 'public/vs/loader.js') -PathType Leaf) -or
+      -not (Test-Path -LiteralPath (Join-Path $source 'public/pdfjs/pdf.worker.min.mjs') -PathType Leaf)) {
+    & node ./scripts/hydrate-public-assets.mjs
+    if ($LASTEXITCODE -ne 0) { throw "Failed to populate public/vs and public/pdfjs assets" }
+  }
+
+  # Remove stale out/ and .next/ export state before building cleanly.
+  foreach ($stale in @('out', '.next')) {
+    $p = Join-Path $source $stale
+    if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
+  }
+
+  $prevBuildId = $env:TETHER_CODEG_BUILD_ID
+  $prevGallery = $env:CODEG_GALLERY
+  $prevTelemetry = $env:NEXT_TELEMETRY_DISABLED
+  try {
+    $env:TETHER_CODEG_BUILD_ID = $BuildId
+    $env:CODEG_GALLERY = '0'
+    $env:NEXT_TELEMETRY_DISABLED = '1'
+    & node ./node_modules/next/dist/bin/next build
+    if ($LASTEXITCODE -ne 0 -and (Test-Path -LiteralPath (Join-Path $source 'out/workspace.html') -PathType Leaf)) {
+      # Next.js 16.4 emits a one-shot upgrade notice exit on the first build in agent shells
+      # after generating out/ and instructs: "Retry the same command to continue the original task."
+      & node ./node_modules/next/dist/bin/next build
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Codeg static build failed with exit $LASTEXITCODE" }
+  } finally {
+    $env:TETHER_CODEG_BUILD_ID = $prevBuildId
+    $env:CODEG_GALLERY = $prevGallery
+    $env:NEXT_TELEMETRY_DISABLED = $prevTelemetry
+  }
 } finally {
   Pop-Location
 }
@@ -55,6 +72,15 @@ foreach ($page in @('index.html', 'login.html', 'workspace.html')) {
     throw "Static export did not produce $page"
   }
 }
+
+$buildMeta = [ordered]@{
+  version    = $expectedVersion
+  source     = 'third_party/codeg'
+  build_id   = $BuildId
+  git_commit = $gitCommit
+  built_at   = (Get-Date).ToUniversalTime().ToString('o')
+} | ConvertTo-Json -Depth 4
+
 if ($ExportDirectory) {
   $destination = [IO.Path]::GetFullPath($ExportDirectory, $repo)
   if (Test-Path -LiteralPath $destination) { throw "Export directory already exists: $destination" }
@@ -71,5 +97,7 @@ if ($ExportDirectory) {
   if ($LASTEXITCODE -ge 8) { throw "Failed to copy static export (robocopy exit $LASTEXITCODE)" }
   $global:LASTEXITCODE = 0
 }
+
 Copy-Item -LiteralPath (Join-Path $repo 'tether/node/agents-runtime-token.html') -Destination (Join-Path $destination 'token.html') -Force
-Write-Output "Built Codeg $expectedVersion ($expectedRevision) and copied its static export to $destination"
+Set-Content -LiteralPath (Join-Path $destination 'tether-build.json') -Value $buildMeta -Encoding UTF8
+Write-Output "Built internal Codeg $expectedVersion ($BuildId) and copied its static export to $destination"
