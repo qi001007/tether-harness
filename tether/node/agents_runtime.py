@@ -35,6 +35,8 @@ LINUX_RUNTIME_MEMBERS = {
     "codeg-server-linux-x64/codeg-mcp": ("codeg-mcp", 10819192),
     "codeg-server-linux-x64/codeg-computer-helper": ("codeg-computer-helper", 9780696),
 }
+DEEPSEEK_ACP_VERSION = "0.11.0"
+DEEPSEEK_ACP_PATCH_REV = "tether-mcp-optional-v1"
 
 
 def _runtime_dir() -> Path:
@@ -217,7 +219,136 @@ class AgentsRuntime:
     def _deepseek_acp_present(home: Path) -> bool:
         return AgentsRuntime._deepseek_acp_binary(home) is not None
 
-    def _deepseek_acp_current(self, home: Path) -> bool:
+    @staticmethod
+    def _deepseek_acp_package_dir(home: Path) -> Path | None:
+        for candidate in (home / "node_modules" / "deepseek-acp",
+                          home / "lib" / "node_modules" / "deepseek-acp"):
+            if (candidate / "package.json").is_file() and (candidate / "lib" / "mcp" / "spec.js").is_file():
+                return candidate
+        return None
+
+    @staticmethod
+    def _deepseek_acp_patch_status(home: Path) -> tuple[bool, str]:
+        pkg = AgentsRuntime._deepseek_acp_package_dir(home)
+        if pkg is None:
+            return False, "missing"
+        try:
+            text = (pkg / "lib" / "mcp" / "spec.js").read_text(encoding="utf-8")
+        except OSError:
+            return False, "missing"
+        if "function toMountSpec(" not in text or "class UnsupportedMcpServer" not in text:
+            return False, "unpatched"
+        if "failOnStartupError: true" in text or text.count("failOnStartupError: false") < 2:
+            return False, "unpatched"
+        try:
+            marker = json.loads((pkg / ".tether-patch.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False, "unpatched"
+        if marker.get("revision") != DEEPSEEK_ACP_PATCH_REV:
+            return False, "unpatched"
+        return True, DEEPSEEK_ACP_PATCH_REV
+
+    @staticmethod
+    def _atomic_write_text(path: Path, text: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle, staged = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(text)
+            os.replace(staged, path)
+        except BaseException:
+            try:
+                os.unlink(staged)
+            except OSError:
+                pass
+            raise
+
+    def _patch_deepseek_acp(self, home: Path) -> bool:
+        pkg = AgentsRuntime._deepseek_acp_package_dir(home)
+        if pkg is None:
+            self._append_log("deepseek-acp patch skipped: package not found")
+            return False
+        spec = pkg / "lib" / "mcp" / "spec.js"
+        try:
+            original = spec.read_text(encoding="utf-8")
+        except OSError as exc:
+            self._append_log("deepseek-acp patch failed: %s" % exc)
+            return False
+        if "function toMountSpec(" not in original or "class UnsupportedMcpServer" not in original:
+            self._append_log("deepseek-acp patch skipped: unexpected spec.js layout")
+            return False
+        true_count = original.count("failOnStartupError: true")
+        false_count = original.count("failOnStartupError: false")
+        if true_count == 2:
+            patched = original.replace("failOnStartupError: true", "failOnStartupError: false")
+        elif true_count == 0 and false_count >= 2:
+            patched = original
+        else:
+            self._append_log("deepseek-acp patch skipped: unexpected failOnStartupError counts "
+                             "(true=%d, false=%d)" % (true_count, false_count))
+            return False
+        patched_files: list[str] = []
+        if patched != original:
+            try:
+                AgentsRuntime._atomic_write_text(spec, patched)
+            except OSError as exc:
+                self._append_log("deepseek-acp patch failed writing spec.js: %s" % exc)
+                return False
+            patched_files.append("lib/mcp/spec.js")
+        spec_ts = pkg / "src" / "mcp" / "spec.ts"
+        if spec_ts.is_file():
+            try:
+                ts_text = spec_ts.read_text(encoding="utf-8")
+            except OSError:
+                ts_text = None
+            if ts_text is not None:
+                ts_new = ts_text.replace("readonly failOnStartupError: true",
+                                         "readonly failOnStartupError: boolean")
+                ts_new = ts_new.replace("failOnStartupError: true", "failOnStartupError: false")
+                if ts_new != ts_text:
+                    try:
+                        AgentsRuntime._atomic_write_text(spec_ts, ts_new)
+                    except OSError as exc:
+                        self._append_log("deepseek-acp patch failed writing spec.ts: %s" % exc)
+                        return False
+                    patched_files.append("src/mcp/spec.ts")
+        for relative in ("lib/mcp/spec.d.ts", "lib/types/mcp/spec.d.ts"):
+            types = pkg / relative
+            if not types.is_file():
+                continue
+            try:
+                types_text = types.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            types_new = types_text.replace("readonly failOnStartupError: true;",
+                                           "readonly failOnStartupError: boolean;")
+            if types_new != types_text:
+                try:
+                    AgentsRuntime._atomic_write_text(types, types_new)
+                except OSError as exc:
+                    self._append_log("deepseek-acp patch failed writing %s: %s" % (relative, exc))
+                    return False
+                patched_files.append(relative)
+        marker = {"version": DEEPSEEK_ACP_VERSION, "revision": DEEPSEEK_ACP_PATCH_REV,
+                  "patched_files": patched_files}
+        if not patched_files:
+            try:
+                existing = json.loads((pkg / ".tether-patch.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                existing = {}
+            if (existing.get("revision") == DEEPSEEK_ACP_PATCH_REV
+                    and isinstance(existing.get("patched_files"), list)):
+                marker["patched_files"] = list(existing["patched_files"])
+        try:
+            AgentsRuntime._atomic_write_text(pkg / ".tether-patch.json", json.dumps(marker) + "\n")
+        except OSError as exc:
+            self._append_log("deepseek-acp patch failed writing marker: %s" % exc)
+            return False
+        self._append_log("deepseek-acp patched (%s): %s" % (
+            DEEPSEEK_ACP_PATCH_REV, ", ".join(patched_files) or "already patched"))
+        return True
+
+    def _deepseek_acp_version_ok(self, home: Path) -> bool:
         binary = self._deepseek_acp_binary(home)
         if binary is None:
             return False
@@ -232,8 +363,48 @@ class AgentsRuntime:
         except (OSError, subprocess.SubprocessError):
             return False
 
+    def _deepseek_acp_current(self, home: Path) -> bool:
+        return self._deepseek_acp_version_ok(home) and self._deepseek_acp_patch_status(home)[0]
+
+    def _log_deepseek_acp_ready(self, home: Path) -> None:
+        binary = AgentsRuntime._deepseek_acp_binary(home)
+        _ok, revision = self._deepseek_acp_patch_status(home)
+        self._append_log("deepseek-acp ready: %s (revision %s)" % (
+            str(binary) if binary else "<missing>", revision))
+
+    @staticmethod
+    def _acquire_install_lock(lock: Path) -> bool:
+        try:
+            lock.parent.mkdir(parents=True, exist_ok=True)
+            os.close(os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            return True
+        except FileExistsError:
+            return False
+        except OSError:
+            raise
+
     def _ensure_deepseek_acp(self, home: Path) -> None:
         if self._deepseek_acp_current(home):
+            self._log_deepseek_acp_ready(home)
+            return
+        if self._deepseek_acp_version_ok(home):
+            # Version is already installed, only the optional-MCP patch is missing.
+            lock = home / ".deepseek-acp-install.lock"
+            try:
+                acquired = AgentsRuntime._acquire_install_lock(lock)
+            except OSError as exc:
+                self._append_log("deepseek-acp patch skipped: %s" % exc)
+                return
+            if not acquired:
+                return
+            try:
+                if self._patch_deepseek_acp(home):
+                    self._log_deepseek_acp_ready(home)
+            finally:
+                try:
+                    lock.unlink()
+                except OSError:
+                    pass
             return
         npm = shutil.which("npm.cmd") or shutil.which("npm")
         if not npm:
@@ -241,19 +412,18 @@ class AgentsRuntime:
             return
         lock = home / ".deepseek-acp-install.lock"
         try:
-            home.mkdir(parents=True, exist_ok=True)
-            os.close(os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-        except FileExistsError:
-            return
+            acquired = AgentsRuntime._acquire_install_lock(lock)
         except OSError as exc:
             self._append_log("deepseek-acp install skipped: %s" % exc)
+            return
+        if not acquired:
             return
         cache = home / "cache"
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if platform.system() == "Windows" else 0
         try:
             self._append_log("installing deepseek-acp runtime")
             subprocess.run([npm, "install", "-g", "--prefix", str(home), "--cache", str(cache),
-                            "--force", "--no-audit", "--no-fund", "deepseek-acp@0.11.0"],
+                            "--force", "--no-audit", "--no-fund", "deepseek-acp@%s" % DEEPSEEK_ACP_VERSION],
                            timeout=300, check=False, stdin=subprocess.DEVNULL,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                            creationflags=creationflags)
@@ -265,6 +435,8 @@ class AgentsRuntime:
             except OSError:
                 pass
             shutil.rmtree(cache, ignore_errors=True)
+        if self._patch_deepseek_acp(home):
+            self._log_deepseek_acp_ready(home)
 
     def _read_state(self) -> dict[str, Any]:
         try:
@@ -711,6 +883,7 @@ class AgentsRuntime:
                 from .agent_registry import agent_home
                 home = agent_home()
                 self._ensure_deepseek_acp(home)
+                self._log_deepseek_acp_ready(home)
                 extra_paths = [str(candidate) for candidate in
                                (home, home / "bin", home / "node_modules" / ".bin")
                                if candidate.is_dir()]

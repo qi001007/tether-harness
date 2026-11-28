@@ -530,8 +530,11 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     })
   }
 
-  const runNativeJob = async ({ source, destination, items, total, relayItem }, controller, operationId) => {
+  const runNativeJob = async (input, controller, operationId) => {
+    const { source, destination, items, total, relayItem, relayItems, targetEntries } = input
     try {
+      const fallbackItems = (Array.isArray(relayItems) && relayItems.length ? relayItems : (relayItem ? [relayItem] : []))
+        .map((item) => ({ path: item.path, name: item.name, size: Number(item.size) || 0 }))
       const onProgress = (value) => setJob((current) => ({ ...current,
         percent: Math.min(99, value.percent), transferred: value.transferred,
         total: value.total || total, index: Math.min(items.length - 1, value.filesDone || 0) }))
@@ -541,46 +544,102 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       const sourceNode = devices.find((device) => device?.device_id === sourceDevice)
       const targetNode = devices.find((device) => device?.device_id === targetDevice)
       const ownsBoth = userId && sourceNode?.owner_id === userId && targetNode?.owner_id === userId
-      const routeKey = !operationId && relayItem && ownsBoth ? JSON.stringify([userId, sourceDevice, targetDevice]) : null
+      // Only keep the single-file Croc fast path that existed before batch relay.
+      const crocTarget = hubOnly && fallbackItems.length === 1 && total > 0 ? fallbackItems[0] : null
+      const routeKey = !operationId && crocTarget && ownsBoth ? JSON.stringify([userId, sourceDevice, targetDevice]) : null
       const previous = routeKey ? crocRouteRef.current.get(routeKey) : undefined
       const recent = previous?.until > Date.now() ? previous : undefined
       const preferCroc = recent?.worked === true
-      const preferCrocUpload = routeKey && !recent && items.length === 1 &&
+      const preferCrocUpload = Boolean(routeKey) && !recent &&
         isCrocUploadCandidate(sourceNode, targetNode, total)
       if (routeKey && recent?.worked !== false) crocRouteRef.current.delete(routeKey)
       const rememberCroc = (worked) => {
         if (routeKey) crocRouteRef.current.set(routeKey, { worked, until: Date.now() + CROC_ROUTE_PREFERENCE_MS })
       }
-      const tryCroc = (notice) => transferCrocViaHub({
-        post: postHubFs, sourceDevice, targetDevice, source: relayItem.path,
-        destination: destination.path, name: relayItem.name, signal: controller.signal,
-        onStart: () => { if (onNotice) onNotice(notice) },
-        onProgress: (value) => onProgress({ ...value, transferred: Math.round(total * value.percent / 100) }),
+      const tryCroc = (item, notice) => transferCrocViaHub({
+        post: postHubFs, sourceDevice, targetDevice, source: item.path,
+        destination: destination.path, name: item.name, signal: controller.signal,
+        onStart: () => { if (notice && onNotice) onNotice(notice) },
+        onProgress: (value) => onProgress({ ...value,
+          transferred: Math.round((Number(item.size) || 0) * (Number(value && value.percent) || 0) / 100) }),
         onReconnecting
       })
-      const triedCroc = preferCroc || preferCrocUpload
+      // Compatible per-file queue used after a native job proves it wrote nothing.
+      const runCompatibleFallback = async () => {
+        const entries = Array.isArray(targetEntries) ? targetEntries : []
+        let done = 0
+        let crocUsable = true
+        for (let index = 0; index < fallbackItems.length; index += 1) {
+          controller.signal.throwIfAborted()
+          const item = fallbackItems[index]
+          setJob((current) => ({ ...(current || {}), state: 'running', index, count: fallbackItems.length }))
+          let itemBytes = null
+          if (crocUsable && item.size > 0) {
+            try {
+              const croc = await transferCrocViaHub({
+                post: postHubFs, sourceDevice, targetDevice, source: item.path,
+                destination: destination.path, name: item.name, signal: controller.signal,
+                onStart: () => { if (onNotice) onNotice('直传未开始，已切换到 Croc 中转') },
+                onProgress: (value) => {
+                  const currentBytes = done + item.size * (Number(value && value.percent) || 0) / 100
+                  setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                    transferred: currentBytes, index, count: fallbackItems.length, state: 'running' }))
+                },
+                onReconnecting
+              })
+              if (croc) itemBytes = Number(croc.bytes) || item.size
+            } catch (error) {
+              if (isTransferAbort(error, controller.signal)) throw error
+            }
+            // One Croc failure means this route pays handshake time for nothing; stop trying.
+            if (itemBytes === null) crocUsable = false
+          }
+          if (itemBytes === null) {
+            let dest = joinPath(destination.path, item.name)
+            let overwrite = false
+            while (true) {
+              try {
+                const chunk = await copyFileInChunks({
+                  sourceDevice, targetDevice, source: item.path, destination: dest, overwrite,
+                  signal: controller.signal, relay: true,
+                  onProgress: (value) => {
+                    const currentBytes = done + Math.max(0, Number(value && value.transferred) || 0)
+                    setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                      transferred: currentBytes, index, count: fallbackItems.length, state: 'running' }))
+                  }
+                })
+                itemBytes = Number(chunk && chunk.bytes) || item.size
+                break
+              } catch (cause) {
+                if (!cause || cause.code !== 'exists') throw cause
+                const choice = await askConflict(item, dest)
+                if (choice === 'cancel') throw Object.assign(new Error('已取消'), { code: 'aborted' })
+                if (choice === 'overwrite') { overwrite = true; continue }
+                if (choice === 'keep') { dest = uniqueName(dest, entries.map((entry) => entry.name)); overwrite = false; continue }
+                throw cause
+              }
+            }
+          }
+          done += Number(itemBytes) || 0
+          setJob((current) => ({ ...(current || {}), percent: total ? Math.round(done / total * 100) : 100,
+            transferred: done, index, count: fallbackItems.length, state: 'running' }))
+        }
+        return { bytes: done }
+      }
+      const triedCroc = Boolean(preferCroc) || preferCrocUpload
       let result = triedCroc
-        ? await tryCroc(preferCrocUpload ? '正在使用 Croc 发送大文件' : '使用上次成功的 Croc 中转')
+        ? await tryCroc(crocTarget, preferCrocUpload ? '正在使用 Croc 发送大文件' : '使用上次成功的 Croc 中转')
         : null
       if (result && preferCroc) crocRouteRef.current.set(routeKey, recent)
       if (triedCroc && !result) rememberCroc(false)
       if (!result) {
         result = await transferNativeJob({
           post: postHubFs, source, destination, items, operationId, signal: controller.signal,
-          allowRelay: Boolean(relayItem), onProgress, onReconnecting
+          allowRelay: fallbackItems.length > 0, onProgress, onReconnecting
         })
       }
       if (result.useRelay) {
-        result = routeKey && !triedCroc ? await tryCroc('直传未开始，已切换到 Croc 中转') : null
-        if (routeKey && !triedCroc) rememberCroc(Boolean(result))
-        if (!result) {
-          if (onNotice) onNotice('已切换到 Hub 分块复制')
-          result = await copyFileInChunks({
-            sourceDevice, targetDevice, source: relayItem.path,
-            destination: joinPath(destination.path, relayItem.name), overwrite: false,
-            signal: controller.signal, onProgress, relay: true
-          })
-        }
+        result = await runCompatibleFallback()
       }
       const doneBytes = result.bytes || total
       setJob((current) => ({ ...current, state: 'done', percent: 100, transferred: doneBytes }))
@@ -592,7 +651,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     } catch (error) {
       const cancelled = isTransferAbort(error, controller.signal) || error.code === 'cancelled'
       const unconfirmed = error.code === 'native_job_unconfirmed'
-      if (unconfirmed) pendingNativeJobRef.current = { source, destination, items, total, operationId: error.operationId }
+      if (unconfirmed) pendingNativeJobRef.current = { ...input, operationId: error.operationId }
       setJob((current) => ({ ...current, state: unconfirmed ? 'unconfirmed' : cancelled ? 'cancelled' : 'error',
         error: cancelled ? '传输已取消' : error.message || '原生传输失败' }))
       if (!cancelled && !unconfirmed && onError) onError(error)
@@ -629,11 +688,24 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       } catch (_) { useNativeJob = false }
     }
     if (useNativeJob) {
+      try {
+        const [sourceInfo, targetInfo] = await Promise.all([
+          postFs(side(fromSide).device, 'transfer_info', {}, controller.signal).catch(() => null),
+          postFs(target.device, 'transfer_info', {}, controller.signal).catch(() => null)
+        ])
+        if (sourceInfo?.transfer_engines?.native_source === false ||
+            targetInfo?.transfer_engines?.native_target === false) {
+          useNativeJob = false
+        }
+      } catch (_) { /* probing must never block the native attempt */ }
+    }
+    if (useNativeJob) {
       return runNativeJob({
         source: { device_id: side(fromSide).device, path: nativeBatch.path },
         destination: { device_id: target.device, path: target.path },
         items: nativeBatch.names, total,
-        relayItem: hubOnly && items.length === 1 && total > 0 ? items[0] : undefined
+        relayItems: items.map((item) => ({ path: item.path, name: item.name, size: Number(item.size) || 0 })),
+        targetEntries: target.entries || []
       }, controller)
     }
     if (!hubOnly) {

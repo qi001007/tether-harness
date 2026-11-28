@@ -1215,12 +1215,33 @@ class FsService:
     def _op_transfer_info(self, args: dict[str, Any]) -> dict[str, Any]:
         croc = getattr(self, "croc", None)
         if croc is None:
-            return {"engine": "croc", "legacy": True, "default_engine": "rclone-sftpgo",
-                    "available": False, "version": "", "relay": False, "finish_by_transfer_id": True,
-                    "verify_sha256_before_finish": True}
-        return {"engine": "croc", "legacy": True, "default_engine": "rclone-sftpgo",
-                **croc.info(), "cancel_by_transfer_id": True, "finish_by_transfer_id": True,
-                "verify_sha256_before_finish": True}
+            result = {"engine": "croc", "legacy": True, "default_engine": "rclone-sftpgo",
+                      "available": False, "version": "", "relay": False, "finish_by_transfer_id": True,
+                      "verify_sha256_before_finish": True}
+        else:
+            result = {"engine": "croc", "legacy": True, "default_engine": "rclone-sftpgo",
+                      **croc.info(), "cancel_by_transfer_id": True, "finish_by_transfer_id": True,
+                      "verify_sha256_before_finish": True}
+        engines = self._native_transfer_engines()
+        # The legacy branch always advertises directional engines. A Croc-capable
+        # peer only adds the optional key once it actually has a native engine, so
+        # older peers keep their previous response shape.
+        if croc is None or engines["native_source"] or engines["native_target"]:
+            result["transfer_engines"] = engines
+        return result
+
+    def _native_transfer_engines(self) -> dict[str, Any]:
+        """Static directional engine readiness; never launches sftpgo or rclone."""
+        grants = getattr(self, "sftpgo_grants", None)
+        grants_binary = getattr(grants, "binary", None)
+        native_source = bool(grants is not None and (
+            getattr(grants, "admin_url", "") or
+            (grants_binary is not None and Path(grants_binary).is_file())))
+        jobs = getattr(self, "transfer_jobs", None)
+        rclone_path = str(getattr(jobs, "_binary", "") or "")
+        native_target = bool(rclone_path and Path(rclone_path).is_file())
+        return {"native_source": native_source, "native_target": native_target,
+                "fallback_safe_marker": True}
 
     def local_sftp_relay_status(self, network_id: str) -> dict[str, Any]:
         try:

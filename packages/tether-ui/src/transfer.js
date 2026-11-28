@@ -37,6 +37,27 @@ function isNativeJobConnectionError(error, target) {
   return /(?:failed to fetch|fetch failed|network error|net::ERR_[A-Z_]+)$/i.test(error?.message || '')
 }
 
+// True only when the target unambiguously rejected transfer_job_start as an
+// unknown/unsupported operation before doing any work. Source-file not-found,
+// permission, conflict and transport errors must never trigger a silent relay.
+function isUnacceptedNativeStartError(error) {
+  if (!error) return false
+  if (error.code === 'bad_op') return true
+  if (error.status === 405 || error.status === 501) return true
+  if (error.status === 404) {
+    if (error.code === 'bad_op' || error.code === 'unsupported_operation' || error.code === 'unknown_operation') return true
+    return !error.code && /not found|unknown op|bad_op/i.test(error.message || '')
+  }
+  return false
+}
+
+function hasSafeFallbackProof(job, confirmedZero) {
+  if (job?.write_started === true) return false
+  if (typeof job?.fallback_safe === 'boolean') return job.fallback_safe === true
+  // A legacy node omits fallback_safe; require a confirmed zero-write, unpaused job.
+  return confirmedZero === true
+}
+
 function nativeJobUnconfirmed(operationId, message) {
   return Object.assign(failure(message + '（任务号 ' + operationId + '）', 'native_job_unconfirmed'), { operationId })
 }
@@ -46,7 +67,7 @@ export async function transferNativeJob({
   allowRelay = false, onProgress = () => {}, onReconnecting = () => {}
 }) {
   let started = Boolean(operationId)
-  let relayEligible = allowRelay && !started && items.length === 1
+  let relayEligible = allowRelay && !started
   let zeroSince = null
   let stopRequestedAt = null
   operationId = operationId || newTransferId()
@@ -57,14 +78,23 @@ export async function transferNativeJob({
     signal?.throwIfAborted()
     if (!started) {
       started = true
-      await post(target, 'transfer_job_start', {
-        ...jobRequest,
-        source: { device_id: source.device_id, path: source.path },
-        destination: { device_id: target, path: destination.path },
-        items: items.map((path) => ({ kind: 'file', path })),
-        mode: 'copy',
-        conflict_policy: 'fail'
-      }, signal)
+      try {
+        await post(target, 'transfer_job_start', {
+          ...jobRequest,
+          source: { device_id: source.device_id, path: source.path },
+          destination: { device_id: target, path: destination.path },
+          items: items.map((path) => ({ kind: 'file', path })),
+          mode: 'copy',
+          conflict_policy: 'fail'
+        }, signal)
+      } catch (error) {
+        if (relayEligible && isUnacceptedNativeStartError(error)) {
+          // The node never accepted the job, so there is nothing to cancel.
+          started = false
+          return { operationId, useRelay: true, unaccepted: true }
+        }
+        throw error
+      }
     }
     while (true) {
       signal?.throwIfAborted()
@@ -95,15 +125,17 @@ export async function transferNativeJob({
       const filesDone = Number(job && job.files_done) || 0
       const percent = bytesTotal ? Math.min(100, bytesDone / bytesTotal * 100) : 0
       const confirmedZero = job?.bytes_done === 0 && job?.files_done === 0
-      if (bytesDone > 0 || filesDone > 0 || job?.state === 'verifying') relayEligible = false
+      if (job?.write_started === true || bytesDone > 0 || filesDone > 0 || job?.state === 'verifying') {
+        relayEligible = false
+      }
       if (job && job.state === 'completed') {
         onProgress({ transferred: bytesDone, total: bytesTotal, percent: 100, filesDone })
         return { operationId, bytes: bytesDone }
       }
-      if (stopRequestedAt !== null && relayEligible && job?.state === 'cancelled' && confirmedZero) {
+      if (stopRequestedAt !== null && relayEligible && job?.state === 'cancelled' && hasSafeFallbackProof(job, confirmedZero)) {
         return { operationId, useRelay: true }
       }
-      if (relayEligible && confirmedZero && job?.state === 'failed' &&
+      if (relayEligible && hasSafeFallbackProof(job, confirmedZero) && job?.state === 'failed' &&
           ['network_not_connected', 'source_connection_failed'].includes(job.error?.code)) {
         return { operationId, useRelay: true }
       }

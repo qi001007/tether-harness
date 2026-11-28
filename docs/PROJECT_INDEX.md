@@ -16,7 +16,7 @@
 | 公开发行历史 | `RELEASES.md`（历史记录，现行状态看 PROGRESS / RELEASE_PIPELINE） |
 | 本目录约束 | `backlog.md` |
 
-跨仓库入口：工作区 [主控交接](../../../docs/TETHER_HANDOFF.md)、[存储记录](../../../docs/STORAGE.md)。
+跨仓库入口：工作区 [主控交接](../../../docs/TETHER_HANDOFF.md)、[前端设计准则与兼容规范](../../../docs/UI_DESIGN_RULES.md)、[存储记录](../../../docs/STORAGE.md)。
 
 ## 已归档或删除的旧口径
 

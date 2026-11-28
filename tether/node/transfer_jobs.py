@@ -319,20 +319,31 @@ class RcloneJobs:
                 files_total INTEGER NOT NULL DEFAULT 0, rate INTEGER NOT NULL DEFAULT 0,
                 rc_job_id INTEGER, rc_execute_id TEXT,
                 attempts INTEGER NOT NULL DEFAULT 1,
+                write_started INTEGER NOT NULL DEFAULT 0,
+                cleanup_done INTEGER NOT NULL DEFAULT 0,
                 error TEXT, updated_at REAL NOT NULL
             )""")
             columns = {row[1] for row in db.execute("PRAGMA table_info(jobs)")}
-            for name, sql_type in (("rc_job_id", "INTEGER"), ("rc_execute_id", "TEXT"), ("attempts", "INTEGER NOT NULL DEFAULT 1")):
+            for name, sql_type in (("rc_job_id", "INTEGER"), ("rc_execute_id", "TEXT"),
+                                   ("attempts", "INTEGER NOT NULL DEFAULT 1"),
+                                   ("write_started", "INTEGER NOT NULL DEFAULT 0"),
+                                   ("cleanup_done", "INTEGER NOT NULL DEFAULT 0")):
                 if name not in columns:
                     db.execute(f"ALTER TABLE jobs ADD COLUMN {name} {sql_type}")
 
     def _snapshot(self, row: sqlite3.Row) -> dict[str, Any]:
         error = json.loads(row["error"]) if row["error"] else None
+        state = row["state"]
+        write_started = bool(row["write_started"])
+        cleanup_done = bool(row["cleanup_done"])
         return {"protocol": 1, "target_id": self.target_id,
-                "operation_id": row["operation_id"], "state": row["state"],
+                "operation_id": row["operation_id"], "state": state,
                 "bytes_done": row["bytes_done"], "bytes_total": row["bytes_total"],
                 "files_done": row["files_done"], "files_total": row["files_total"],
                 "rate_bytes_per_second": row["rate"], "error": error,
+                "write_started": write_started,
+                "fallback_safe": bool(state in ("failed", "cancelled")
+                                      and not write_started and cleanup_done),
                 "updated_at": row["updated_at"]}
 
     def _get(self, operation_id: str) -> dict[str, Any] | None:
@@ -610,6 +621,7 @@ class RcloneJobs:
             if current and current["state"] == "cancelling":
                 self._update(operation_id, state="cancelled")
                 self._cleanup_credentials(operation_id)
+                self._update(operation_id, cleanup_done=1)
                 return
             self._update(operation_id, state="authorizing")
         bytes_done = files_done = 0
@@ -676,6 +688,7 @@ class RcloneJobs:
                 if batch_files and kind == "file":
                     if batch_published:
                         continue
+                    self._update(operation_id, write_started=1)
                     batch_stage_root = dest_root / ".tether-incoming" / operation_id
                     self._write_guard(batch_stage_root, "write")
                     batch_stage_root.mkdir(parents=True, exist_ok=True)
@@ -762,6 +775,7 @@ class RcloneJobs:
                 stage_root = dest_root / ".tether-incoming" / operation_id
                 stage = self._resolve(str(stage_root / Path(*relative.split("/"))))
                 self._write_guard(stage, "write")
+                self._update(operation_id, write_started=1)
                 stage.parent.mkdir(parents=True, exist_ok=True)
                 if kind == "directory":
                     stage.mkdir(parents=True, exist_ok=True)
@@ -911,9 +925,12 @@ class RcloneJobs:
                 self._active.pop(operation_id, None)
             self._stop_rc(operation_id)
             current = self._get(operation_id)
-            if current and current["state"] in {"completed", "cancelled"}:
+            state = current["state"] if current else None
+            if state in {"completed", "cancelled", "failed"}:
                 self._cleanup_credentials(operation_id)
-            if current and current["state"] in TERMINAL:
+                shutil.rmtree(dest_root / ".tether-incoming" / operation_id, ignore_errors=True)
+                self._update(operation_id, cleanup_done=1)
+            elif state in TERMINAL:
                 shutil.rmtree(dest_root / ".tether-incoming" / operation_id, ignore_errors=True)
 
     def _receive_relays(self, authority: dict[str, Any], endpoint: dict[str, Any], *,
@@ -1576,15 +1593,28 @@ class RcloneJobs:
         cutoff = tuning("RCLONE_MULTI_THREAD_CUTOFF", "16Mi", RCLONE_SIZE_RE)
         streams = tuning("RCLONE_MULTI_THREAD_STREAMS", "4", RCLONE_STREAMS_RE)
         chunk_size = tuning("RCLONE_MULTI_THREAD_CHUNK_SIZE", "8Mi", RCLONE_SIZE_RE)
-        process = subprocess.Popen([self._binary, "rcd", "--config", str(config), "--rc-addr", f"127.0.0.1:{port}",
-                                    "--rc-user", username, "--rc-pass", password,
-                                    "--transfers", "4", "--checkers", "4",
-                                    "--multi-thread-cutoff", cutoff, "--multi-thread-streams", streams,
-                                    "--multi-thread-chunk-size", chunk_size],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        self._rc[operation_id] = {"process": process, "url": f"http://127.0.0.1:{port}/",
-                                  "username": username, "password": password}
+        base = [self._binary, "rcd", "--config", str(config), "--rc-addr", f"127.0.0.1:{port}",
+                "--rc-user", username, "--rc-pass", password,
+                "--transfers", "4", "--checkers", "4"]
+        # Multi-thread flags stay separate argv entries (never one shell string) so
+        # Windows paths are passed verbatim. An older rclone rejects them with
+        # "unknown flag"; retry without them instead of failing the transfer.
+        optional = ["--multi-thread-cutoff", cutoff, "--multi-thread-streams", streams,
+                    "--multi-thread-chunk-size", chunk_size]
+        self._launch_rc(operation_id, base, optional, username, password)
+
+    def _launch_rc(self, operation_id: str, base: list[str], optional: list[str],
+                   username: str, password: str) -> None:
+        errors = tempfile.TemporaryFile()
+        try:
+            process = subprocess.Popen(base + optional, stdout=subprocess.DEVNULL, stderr=errors,
+                                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError:
+            errors.close()
+            raise
+        url = base[base.index("--rc-addr") + 1]
+        self._rc[operation_id] = {"process": process, "url": "http://" + url + "/",
+                                  "username": username, "password": password, "errors": errors}
         state_file = self._grant_dir / operation_id / "rclone-rc.json"
         state_file.write_text(json.dumps({"url": self._rc[operation_id]["url"], "username": username,
                                           "password": password, "pid": process.pid}, separators=(",", ":")), encoding="utf-8")
@@ -1595,8 +1625,14 @@ class RcloneJobs:
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             if process.poll() is not None:
+                detail = self._read_rc_stderr(errors)
                 self._stop_rc(operation_id)
-                raise TransferJobError("rclone_rc_start_failed", "rclone RC exited before becoming ready", True)
+                if optional and "unknown flag" in detail.casefold():
+                    self._launch_rc(operation_id, base, [], username, password)
+                    return
+                reason = "rclone RC exited before becoming ready"
+                raise TransferJobError("rclone_rc_start_failed",
+                                       reason + (": " + detail[:300] if detail else ""), True)
             try:
                 self._rc_call(operation_id, "core/version", {})
                 return
@@ -1604,6 +1640,15 @@ class RcloneJobs:
                 time.sleep(0.1)
         self._stop_rc(operation_id)
         raise TransferJobError("rclone_rc_start_failed", "rclone RC did not become healthy", True)
+
+    @staticmethod
+    def _read_rc_stderr(errors) -> str:
+        try:
+            errors.seek(0)
+            text = errors.read(8192).decode("utf-8", "replace")
+        except (OSError, ValueError):
+            text = ""
+        return " ".join(text.split())
 
     def _stat_source_file(self, operation_id: str, relative: str) -> dict[str, Any] | None:
         for delay in (0, 1, 3):
@@ -1681,8 +1726,14 @@ class RcloneJobs:
         entry = self._rc.pop(operation_id, None)
         if not entry:
             return
-        process = entry["process"]
-        if process.poll() is None:
+        errors = entry.get("errors")
+        if errors is not None:
+            try:
+                errors.close()
+            except OSError:
+                pass
+        process = entry.get("process")
+        if process is not None and process.poll() is None:
             try:
                 process.terminate()
                 process.wait(timeout=3)

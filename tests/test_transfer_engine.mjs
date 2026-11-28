@@ -492,7 +492,8 @@ test('native copies can use Hub relay only after the zero-byte job is confirmed 
     { statuses: [{ ...running, bytes_done: 1 }, networkFailure], error: 'failed' },
     { statuses: [running, running, { ...running, state: 'completed', bytes_done: 8, files_done: 1 }],
       cancel: true, bytes: 8 },
-    { statuses: [running, running, cancelled], items: ['file.bin', 'other.bin'], error: 'cancelled' }
+    { statuses: [running, running, { ...running, state: 'cancelling' }, cancelled], items: ['file.bin', 'other.bin'],
+      useRelay: true, cancel: true }
   ]
   for (const { statuses, useRelay, failedWithoutCancel, cancel, error, message, items, bytes, cancelDelay = 1_000 } of scenarios) {
     const calls = []
@@ -706,4 +707,98 @@ test('an older Hub without the Croc capability endpoint falls back before starti
   })
   assert.equal(result, null)
   assert.deepEqual(calls, [['a', 'transfer_info'], ['b', 'transfer_info']])
+})
+
+async function nativeOutcome(job, { items = ['one.bin', 'two.bin'], startError } = {}) {
+  const calls = []
+  let operationId = null
+  try {
+    const result = await transferNativeJob({
+      post: async (_device, operation, body) => {
+        calls.push(operation)
+        operationId = body.operation_id
+        if (operation === 'transfer_job_start') {
+          if (startError) throw startError
+          return { state: 'queued' }
+        }
+        return typeof job === 'function' ? job() : job
+      },
+      source: { device_id: 'source', path: '/source' },
+      destination: { device_id: 'target', path: '/target' },
+      items,
+      allowRelay: true
+    })
+    return { result, calls, operationId }
+  } catch (error) {
+    return { error, calls, operationId }
+  }
+}
+
+test('multi-file native jobs fall back on route failures only with a safe no-write proof', async () => {
+  for (const code of ['network_not_connected', 'source_connection_failed']) {
+    const safe = await nativeOutcome({ state: 'failed', bytes_done: 0, files_done: 0, fallback_safe: true, error: { code } })
+    assert.equal(safe.result?.useRelay, true, code + ' should relay when the node proves no write')
+    assert.equal(safe.result?.operationId, safe.operationId)
+
+    const legacy = await nativeOutcome({ state: 'failed', bytes_done: 0, files_done: 0, error: { code } })
+    assert.equal(legacy.result?.useRelay, true, code + ' should relay for a legacy node that confirmed zero')
+
+    const unsafe = await nativeOutcome({ state: 'failed', bytes_done: 0, files_done: 0, fallback_safe: false, error: { code } })
+    assert.equal(unsafe.error?.code, 'failed', code + ' must not relay without cleanup proof')
+
+    const wrote = await nativeOutcome({ state: 'failed', bytes_done: 0, files_done: 0, write_started: true,
+      fallback_safe: true, error: { code } })
+    assert.equal(wrote.error?.code, 'failed', code + ' must not relay after a write started')
+
+    const progressed = await nativeOutcome({ state: 'failed', bytes_done: 1, files_done: 0, fallback_safe: true, error: { code } })
+    assert.equal(progressed.error?.code, 'failed', code + ' must not relay once bytes were transferred')
+  }
+})
+
+test('a 0-byte native job falls back only when the node proves nothing was written', async () => {
+  const failed = (extra) => ({ state: 'failed', bytes_done: 0, files_done: 0, ...extra,
+    error: { code: 'source_connection_failed' } })
+  const safe = await nativeOutcome(failed({ fallback_safe: true }), { items: ['empty.bin'] })
+  assert.equal(safe.result?.useRelay, true)
+  const legacy = await nativeOutcome(failed({}), { items: ['empty.bin'] })
+  assert.equal(legacy.result?.useRelay, true)
+  const noProof = await nativeOutcome(failed({ fallback_safe: false }), { items: ['empty.bin'] })
+  assert.equal(noProof.error?.code, 'failed')
+  const wrote = await nativeOutcome(failed({ fallback_safe: true, write_started: true }), { items: ['empty.bin'] })
+  assert.equal(wrote.error?.code, 'failed')
+  const wroteLegacy = await nativeOutcome(failed({ write_started: true }), { items: ['empty.bin'] })
+  assert.equal(wroteLegacy.error?.code, 'failed')
+})
+
+test('an unaccepted transfer_job_start falls back to relay without cancelling the job', async () => {
+  const cases = [
+    [{ code: 'bad_op' }, true],
+    [{ status: 405 }, true],
+    [{ status: 501 }, true],
+    [{ status: 404, code: 'bad_op' }, true],
+    [{ status: 404, code: 'unsupported_operation' }, true],
+    [{ status: 404, code: 'unknown_operation' }, true],
+    [{ status: 404, message: 'unknown op: transfer_job_start' }, true],
+    [{ status: 404, code: 'not_found', message: 'source file not found' }, false],
+    [{ status: 404, code: 'device_not_found' }, false],
+    [{ code: 'denied' }, false],
+    [{ code: 'exists' }, false],
+    [{ code: 'conflict' }, false],
+    [{ code: 'node_timeout' }, false],
+    [{ status: 502 }, false],
+    [{ status: 503 }, false],
+    [{ status: 504 }, false],
+    [{}, false]
+  ]
+  for (const [fields, unaccepted] of cases) {
+    const error = Object.assign(new Error(fields.message || 'start rejected'), fields)
+    const outcome = await nativeOutcome(null, { startError: error })
+    if (unaccepted) {
+      assert.equal(outcome.result?.useRelay, true, JSON.stringify(fields) + ' should be treated as unaccepted')
+      assert.equal(outcome.result?.unaccepted, true)
+    } else {
+      assert.equal(outcome.error, error, JSON.stringify(fields) + ' must rethrow unchanged')
+    }
+    assert.equal(outcome.calls.filter((op) => op === 'transfer_job_cancel').length, 0)
+  }
 })
