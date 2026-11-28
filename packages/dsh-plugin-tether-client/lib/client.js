@@ -39458,6 +39458,27 @@ function isNativeJobConnectionError(error, target) {
   return /(?:failed to fetch|fetch failed|network error|net::ERR_[A-Z_]+)$/i.test(error?.message || '')
 }
 
+// True only when the target unambiguously rejected transfer_job_start as an
+// unknown/unsupported operation before doing any work. Source-file not-found,
+// permission, conflict and transport errors must never trigger a silent relay.
+function isUnacceptedNativeStartError(error) {
+  if (!error) return false
+  if (error.code === 'bad_op') return true
+  if (error.status === 405 || error.status === 501) return true
+  if (error.status === 404) {
+    if (error.code === 'bad_op' || error.code === 'unsupported_operation' || error.code === 'unknown_operation') return true
+    return !error.code && /not found|unknown op|bad_op/i.test(error.message || '')
+  }
+  return false
+}
+
+function hasSafeFallbackProof(job, confirmedZero) {
+  if (job?.write_started === true) return false
+  if (typeof job?.fallback_safe === 'boolean') return job.fallback_safe === true
+  // A legacy node omits fallback_safe; require a confirmed zero-write, unpaused job.
+  return confirmedZero === true
+}
+
 function nativeJobUnconfirmed(operationId, message) {
   return Object.assign(failure(message + '（任务号 ' + operationId + '）', 'native_job_unconfirmed'), { operationId })
 }
@@ -39467,7 +39488,7 @@ async function transferNativeJob({
   allowRelay = false, onProgress = () => {}, onReconnecting = () => {}
 }) {
   let started = Boolean(operationId)
-  let relayEligible = allowRelay && !started && items.length === 1
+  let relayEligible = allowRelay && !started
   let zeroSince = null
   let stopRequestedAt = null
   operationId = operationId || newTransferId()
@@ -39478,14 +39499,23 @@ async function transferNativeJob({
     signal?.throwIfAborted()
     if (!started) {
       started = true
-      await post(target, 'transfer_job_start', {
-        ...jobRequest,
-        source: { device_id: source.device_id, path: source.path },
-        destination: { device_id: target, path: destination.path },
-        items: items.map((path) => ({ kind: 'file', path })),
-        mode: 'copy',
-        conflict_policy: 'fail'
-      }, signal)
+      try {
+        await post(target, 'transfer_job_start', {
+          ...jobRequest,
+          source: { device_id: source.device_id, path: source.path },
+          destination: { device_id: target, path: destination.path },
+          items: items.map((path) => ({ kind: 'file', path })),
+          mode: 'copy',
+          conflict_policy: 'fail'
+        }, signal)
+      } catch (error) {
+        if (relayEligible && isUnacceptedNativeStartError(error)) {
+          // The node never accepted the job, so there is nothing to cancel.
+          started = false
+          return { operationId, useRelay: true, unaccepted: true }
+        }
+        throw error
+      }
     }
     while (true) {
       signal?.throwIfAborted()
@@ -39516,15 +39546,17 @@ async function transferNativeJob({
       const filesDone = Number(job && job.files_done) || 0
       const percent = bytesTotal ? Math.min(100, bytesDone / bytesTotal * 100) : 0
       const confirmedZero = job?.bytes_done === 0 && job?.files_done === 0
-      if (bytesDone > 0 || filesDone > 0 || job?.state === 'verifying') relayEligible = false
+      if (job?.write_started === true || bytesDone > 0 || filesDone > 0 || job?.state === 'verifying') {
+        relayEligible = false
+      }
       if (job && job.state === 'completed') {
         onProgress({ transferred: bytesDone, total: bytesTotal, percent: 100, filesDone })
         return { operationId, bytes: bytesDone }
       }
-      if (stopRequestedAt !== null && relayEligible && job?.state === 'cancelled' && confirmedZero) {
+      if (stopRequestedAt !== null && relayEligible && job?.state === 'cancelled' && hasSafeFallbackProof(job, confirmedZero)) {
         return { operationId, useRelay: true }
       }
-      if (relayEligible && confirmedZero && job?.state === 'failed' &&
+      if (relayEligible && hasSafeFallbackProof(job, confirmedZero) && job?.state === 'failed' &&
           ['network_not_connected', 'source_connection_failed'].includes(job.error?.code)) {
         return { operationId, useRelay: true }
       }
@@ -40413,8 +40445,11 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     })
   }
 
-  const runNativeJob = async ({ source, destination, items, total, relayItem }, controller, operationId) => {
+  const runNativeJob = async (input, controller, operationId) => {
+    const { source, destination, items, total, relayItem, relayItems, targetEntries } = input
     try {
+      const fallbackItems = (Array.isArray(relayItems) && relayItems.length ? relayItems : (relayItem ? [relayItem] : []))
+        .map((item) => ({ path: item.path, name: item.name, size: Number(item.size) || 0 }))
       const onProgress = (value) => setJob((current) => ({ ...current,
         percent: Math.min(99, value.percent), transferred: value.transferred,
         total: value.total || total, index: Math.min(items.length - 1, value.filesDone || 0) }))
@@ -40424,46 +40459,102 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
       const sourceNode = devices.find((device) => device?.device_id === sourceDevice)
       const targetNode = devices.find((device) => device?.device_id === targetDevice)
       const ownsBoth = userId && sourceNode?.owner_id === userId && targetNode?.owner_id === userId
-      const routeKey = !operationId && relayItem && ownsBoth ? JSON.stringify([userId, sourceDevice, targetDevice]) : null
+      // Only keep the single-file Croc fast path that existed before batch relay.
+      const crocTarget = hubOnly && fallbackItems.length === 1 && total > 0 ? fallbackItems[0] : null
+      const routeKey = !operationId && crocTarget && ownsBoth ? JSON.stringify([userId, sourceDevice, targetDevice]) : null
       const previous = routeKey ? crocRouteRef.current.get(routeKey) : undefined
       const recent = previous?.until > Date.now() ? previous : undefined
       const preferCroc = recent?.worked === true
-      const preferCrocUpload = routeKey && !recent && items.length === 1 &&
+      const preferCrocUpload = Boolean(routeKey) && !recent &&
         isCrocUploadCandidate(sourceNode, targetNode, total)
       if (routeKey && recent?.worked !== false) crocRouteRef.current.delete(routeKey)
       const rememberCroc = (worked) => {
         if (routeKey) crocRouteRef.current.set(routeKey, { worked, until: Date.now() + CROC_ROUTE_PREFERENCE_MS })
       }
-      const tryCroc = (notice) => transferCrocViaHub({
-        post: postHubFs, sourceDevice, targetDevice, source: relayItem.path,
-        destination: destination.path, name: relayItem.name, signal: controller.signal,
-        onStart: () => { if (onNotice) onNotice(notice) },
-        onProgress: (value) => onProgress({ ...value, transferred: Math.round(total * value.percent / 100) }),
+      const tryCroc = (item, notice) => transferCrocViaHub({
+        post: postHubFs, sourceDevice, targetDevice, source: item.path,
+        destination: destination.path, name: item.name, signal: controller.signal,
+        onStart: () => { if (notice && onNotice) onNotice(notice) },
+        onProgress: (value) => onProgress({ ...value,
+          transferred: Math.round((Number(item.size) || 0) * (Number(value && value.percent) || 0) / 100) }),
         onReconnecting
       })
-      const triedCroc = preferCroc || preferCrocUpload
+      // Compatible per-file queue used after a native job proves it wrote nothing.
+      const runCompatibleFallback = async () => {
+        const entries = Array.isArray(targetEntries) ? targetEntries : []
+        let done = 0
+        let crocUsable = true
+        for (let index = 0; index < fallbackItems.length; index += 1) {
+          controller.signal.throwIfAborted()
+          const item = fallbackItems[index]
+          setJob((current) => ({ ...(current || {}), state: 'running', index, count: fallbackItems.length }))
+          let itemBytes = null
+          if (crocUsable && item.size > 0) {
+            try {
+              const croc = await transferCrocViaHub({
+                post: postHubFs, sourceDevice, targetDevice, source: item.path,
+                destination: destination.path, name: item.name, signal: controller.signal,
+                onStart: () => { if (onNotice) onNotice('直传未开始，已切换到 Croc 中转') },
+                onProgress: (value) => {
+                  const currentBytes = done + item.size * (Number(value && value.percent) || 0) / 100
+                  setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                    transferred: currentBytes, index, count: fallbackItems.length, state: 'running' }))
+                },
+                onReconnecting
+              })
+              if (croc) itemBytes = Number(croc.bytes) || item.size
+            } catch (error) {
+              if (isTransferAbort(error, controller.signal)) throw error
+            }
+            // One Croc failure means this route pays handshake time for nothing; stop trying.
+            if (itemBytes === null) crocUsable = false
+          }
+          if (itemBytes === null) {
+            let dest = joinPath(destination.path, item.name)
+            let overwrite = false
+            while (true) {
+              try {
+                const chunk = await copyFileInChunks({
+                  sourceDevice, targetDevice, source: item.path, destination: dest, overwrite,
+                  signal: controller.signal, relay: true,
+                  onProgress: (value) => {
+                    const currentBytes = done + Math.max(0, Number(value && value.transferred) || 0)
+                    setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                      transferred: currentBytes, index, count: fallbackItems.length, state: 'running' }))
+                  }
+                })
+                itemBytes = Number(chunk && chunk.bytes) || item.size
+                break
+              } catch (cause) {
+                if (!cause || cause.code !== 'exists') throw cause
+                const choice = await askConflict(item, dest)
+                if (choice === 'cancel') throw Object.assign(new Error('已取消'), { code: 'aborted' })
+                if (choice === 'overwrite') { overwrite = true; continue }
+                if (choice === 'keep') { dest = uniqueName(dest, entries.map((entry) => entry.name)); overwrite = false; continue }
+                throw cause
+              }
+            }
+          }
+          done += Number(itemBytes) || 0
+          setJob((current) => ({ ...(current || {}), percent: total ? Math.round(done / total * 100) : 100,
+            transferred: done, index, count: fallbackItems.length, state: 'running' }))
+        }
+        return { bytes: done }
+      }
+      const triedCroc = Boolean(preferCroc) || preferCrocUpload
       let result = triedCroc
-        ? await tryCroc(preferCrocUpload ? '正在使用 Croc 发送大文件' : '使用上次成功的 Croc 中转')
+        ? await tryCroc(crocTarget, preferCrocUpload ? '正在使用 Croc 发送大文件' : '使用上次成功的 Croc 中转')
         : null
       if (result && preferCroc) crocRouteRef.current.set(routeKey, recent)
       if (triedCroc && !result) rememberCroc(false)
       if (!result) {
         result = await transferNativeJob({
           post: postHubFs, source, destination, items, operationId, signal: controller.signal,
-          allowRelay: Boolean(relayItem), onProgress, onReconnecting
+          allowRelay: fallbackItems.length > 0, onProgress, onReconnecting
         })
       }
       if (result.useRelay) {
-        result = routeKey && !triedCroc ? await tryCroc('直传未开始，已切换到 Croc 中转') : null
-        if (routeKey && !triedCroc) rememberCroc(Boolean(result))
-        if (!result) {
-          if (onNotice) onNotice('已切换到 Hub 分块复制')
-          result = await copyFileInChunks({
-            sourceDevice, targetDevice, source: relayItem.path,
-            destination: joinPath(destination.path, relayItem.name), overwrite: false,
-            signal: controller.signal, onProgress, relay: true
-          })
-        }
+        result = await runCompatibleFallback()
       }
       const doneBytes = result.bytes || total
       setJob((current) => ({ ...current, state: 'done', percent: 100, transferred: doneBytes }))
@@ -40475,7 +40566,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     } catch (error) {
       const cancelled = isTransferAbort(error, controller.signal) || error.code === 'cancelled'
       const unconfirmed = error.code === 'native_job_unconfirmed'
-      if (unconfirmed) pendingNativeJobRef.current = { source, destination, items, total, operationId: error.operationId }
+      if (unconfirmed) pendingNativeJobRef.current = { ...input, operationId: error.operationId }
       setJob((current) => ({ ...current, state: unconfirmed ? 'unconfirmed' : cancelled ? 'cancelled' : 'error',
         error: cancelled ? '传输已取消' : error.message || '原生传输失败' }))
       if (!cancelled && !unconfirmed && onError) onError(error)
@@ -40512,11 +40603,24 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
       } catch (_) { useNativeJob = false }
     }
     if (useNativeJob) {
+      try {
+        const [sourceInfo, targetInfo] = await Promise.all([
+          postFs(side(fromSide).device, 'transfer_info', {}, controller.signal).catch(() => null),
+          postFs(target.device, 'transfer_info', {}, controller.signal).catch(() => null)
+        ])
+        if (sourceInfo?.transfer_engines?.native_source === false ||
+            targetInfo?.transfer_engines?.native_target === false) {
+          useNativeJob = false
+        }
+      } catch (_) { /* probing must never block the native attempt */ }
+    }
+    if (useNativeJob) {
       return runNativeJob({
         source: { device_id: side(fromSide).device, path: nativeBatch.path },
         destination: { device_id: target.device, path: target.path },
         items: nativeBatch.names, total,
-        relayItem: hubOnly && items.length === 1 && total > 0 ? items[0] : undefined
+        relayItems: items.map((item) => ({ path: item.path, name: item.name, size: Number(item.size) || 0 })),
+        targetEntries: target.entries || []
       }, controller)
     }
     if (!hubOnly) {
@@ -42523,6 +42627,20 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
   // The reply goes back over the same channel the request came from — a frame's
   // postMessage, or a window message dispatched inside the webview guest.
   const [folderPick, setFolderPick] = React.useState(null)
+  React.useEffect(() => {
+    setFolderPick((current) => {
+      if (!current) return null
+      const rev = (serviceView && serviceView.openRevision) || 0
+      if (current.deviceId === device && current.openRevision === rev) return current
+      const payload = { type: 'tether:pick-folder-result', id: current.id, cancelled: true }
+      if (current.mode === 'iframe') {
+        try { if (current.source && typeof current.source.postMessage === 'function') current.source.postMessage(payload, '*') } catch (_) {}
+      } else if (current.guest && typeof current.guest.executeJavaScript === 'function') {
+        try { void current.guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {}) } catch (_) {}
+      }
+      return null
+    })
+  }, [device, serviceView && serviceView.openRevision])
   // Answer an open pick request. `value` is the chosen path, or an array of
   // paths for a multi-selection; an empty answer is a cancel, and the guest
   // treats both the same way. `paths` carries the whole answer so a file
@@ -42535,19 +42653,23 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
     const chosen = (Array.isArray(value) ? value : [value])
       .map((item) => typeof item === 'string' ? item.trim() : '')
       .filter(Boolean)
-    const payload = chosen.length
+    const stillCurrent = request.deviceId === device
+      && request.openRevision === ((serviceView && serviceView.openRevision) || 0)
+    const payload = (chosen.length && stillCurrent)
       ? { type: 'tether:pick-folder-result', id: request.id, path: chosen[0], paths: chosen }
       : { type: 'tether:pick-folder-result', id: request.id, cancelled: true }
     if (request.mode === 'iframe') {
       try {
-        if (request.source && typeof request.source.postMessage === 'function') {
+        const frame = runtimeFrame.current
+        if (request.source && (!frame || request.source === frame.contentWindow)
+            && typeof request.source.postMessage === 'function') {
           request.source.postMessage(payload, '*')
         }
       } catch (_) { /* the frame is gone */ }
       return
     }
-    const guest = serviceWebviewRef.current
-    if (!guest || typeof guest.executeJavaScript !== 'function') return
+    const guest = request.guest
+    if (!guest || guest !== serviceWebviewRef.current || typeof guest.executeJavaScript !== 'function') return
     // The guest cannot postMessage across the webview boundary, so the answer is
     // dispatched inside it. JSON.stringify is the only value inserted here; the
     // rest of the script is fixed.
@@ -42995,7 +43117,8 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
         const id = String((data && data.id) || '')
         if (/^[0-9a-f-]{36}$/i.test(id)) {
           setFolderPick({
-            id, mode: 'iframe', source: event.source || null,
+            id, mode: 'iframe', source: event.source || null, guest: null,
+            deviceId: device, openRevision: (serviceView && serviceView.openRevision) || 0,
             kind: data.kind === 'file' ? 'file' : 'folder',
             multiple: data.multiple === true
           })
@@ -43391,7 +43514,7 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
     const expectedOrigin = auth.origin
     // The token never enters the script text raw: JSON.stringify keeps it a
     // single quoted literal, and the regex above already narrowed the charset.
-    const storeToken = "localStorage.setItem('codeg_token'," + JSON.stringify(auth.token) + ")"
+    const storeToken = "window.__tetherEmbeddedHost=true;try{sessionStorage.setItem('tether_embedded_host','1')}catch(_){}localStorage.setItem('codeg_token'," + JSON.stringify(auth.token) + ")"
     const guestRoute = () => {
       try {
         const current = new URL(guest.getURL())
@@ -43481,7 +43604,8 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
           && /^[0-9a-f-]{36}$/i.test(requestId)
         if (validFolderPick) {
           const request = {
-            id: requestId, mode: 'webview', source: null,
+            id: requestId, mode: 'webview', source: null, guest,
+            deviceId: device, openRevision: (serviceView && serviceView.openRevision) || 0,
             kind: pickKind === 'file' ? 'file' : 'folder',
             multiple: pickMultiple === '1'
           }
@@ -43681,48 +43805,65 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
     h('form', { onSubmit: send, style: { display: 'flex', gap: 8, padding: 12, borderTop: '1px solid ' + C.line } },
       h('textarea', { value: input, onChange: (event) => setInput(event.target.value), placeholder: '输入消息', disabled: !ready || busy, style: { flex: '1 1 auto', minHeight: 46, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 8, padding: '8px 9px', background: C.bg, color: C.ink, fontSize: 12, resize: 'none' } }),
       h('button', { type: 'submit', disabled: busy || !ready || !input.trim(), style: { ...button, alignSelf: 'flex-end' } }, busy ? '处理中…' : '发送'))) : null
+  const autoOpenAttemptedRef = React.useRef('')
+  React.useEffect(() => {
+    if (!isActive || !nativeWorkbench || !device || catalogOpen || panes.length || homeOpen || session) return
+    if (serviceCatalogBusy || serviceOpening || workbenchLoginRequired || workbenchLoginBusy) return
+    if (!codegService || legacyCodegBlocked || !['ready', 'stopped'].includes(codegService.state)) return
+    const attemptKey = device + ':' + homeRetry
+    if (autoOpenAttemptedRef.current === attemptKey) return
+    autoOpenAttemptedRef.current = attemptKey
+    void openNativeCodeg()
+  }, [isActive, nativeWorkbench, device, catalogOpen, panes.length, homeOpen, session,
+    serviceCatalogBusy, serviceOpening, workbenchLoginRequired, workbenchLoginBusy,
+    codegService && codegService.state, legacyCodegBlocked, homeRetry])
+
   return h('div', {
     style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }
   },
     sessionView,
     agentHomeView,
     workspace,
-    !panes.length && !homeOpen && !session && nativeWorkbench ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', padding: 24, color: C.mute, fontSize: 12 } },
-      h('div', { style: { fontSize: 16, fontWeight: 600, color: C.ink } }, '目标设备工作台'),
-      serviceCatalogBusy ? h('div', null, '正在读取目标服务状态…')
-        : codegService ? h('div', { style: { textAlign: 'center', lineHeight: 1.6 } },
-          h('div', { style: { color: C.sub } }, '目标设备：' + (devices.find((item) => item.device_id === device)?.name || device)),
-          h('div', { style: { color: C.sub } }, '服务状态：' + (serviceStateLabel[codegService.state] || codegService.state || '未知')),
-          codegService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, codegService.reason) : null)
-          : h('div', { style: { color: homeError ? C.danger : C.sub, textAlign: 'center' } }, homeError || 'Controller 服务目录未返回 Codeg 状态。'),
-      homeError && codegService ? h('div', { role: 'alert', style: { maxWidth: 520, color: C.danger, textAlign: 'center' } }, homeError) : null,
-      h('button', { type: 'button', disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
-          || legacyCodegBlocked || (codegService && codegService.state === 'missing'),
-        onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : (codegService ? () => void openNativeCodeg() : retryAgentsHome),
-        style: { ...button, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
-          || legacyCodegBlocked || (codegService && codegService.state === 'missing') ? 0.55 : 1 } },
-      workbenchLoginBusy ? '等待登录完成…' : workbenchLoginRequired ? '通过主进程登录' : serviceOpening ? '正在打开…'
-        : codegService ? (legacyCodegBlocked ? legacyCodegLabel : codegService.state === 'ready' ? '打开 Codeg'
-          : codegService.state === 'missing' ? codegUnavailableLabel : '启动并打开 Codeg') : '重试服务目录'),
-      h('button', { type: 'button', onClick: () => setHomeOpen(true), style: { ...button, marginTop: 8 } }, 'Agent 主页'),
-      desktopService ? h('div', { style: { marginTop: 4, textAlign: 'center', lineHeight: 1.55 } },
-        h('div', { style: { color: C.sub } }, '远程桌面：' + (serviceStateLabel[desktopService.state] || desktopService.state || '未知')),
-        desktopService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, desktopService.reason) : null,
-        desktopService.agent_busy ? h('div', { style: { maxWidth: 520, color: C.sub } }, '目标 Agent 正在处理任务，连接将以只读方式打开。') : null,
-        h('button', { type: 'button', disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
-          || !['ready', 'stopped'].includes(desktopService.state),
-        onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : () => void openNativeDesktop(),
-        style: { ...button, marginTop: 8, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
-          || !['ready', 'stopped'].includes(desktopService.state) ? 0.55 : 1 } },
-        serviceOpening ? '正在授权并连接…' : desktopService.state === 'ready' ? '打开远程桌面（目标同意后连接）' : '启动并打开远程桌面')) : null) : null,
+    !panes.length && !homeOpen && !session && nativeWorkbench ? (() => {
+      const codegReadyToAutoOpen = isActive && !!codegService && !legacyCodegBlocked
+        && ['ready', 'stopped'].includes(codegService.state) && !homeError && !workbenchLoginRequired
+      const loading = serviceCatalogBusy || serviceOpening || codegReadyToAutoOpen
+      const statusText = workbenchLoginRequired ? '需要登录'
+        : homeError ? homeError
+          : legacyCodegBlocked ? legacyCodegLabel
+            : codegService && codegService.state === 'missing' ? codegUnavailableLabel
+              : codegService && codegService.reason ? codegService.reason : '多 Agent 不可用'
+      return h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, flex: '1 1 auto', padding: 24, color: C.mute, fontSize: 12.5, textAlign: 'center' } },
+        h('div', {
+          style: { width: 52, height: 52, borderRadius: 14, background: C.soft, color: C.ink,
+            display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(16,24,40,.06)' }
+        }, h(Glyph, { name: 'bot', size: 24 })),
+        loading
+          ? h('div', { role: 'status', 'aria-live': 'polite', style: { display: 'inline-flex', alignItems: 'center', gap: 8, color: C.sub } },
+            h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 15 })),
+            '正在打开多 Agent…')
+          : h(React.Fragment, null,
+            h('div', { role: 'alert', style: { maxWidth: 420, color: homeError ? C.danger : C.sub } }, statusText),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('button', {
+                type: 'button',
+                disabled: workbenchLoginBusy || legacyCodegBlocked || (codegService && codegService.state === 'missing'),
+                onClick: workbenchLoginRequired ? () => void startWorkbenchLogin()
+                  : (codegService && ['ready', 'stopped'].includes(codegService.state) ? () => void openNativeCodeg() : retryAgentsHome),
+                style: { ...button, opacity: workbenchLoginBusy || legacyCodegBlocked || (codegService && codegService.state === 'missing') ? 0.55 : 1 }
+              }, workbenchLoginBusy ? '登录中…' : workbenchLoginRequired ? '登录' : '重试'),
+              (legacyCodegBlocked || (codegService && codegService.state === 'missing') || homeError)
+                ? h('button', { type: 'button', onClick: () => setHomeOpen(true), style: homeButton }, 'Agent 主页')
+                : null)))
+    })() : null,
     !panes.length && !nativeWorkbench && homeError ? h('div', { role: 'alert', style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
       h('div', { style: { color: C.ink, textAlign: 'center' } }, homeError),
       h('button', { type: 'button', onClick: retryAgentsHome, style: button }, '重试')) : null,
     !panes.length && !nativeWorkbench && !homeError ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
       h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
-      '正在打开 Agent 主页…') : null,
+      '正在打开多 Agent…') : null,
     folderPick ? h(TetherFolderPickDialog, {
-      key: folderPick.id, React, C, Glyph, api, post, device,
+      key: folderPick.id, React, C, Glyph, api, post, device: folderPick.deviceId || device,
       kind: folderPick.kind === 'file' ? 'file' : 'folder',
       multiple: folderPick.multiple === true,
       onDone: closeFolderPick
@@ -43767,8 +43908,8 @@ function dshGuestFlowScript() {
   const flowFnSource = typeof dshDirectoryFlowFn === 'function' ? dshDirectoryFlowFn.toString() : ''
   if (!flowFnSource) return ''
   return `(function () {
+  window.__tetherEmbeddedHost = true
   if (window.__tetherGuestFlowV2) return
-  try { if (!new URL(location.href).searchParams.has('tether_native')) return } catch (_) { return }
   window.__tetherGuestFlowV2 = true
   var runFlow = ${flowFnSource}
   var id = 'tether-dsh-guest-flow'
@@ -46678,10 +46819,23 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const documentStartedAtRef = React.useRef(0)
       const nativeGuestRef = React.useRef(null)
       const nativeIframeRef = React.useRef(null)
-      // 映射 DSH（tether_native=1）页内发起的目录/文件选择：与 Codeg 服务窗同一桥协议，
-      // webview 走 hash（did-navigate-in-page），iframe 走 postMessage；应答原路返回。
-      // { id, mode: 'iframe' | 'webview', source, kind: 'folder' | 'file', multiple }
+      // 映射 DSH（tether_native=1 或宿主嵌入）页内发起的目录/文件选择：与 Codeg 服务窗同一桥协议，
+      // 打开时固定设备、发起实例与授权标识；切设备/重载/关闭时自动取消，回执只交还原发起实例。
+      // { id, mode: 'iframe' | 'webview', source, guest, deviceId, grantId, kind: 'folder' | 'file', multiple }
       const [folderPick, setFolderPick] = React.useState(null)
+      React.useEffect(() => {
+        setFolderPick((current) => {
+          if (!current) return null
+          if (current.deviceId === deviceId && current.grantId === (currentState.grantId || '')) return current
+          const payload = { type: 'tether:pick-folder-result', id: current.id, cancelled: true }
+          if (current.mode === 'iframe') {
+            try { if (current.source && typeof current.source.postMessage === 'function') current.source.postMessage(payload, '*') } catch (_) {}
+          } else if (current.guest && typeof current.guest.executeJavaScript === 'function') {
+            try { void current.guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {}) } catch (_) {}
+          }
+          return null
+        })
+      }, [deviceId, currentState.grantId])
       const closeFolderPick = (value) => {
         const request = folderPick
         if (!request) return
@@ -46689,28 +46843,35 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const chosen = (Array.isArray(value) ? value : [value])
           .map((item) => typeof item === 'string' ? item.trim() : '')
           .filter(Boolean)
-        const payload = chosen.length
+        const activeState = surfaceStateRef.current
+        const stillMatchesDevice = request.deviceId === deviceId
+          && (!request.grantId || (activeState && activeState.grantId === request.grantId))
+        const payload = (chosen.length && stillMatchesDevice)
           ? { type: 'tether:pick-folder-result', id: request.id, path: chosen[0], paths: chosen }
           : { type: 'tether:pick-folder-result', id: request.id, cancelled: true }
         if (request.mode === 'iframe') {
           try {
-            if (request.source && typeof request.source.postMessage === 'function') {
+            const frame = nativeIframeRef.current
+            if (request.source && (!frame || request.source === frame.contentWindow)
+                && typeof request.source.postMessage === 'function') {
               request.source.postMessage(payload, '*')
             }
           } catch (_) { /* the frame is gone */ }
           return
         }
-        const guest = nativeGuestRef.current
-        if (!guest || typeof guest.executeJavaScript !== 'function') return
+        const guest = request.guest
+        if (!guest || guest !== nativeGuestRef.current || typeof guest.executeJavaScript !== 'function') return
         // webview _guest 无法跨边界 postMessage，应答在其内部派发；脚本固定，仅插入 JSON。
         try {
           void guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {})
         } catch (_) { /* the guest is gone */ }
       }
-      // 回环 guest 的设备文件中继。guest 只提交方法/白名单路径/请求体；
-      // 设备身份由宿主定为本机，绝不把 guest 给的字符串拼成 URL。
+      // 嵌入 DSH guest（回环或 Mesh）的设备文件中继。guest 只提交方法/白名单路径/请求体；
+      // 设备身份固定为当前表面绑定的 deviceId（绝不信任 guest 指定的任意其他设备）。
       const fsRelayLocalDeviceRef = React.useRef(localDeviceId)
       fsRelayLocalDeviceRef.current = localDeviceId
+      const fsRelayTargetDeviceRef = React.useRef(deviceId)
+      fsRelayTargetDeviceRef.current = deviceId
       const fsRelayChunksRef = React.useRef(new Map())
       const fsRelayReplyGuest = (guest, payload) => {
         if (!guest || typeof guest.executeJavaScript !== 'function') return
@@ -46726,7 +46887,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           return context && typeof context.device === 'string' ? context.device : ''
         } catch (_) { return '' }
       }
-      const fsRelayPerform = async (reply, request) => {
+      const fsRelayPerform = async (reply, request, pinnedDevice = '') => {
         const id = String(request && request.id || '')
         const fail = (status, code, message) => reply({ type: 'tether:fs-result', id, ok: false, status, code, message })
         if (!/^[0-9a-f-]{36}$/i.test(id) || !tetherFsRelayHostReady()) return
@@ -46744,9 +46905,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           fail(400, 'bad_query', '设备文件中继查询串无效')
           return
         }
-        const localDevice = await fsRelayLocalDevice()
-        if (!localDevice || request.device !== localDevice) {
-          fail(404, 'device_not_found', '只允许中继本机设备')
+        const targetDevice = pinnedDevice || fsRelayTargetDeviceRef.current || await fsRelayLocalDevice()
+        if (!targetDevice || (request.device && request.device !== targetDevice)) {
+          fail(404, 'device_not_found', '设备身份与当前工作区不匹配')
           return
         }
         let body
@@ -46761,8 +46922,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             fail(400, 'bad_body', '设备文件中继请求体无效')
             return
           }
-          if (parsed.device_id != null && String(parsed.device_id) !== localDevice) {
-            fail(404, 'device_not_found', '只允许中继本机设备')
+          if (parsed.device_id != null && String(parsed.device_id) !== targetDevice) {
+            fail(404, 'device_not_found', '设备身份与当前工作区不匹配')
             return
           }
           body = request.body
@@ -46773,7 +46934,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const startedAt = performance.now()
         let response
         try {
-          response = await fetch('/api/devices/' + encodeURIComponent(localDevice) + path, {
+          response = await fetch('/api/devices/' + encodeURIComponent(targetDevice) + path, {
             method,
             headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
             body: body === undefined ? undefined : body,
@@ -46781,7 +46942,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             cache: 'no-store'
           })
         } catch (_) {
-          fail(502, 'local_unreachable', '本机设备文件服务不可达')
+          fail(502, 'local_unreachable', '目标设备文件服务不可达')
           return
         }
         const data = await response.json().catch(() => null)
@@ -46834,8 +46995,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             return
           }
         }
+        const pinnedDevice = (surfaceStateRef.current && surfaceStateRef.current.deviceId) || deviceId
         void fsRelayPerform((payload) => fsRelayReplyGuest(guest, payload),
-          { id, method, path, device, query, body })
+          { id, method, path, device, query, body }, pinnedDevice)
       }
       const pollFlightRef = React.useRef(null)
       const surfaceStateRef = React.useRef(currentState)
@@ -47424,56 +47586,60 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [dshBusy, setDshBusy] = React.useState('')
       const dshWatch = visible && (deviceId === localDeviceId || dshRelevant || !!dshBusy)
       const [dshError, setDshError] = React.useState('')
+      const [dshActionError, setDshActionError] = React.useState('')
       const [dshWeb, setDshWeb] = React.useState(null)
       const [dshWebBusy, setDshWebBusy] = React.useState('')
-      const [dshWebOpen, setDshWebOpen] = React.useState(false)
-      const [dshWebLoad, setDshWebLoad] = React.useState({ status: 'idle', attempt: 0, error: '' })
-      const [dshWebGuestReady, setDshWebGuestReady] = React.useState(false)
-      const dshWebRef = React.useRef(null)
-      const dshWebRefCallback = React.useRef(null)
-      if (!dshWebRefCallback.current) dshWebRefCallback.current = (guest) => {
-        if (dshWebRef.current === guest) return
-        dshWebRef.current = guest
-        if (guest) bindDshGuestFlowInjection(guest)
-        setDshWebGuestReady(!!guest)
+      const dshPendingAutoOpenRef = React.useRef(false)
+      const [nativeGuestAttempt, setNativeGuestAttempt] = React.useState(0)
+      const nativeGuestAttemptRef = React.useRef(0)
+      nativeGuestAttemptRef.current = nativeGuestAttempt
+      const nativeGuestTimerRef = React.useRef(null)
+      const clearNativeGuestTimer = () => {
+        if (nativeGuestTimerRef.current) clearTimeout(nativeGuestTimerRef.current)
+        nativeGuestTimerRef.current = null
       }
-      const dshWebLoadAttemptRef = React.useRef(0)
-      const dshWebLoadTimerRef = React.useRef(null)
-      const clearDshWebLoadTimer = () => {
-        if (dshWebLoadTimerRef.current) clearTimeout(dshWebLoadTimerRef.current)
-        dshWebLoadTimerRef.current = null
+      const armNativeGuestTimer = (attemptNum, timeoutMs) => {
+        clearNativeGuestTimer()
+        nativeGuestTimerRef.current = setTimeout(() => {
+          if (nativeGuestAttemptRef.current !== attemptNum) return
+          setState((prev) => prev.deviceId === deviceId && prev.status === 'native-document-loading'
+            ? { ...prev, status: 'native-document-error', message: 'DSH 连接超时，请重试。' } : prev)
+        }, timeoutMs)
       }
-      const beginDshWebLoad = () => {
-        const attempt = dshWebLoadAttemptRef.current + 1
-        dshWebLoadAttemptRef.current = attempt
-        clearDshWebLoadTimer()
-        setDshWebLoad({ status: 'loading', attempt, error: '' })
-        dshWebLoadTimerRef.current = setTimeout(() => {
-          if (dshWebLoadAttemptRef.current !== attempt) return
-          setDshWebLoad({ status: 'error', attempt, error: 'DSH Web 连接超时，请检查服务后重试。' })
-        }, 20000)
-        return attempt
+      const reloadNativeGuest = () => {
+        const nextAttempt = nativeGuestAttemptRef.current + 1
+        nativeGuestAttemptRef.current = nextAttempt
+        setNativeGuestAttempt(nextAttempt)
+        setState((prev) => prev.deviceId === deviceId && prev.url
+          ? { ...prev, status: 'native-document-loading', message: '' } : prev)
+        const current = surfaceStateRef.current
+        armNativeGuestTimer(nextAttempt, current && current.fromWorkbenchOpen ? 20000 : NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS)
       }
-      const closeDshWeb = () => {
-        dshWebLoadAttemptRef.current += 1
-        clearDshWebLoadTimer()
-        setDshWebLoad({ status: 'idle', attempt: dshWebLoadAttemptRef.current, error: '' })
-        const grantId = dshWeb && dshWeb.grantId
+      const closeWorkbenchDsh = () => {
+        nativeGuestAttemptRef.current += 1
+        setNativeGuestAttempt(nativeGuestAttemptRef.current)
+        clearNativeGuestTimer()
+        const current = surfaceStateRef.current
+        const grantId = current && current.grantId
+        const svcId = (current && current.serviceId) || 'dsh'
         if (grantId && host.kind === 'app' && host.workbench && host.workbench.close) {
           setDshWebBusy('close')
-          void host.workbench.close(deviceId, 'dsh', grantId).then(() => {
-            setDshWebOpen(false)
-            setDshWeb((current) => ({ ...(current || {}), grantId: '', endpoint: '', partition: '', running: false }))
+          void host.workbench.close(deviceId, svcId, grantId).then(() => {
+            setState({ deviceId, status: 'error', url: '', code: 'descriptor_missing', message: 'DSH 未启动' })
+            setDshWeb((cur) => ({ ...(cur || {}), running: false }))
           }).catch((error) => {
-            setDshWeb((current) => ({ ...(current || {}), error: error.message || '无法撤销 DSH Web 授权。' }))
+            setDshActionError((error && error.message) || '无法关闭 DSH 工作区。')
           }).finally(() => setDshWebBusy(''))
           return
         }
-        setDshWebOpen(false)
+        setState({ deviceId, status: 'error', url: '', code: 'descriptor_missing', message: 'DSH 未启动' })
       }
-      React.useEffect(() => () => {
-        dshWebLoadAttemptRef.current += 1
-        clearDshWebLoadTimer()
+      React.useEffect(() => {
+        setDshActionError('')
+        setDshError('')
+        dshPendingAutoOpenRef.current = false
+        clearNativeGuestTimer()
+        return () => { clearNativeGuestTimer() }
       }, [deviceId])
       const dshWebEnabled = host.kind === 'app' && !!(host.workbench && host.workbench.open) && !!dshWeb
       const dshWebActive = !!(dshWeb && (dshWeb.state === 'ready' || dshWeb.running || dshWeb.installing || dshWebBusy))
@@ -47490,17 +47656,19 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               running: service.state === 'ready', installing: service.state === 'starting',
               reason: service.reason || '', error: ''
             }) : ({ ...(current || {}), supported: false, state: 'missing', running: false,
-              installing: false, reason: 'service_not_advertised' }))
-          } catch (error) {
-            if (alive) setDshWeb((current) => ({ ...(current || {}), error: error.message || '无法读取 DSH 服务状态。' }))
+              installing: false, reason: 'service_not_advertised', error: '' }))
+          } catch (_) {
+            /* 轮询状态失败不覆盖用户主动点击产生的操作错误 */
           }
         }
         void load()
         const timer = setInterval(load, dshWeb && dshWeb.state === 'starting' ? 1500 : 5000)
         return () => { alive = false; clearInterval(timer) }
       }, [deviceId, host.kind, dshWeb && dshWeb.state === 'starting'])
-      const runDshWeb = async () => {
+      const openWorkbenchDsh = async () => {
         if (!deviceId || !host.workbench || !host.workbench.open) return
+        setDshActionError('')
+        setDshError('')
         setDshWebBusy('open')
         try {
           const service = await host.workbench.open(deviceId, 'dsh')
@@ -47508,38 +47676,50 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               || !service.endpoint || !service.partition || !service.grantId) {
             throw new Error('主进程没有返回有效的 DSH 工作区会话。')
           }
+          dshPendingAutoOpenRef.current = false
+          const isLocal = service.localDirect === true
+          const isMesh = !isLocal && !!safeMeshDshEndpoint(service.endpoint)
+          const nextAttempt = nativeGuestAttemptRef.current + 1
+          nativeGuestAttemptRef.current = nextAttempt
+          setNativeGuestAttempt(nextAttempt)
           setDshWeb((current) => ({ ...(current || {}), supported: true, state: 'ready', running: true,
-            installing: false, endpoint: service.endpoint, partition: service.partition, grantId: service.grantId,
-            identity: safeSurfaceIdentity(service.surface || service), loginState: 'unknown',
-            reason: '', error: '' }))
-          beginDshWebLoad()
-          setDshWebOpen(true)
+            installing: false, reason: '' }))
+          setState({
+            deviceId, status: 'native-document-loading', url: service.endpoint,
+            grantId: service.grantId, partition: service.partition,
+            localDirect: isLocal, mesh: isMesh, serviceId: 'dsh',
+            fromWorkbenchOpen: !isLocal, sourceKey: surfaceSourceKey,
+            identity: safeSurfaceIdentity(service.surface || service), loginState: 'unknown'
+          })
+          armNativeGuestTimer(nextAttempt, isLocal ? NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS : 20000)
         } catch (error) {
           if (error && error.code === 'service_starting') {
+            dshPendingAutoOpenRef.current = true
             setDshWeb((current) => ({ ...(current || {}), state: 'starting', running: false,
-              installing: true, reason: '', error: '' }))
+              installing: true, reason: '' }))
           } else {
-            setDshWeb((current) => ({ ...(current || {}), error: error.message || '操作失败' }))
+            dshPendingAutoOpenRef.current = false
+            setDshActionError((error && error.message) || '启动 DSH 失败')
           }
         } finally {
           setDshWebBusy('')
         }
       }
       React.useEffect(() => {
-        if (host.kind !== 'app' || !host.workbench || !host.workbench.view || !dshWeb || !dshWeb.grantId) return undefined
-        void host.workbench.view(deviceId, 'dsh', !!visible && dshWebOpen).catch((error) => {
-          setDshWeb((current) => ({ ...(current || {}), error: error.message || 'DSH 工作区可见状态同步失败。' }))
-        })
-        return undefined
-      }, [deviceId, dshWeb && dshWeb.grantId, dshWebOpen, visible])
-      // mesh 会话和 DSH Web 共用同一个 workbench grant：内嵌在 workspace 时
-      // 同样要上报可见性，主进程才会维持授权（60s ping）。
+        if (!dshPendingAutoOpenRef.current || dshWebBusy) return
+        if (dshWeb && dshWeb.state === 'ready') {
+          dshPendingAutoOpenRef.current = false
+          void openWorkbenchDsh()
+        }
+      }, [dshWeb && dshWeb.state, dshWebBusy])
+      // mesh 与 workbench DSH 会话共用同一个 grant：上报可见性让主进程维持授权（60s ping）。
       React.useEffect(() => {
         if (host.kind !== 'app' || !host.workbench || !host.workbench.view) return undefined
-        if (!currentState.mesh || currentState.deviceId !== deviceId || !currentState.grantId) return undefined
-        void host.workbench.view(deviceId, 'dsh', !!visible).catch(() => { /* 下一次可见性变化会重试 */ })
+        if (currentState.deviceId !== deviceId || !currentState.grantId) return undefined
+        if (!currentState.mesh && !currentState.fromWorkbenchOpen) return undefined
+        void host.workbench.view(deviceId, currentState.serviceId || 'dsh', !!visible).catch(() => { /* 下一次可见性变化会重试 */ })
         return undefined
-      }, [deviceId, currentState.mesh, currentState.grantId, visible])
+      }, [deviceId, currentState.mesh, currentState.fromWorkbenchOpen, currentState.serviceId, currentState.grantId, visible])
       React.useEffect(() => {
         if (!dshWatch && !dshRelevant) { setDsh(null); return undefined }
         let alive = true
@@ -47571,7 +47751,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             return
           }
         } else if (dsh && dsh.running && dsh.surface
-            && ['document-loaded', 'local'].includes(currentState.status)) {
+            && ['document-loaded', 'local', 'native-document-loaded'].includes(currentState.status)) {
           dshAwaitingDescriptorRef.current = false
           setDshBusy('')
           setDshError('')
@@ -47588,6 +47768,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         || dshBusy === 'dsh_restart' || dshBusy === 'dsh_install_plugin'
       const runDsh = async (action) => {
         setDshError('')
+        setDshActionError('')
         setDshBusy(action)
         dshAwaitingDescriptorRef.current = false
         if (action === 'dsh_restart' || action === 'dsh_install_plugin') {
@@ -47597,15 +47778,44 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const result = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + action, {})
           if (result) {
             setDsh(result)
-            if ((action === 'dsh_start' || action === 'dsh_install') && !result.error) {
+            if (result.error) {
+              setDshActionError(String(result.error))
+              setDshBusy('')
+            } else if (action === 'dsh_start' || action === 'dsh_install') {
               dshAwaitingDescriptorRef.current = true
               retryDocument()
             }
           }
         } catch (error) {
-          setDshError(error.message || '操作失败')
+          setDshActionError(error.message || '操作失败')
           setDshBusy('')
         }
+      }
+      const isLocalTargetDevice = !!(localDeviceId && deviceId === localDeviceId)
+      const startUnifiedDsh = () => {
+        if (host.kind === 'app' && host.workbench && host.workbench.open) {
+          if (isLocalTargetDevice) {
+            void openWorkbenchDsh()
+            return
+          }
+          if (dshWeb && ['ready', 'stopped', 'starting'].includes(dshWeb.state)) {
+            void openWorkbenchDsh()
+            return
+          }
+        }
+        if (dsh && dsh.installed === false && dshInstallSupported) {
+          void runDsh('dsh_install')
+          return
+        }
+        if (dsh && dsh.installed !== false) {
+          void runDsh('dsh_start')
+          return
+        }
+        if (host.kind === 'app' && host.workbench && host.workbench.open) {
+          void openWorkbenchDsh()
+          return
+        }
+        setDshActionError('目标设备未安装 DSH')
       }
       React.useEffect(() => {
         const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
@@ -47627,56 +47837,76 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true
         && currentState.code === 'descriptor_missing'
       const message = currentState.status === 'error' && dshRelevant && dsh
-        ? (dshWebActive ? 'DSH Web 已就绪'
+        ? (dshWebActive ? 'DSH 已就绪'
           : dsh.installed === false ? 'DSH 未安装'
           : dsh.running
             ? (dshBusy === 'dsh_install_plugin'
-              ? '正在安装/修复 Tether 插件…'
-              : (dshSurfaceMissing ? 'DSH 已在运行，但 Tether 插件未加载或 surface 描述符缺失' : currentState.message))
+              ? '正在修复工作区…'
+              : (dshSurfaceMissing ? 'DSH 工作区组件未就绪' : currentState.message))
             : 'DSH 未启动')
-        : currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
-        : currentState.status === 'local' ? '当前已在 DeepSeek Harness 中；本机工作区无需再嵌入，可用左侧「文件」或「连接」。'
-          : currentState.status === 'offline' ? '节点暂时离线，正在自动重连；恢复后会继续载入工作区。'
-          : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
+        : currentState.status === 'loading' ? (currentState.message || '正在连接 DSH…')
+        : currentState.status === 'local' ? '当前已在 DSH 中'
+          : currentState.status === 'offline' ? '设备离线'
+          : currentState.status === 'no-device' ? '请选择设备'
             : currentState.status === 'error' ? currentState.message
               : ''
       const dshRunning = !!(dsh && dsh.running) || dshWebActive
       const dshStarting = dshActionBusy
         || !!(dsh && dsh.installing)
-        || dshWebBusy === 'start' || dshWebBusy === 'install' || !!(dshWeb && dshWeb.installing)
+        || dshWebBusy === 'open' || dshWebBusy === 'start' || dshWebBusy === 'install'
+        || !!(dshWeb && dshWeb.installing)
+        || dshPendingAutoOpenRef.current
         || (dshRunning && ['loading', 'document-loading'].includes(currentState.status))
-      const dshStartingLabel = dshBusy === 'dsh_install' || (dsh && dsh.installing) ? '正在安装 DSH…'
-        : dshBusy === 'dsh_restart' ? '正在重启 DSH…'
-          : dshBusy === 'dsh_install_plugin' ? '正在准备工作区…'
-            : dshRunning ? '正在载入工作区…'
-              : dsh && dsh.installed === false ? '正在安装 DSH…' : '正在启动 DSH…'
+      const dshStartingLabel = dshBusy === 'dsh_install' || (dsh && dsh.installing) ? '正在安装…'
+        : dshBusy === 'dsh_restart' ? '正在重启…'
+          : dshBusy === 'dsh_install_plugin' ? '正在修复…'
+            : dshRunning && !dshWebBusy && !(dshWeb && dshWeb.installing) ? '正在连接…' : '正在启动…'
       const dshStalled = !dshStarting && dshRunning && !dshWebActive
         && (currentState.status === 'error' || dshSurfaceMissing)
       const dshStopped = dshWatch && !!dsh && dsh.running === false
       const dshSurfaceError = dshRelevant || dshStopped
-      const dshDetecting = dshWatch && !dsh && currentState.status === 'error'
+      const dshDetecting = dshWatch && !dsh && !dshWeb && currentState.status === 'error'
         const onNativeGuest = (guest) => {
           nativeGuestRef.current = guest
           bindDshGuestFlowInjection(guest)
           if (!guest || guest.__tetherNativeBound) return
           guest.__tetherNativeBound = true
+          const boundAttempt = nativeGuestAttemptRef.current
+          guest.addEventListener('did-start-navigation', (event) => {
+            if (guest !== nativeGuestRef.current || boundAttempt !== nativeGuestAttemptRef.current) return
+            if (!event || !event.isMainFrame) return
+            const st = surfaceStateRef.current
+            if (!st || st.deviceId !== deviceId || !st.fromWorkbenchOpen) return
+            armNativeGuestTimer(boundAttempt, 20000)
+            setState((prev) => prev.deviceId === deviceId && prev.url === st.url
+              ? { ...prev, status: 'native-document-loading', message: '' } : prev)
+          })
           guest.addEventListener('did-finish-load', async () => {
+            if (guest !== nativeGuestRef.current || boundAttempt !== nativeGuestAttemptRef.current) return
             const state = surfaceStateRef.current
-            const approvedEndpoint = state && (state.localDirect
+            if (!state || state.deviceId !== deviceId || !state.partition || !state.url) return
+            if (state.fromWorkbenchOpen) {
+              if (typeof guest.getURL !== 'function' || !dshWebGuestSameOrigin(state.url, guest.getURL())) return
+              clearNativeGuestTimer()
+              setState((prev) => prev.deviceId === deviceId && prev.url === state.url
+                ? { ...prev, status: 'native-document-loaded', message: '' } : prev)
+              return
+            }
+            const approvedEndpoint = state.localDirect
               ? safeLocalDshSurfaceUrl(state.url)
-              : state.mesh ? safeMeshDshEndpoint(state.url) : safeDshNativeEndpoint(state.url))
+              : state.mesh ? safeMeshDshEndpoint(state.url) : safeDshNativeEndpoint(state.url)
             // mesh 工作台是 SPA：落地页可能带自己的路径与查询串，只校验同源。
-            const guestEndpoint = state && state.localDirect
+            const guestEndpoint = state.localDirect
               ? safeLocalDshNativeUrl(guest.getURL(), state.url)
-              : state && state.mesh
+              : state.mesh
                 ? (dshWebGuestSameOrigin(state.url, guest.getURL()) ? approvedEndpoint : '')
                 : safeDshNativeEndpoint(guest.getURL())
-            if (!state || state.deviceId !== deviceId || !state.partition || !approvedEndpoint
-                || !guestEndpoint || (!state.localDirect && guestEndpoint !== approvedEndpoint)) return
+            if (!approvedEndpoint || !guestEndpoint || (!state.localDirect && guestEndpoint !== approvedEndpoint)) return
             try {
               const hasContent = await guest.executeJavaScript('document.body && (document.body.children.length > 0 || document.body.innerText.trim().length > 0)')
               if (!hasContent) throw new Error('empty')
-              setState((prev) => prev.deviceId === deviceId && prev.url === state.url ? { ...prev, status: 'native-document-loaded' } : prev)
+              clearNativeGuestTimer()
+              setState((prev) => prev.deviceId === deviceId && prev.url === state.url ? { ...prev, status: 'native-document-loaded', message: '' } : prev)
             } catch (_) {
               setState((prev) => prev.deviceId === deviceId && prev.url === state.url
                 ? { ...prev, status: 'native-document-error', message: 'DSH 页面为空或未能挂载，请重新连接。' } : prev)
@@ -47700,12 +47930,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             try { void guest.loadURL(approvedUrl.origin + '/?tether_native=1').catch(() => {}) } catch (_) { /* guest 可能已销毁 */ }
           })
           guest.addEventListener('did-fail-load', (event) => {
-            if (event.isMainFrame && event.errorCode !== -3) setState((prev) => prev.deviceId === deviceId
-              ? { ...prev, status: 'native-document-error', message: 'DSH 页面加载失败，请重新连接。' } : prev)
+            if (guest !== nativeGuestRef.current || boundAttempt !== nativeGuestAttemptRef.current) return
+            if (event.isMainFrame && event.errorCode !== -3) {
+              clearNativeGuestTimer()
+              setState((prev) => prev.deviceId === deviceId
+                ? { ...prev, status: 'native-document-error', message: 'DSH 页面加载失败，请重试。' } : prev)
+            }
           })
           guest.addEventListener('did-get-response-details', (_event, _status, _newUrl, _originalUrl, httpStatus) => {
-            if (Number(httpStatus) >= 400) setState((prev) => prev.deviceId === deviceId
-              ? { ...prev, status: 'native-document-error', message: 'DSH 服务返回 HTTP ' + Number(httpStatus) + '，请重新连接。' } : prev)
+            if (guest !== nativeGuestRef.current || boundAttempt !== nativeGuestAttemptRef.current) return
+            if (Number(httpStatus) >= 400) {
+              clearNativeGuestTimer()
+              setState((prev) => prev.deviceId === deviceId
+                ? { ...prev, status: 'native-document-error', message: 'DSH 服务返回 HTTP ' + Number(httpStatus) + '，请重试。' } : prev)
+            }
           })
           guest.addEventListener('did-navigate-in-page', (event) => {
             if (!event || event.isMainFrame !== true || typeof event.url !== 'string') return
@@ -47717,8 +47955,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               if (actionUrl.origin !== new URL(state.url).origin) return
             } catch (_) { return }
             const params = new URLSearchParams(actionUrl.hash.slice(1))
-            // 回环直连 guest 的设备文件通道：hash 携带白名单请求/分片，宿主同源转发。
-            if (state.localDirect && tetherFsRelayHostReady() && params.get('tether_action') === 'fs') {
+            // 嵌入 guest（回环或 Mesh）的设备文件通道：hash 携带白名单请求/分片，宿主同源转发至固定 deviceId。
+            if (tetherFsRelayHostReady() && params.get('tether_action') === 'fs') {
               fsRelayOnFrame(guest, params)
               if (typeof guest.executeJavaScript === 'function') {
                 void guest.executeJavaScript(
@@ -47745,7 +47983,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               && /^[0-9a-f-]{36}$/i.test(requestId)
             if (validFolderPick) {
               const request = {
-                id: requestId, mode: 'webview', source: null,
+                id: requestId, mode: 'webview', source: null, guest,
+                deviceId: state.deviceId, grantId: state.grantId || '',
                 kind: pickKind === 'file' ? 'file' : 'folder',
                 multiple: pickMultiple === '1'
               }
@@ -47769,13 +48008,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (data.type === 'tether:fs-request') {
             if (event.source !== frame.contentWindow) return
             const surface = surfaceStateRef.current
-            if (!surface || surface.deviceId !== deviceId || !surface.localDirect || !surface.url) return
+            if (!surface || surface.deviceId !== deviceId || !surface.url) return
             let approved = ''
             try { approved = new URL(surface.url).origin } catch (_) { approved = '' }
             if (!approved || event.origin !== approved) return
             void fsRelayPerform(
               (payload) => { try { event.source.postMessage(payload, '*') } catch (_) { /* the frame is gone */ } },
-              { id: data.id, method: data.method, path: data.path, device: data.device, body: data.body }
+              { id: data.id, method: data.method, path: data.path, device: data.device, body: data.body },
+              surface.deviceId
             )
             return
           }
@@ -47784,7 +48024,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const id = String(data.id || '')
           if (!/^[0-9a-f-]{36}$/i.test(id)) return
           const request = {
-            id, mode: 'iframe', source: event.source,
+            id, mode: 'iframe', source: event.source, guest: null,
+            deviceId, grantId: currentState.grantId || '',
             kind: data.kind === 'file' ? 'file' : 'folder',
             multiple: data.multiple === true
           }
@@ -47792,24 +48033,29 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
         window.addEventListener('message', onMessage)
         return () => window.removeEventListener('message', onMessage)
-      }, [currentState.status, currentState.deviceId, deviceId])
+      }, [currentState.status, currentState.deviceId, currentState.grantId, deviceId])
       const dshLoginState = currentState.loginState || 'unknown'
       const dshLoginSource = currentState.loginReason || 'none'
       const nativeSurfaceGuest = ['native-document-loading', 'native-document-loaded', 'native-document-error'].includes(currentState.status)
           && currentState.deviceId === deviceId && host.kind === 'app' ? (
         h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), ...(layered ? {} : { position: 'relative' }) } },
+          currentState.status === 'native-document-loading' && currentState.fromWorkbenchOpen ? h('div', { role: 'status', 'aria-live': 'polite', style: { position: 'absolute', inset: 0, zIndex: 2, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,.86)', color: C.sub, fontSize: 13 } }, '正在连接 DSH…') : null,
           currentState.status === 'native-document-error' ? h('div', { role: 'alert', style: { position: 'absolute', inset: 0, zIndex: 2, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, background: C.bg } },
-            h('div', null, currentState.message || 'DSH 页面无法连接。'), btn('重新连接', retryDocument, { primary: true })) : null,
-          h('webview', { key: currentState.grantId, partition: currentState.partition, src: currentState.url, ref: onNativeGuest,
+            h('div', null, currentState.message || 'DSH 页面无法连接。'), btn('重试', currentState.fromWorkbenchOpen ? reloadNativeGuest : retryDocument, { primary: true })) : null,
+          h('webview', { key: currentState.grantId + ':' + nativeGuestAttempt, partition: currentState.partition, src: currentState.url, ref: onNativeGuest,
             style: { width: '100%', height: '100%', border: 0, display: 'flex' } }),
-          h('div', {
-            role: 'status', 'aria-live': 'polite',
-            style: { position: 'absolute', top: 8, left: 8, zIndex: 3, maxWidth: 460, padding: '5px 8px',
-              borderRadius: 6, background: 'rgba(255,255,255,.86)', color: C.sub, fontSize: 11, lineHeight: '15px',
-              pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis' }
-          }, surfaceIdentityText(currentState.identity, dshLoginState, dshLoginSource)),
+          currentState.fromWorkbenchOpen ? h('div', { style: { position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, zIndex: 3 } },
+            h('button', {
+              type: 'button', className: 'tether-hover', onClick: reloadNativeGuest, title: '重新加载',
+              style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
+            }, '重新加载'),
+            h('button', {
+              type: 'button', className: 'tether-hover', onClick: closeWorkbenchDsh, title: '关闭',
+              style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
+            }, '关闭')
+          ) : null,
           folderPick ? h(TetherFolderPickDialog, {
-            key: folderPick.id, React, C, Glyph, api, post, device: deviceId,
+            key: folderPick.id, React, C, Glyph, api, post, device: folderPick.deviceId || deviceId,
             kind: folderPick.kind === 'file' ? 'file' : 'folder',
             multiple: folderPick.multiple === true,
             onDone: closeFolderPick
@@ -47822,122 +48068,17 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const timer = setTimeout(() => setDshStalledReady(true), 12000)
         return () => clearTimeout(timer)
       }, [dshStalled, deviceId])
-      const dshWebLoginState = dshWeb && dshWeb.loginState || 'unknown'
-      const dshWebLoginSource = dshWeb && dshWeb.loginReason || 'none'
-      const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.endpoint || '') : ''
-      const dshWebOpenable = host.kind === 'app' && !!dshWebUrl && !!(dshWeb && dshWeb.partition)
-      const dshWebLoadAttempt = dshWebLoad.attempt
-      const isCurrentDshWebGuest = (guest, attempt) => !!(guest && guest === dshWebRef.current
-        && dshWebLoadAttemptRef.current === attempt)
-      const finishDshWebLoad = (attempt, error = '') => {
-        if (dshWebLoadAttemptRef.current !== attempt) return
-        clearDshWebLoadTimer()
-        setDshWebLoad({ status: error ? 'error' : 'loaded', attempt, error })
-      }
-      const inspectDshWebLogin = async () => {
-        const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
-        if (!dshWeb || !dshWebUrl || !dshWeb.partition) return
-        let result = { state: 'unknown', reason: 'no_account_source' }
-        if (host && host.workbench && typeof host.workbench.accountStatus === 'function') {
-          try {
-            const remote = await host.workbench.accountStatus(deviceId)
-            if (remote && ['logged_in', 'logged_out', 'unknown'].includes(remote.state)) {
-              result = { state: remote.state, reason: remote.reason || 'account_op' }
-            }
-          } catch (_) { /* unknown, not logged out */ }
-        }
-        if (result.state === 'unknown' && bridge && typeof bridge.inspectSurfaceLogin === 'function') {
-          try {
-            const local = await bridge.inspectSurfaceLogin({
-              partition: dshWeb.partition, origin: new URL(dshWebUrl).origin, identity: dshWeb.identity || {}
-            })
-            if (local && local.ok && ['logged_in', 'logged_out'].includes(local.state)) {
-              result = { state: local.state, reason: 'partition_cookie' }
-            }
-          } catch (_) { /* retain unknown */ }
-        }
-        if (!['logged_in', 'logged_out'].includes(result.state)) return
-        if ((dshWeb.loginState || 'unknown') === result.state) return
-        const reloadAfterLogin = result.state === 'logged_in'
-        setDshWeb((current) => ({ ...(current || {}), loginState: result.state, loginReason: result.reason }))
-        if (reloadAfterLogin) beginDshWebLoad()
-      }
-      React.useEffect(() => {
-        if (!dshWebOpen || !dshWebUrl || !dshWeb || !dshWeb.partition) return undefined
-        void inspectDshWebLogin()
-        const timer = setInterval(() => void inspectDshWebLogin(), 5000)
-        return () => clearInterval(timer)
-      }, [dshWebOpen, dshWebUrl, dshWeb && dshWeb.partition, dshWeb && dshWeb.identity && dshWeb.identity.pid])
-      React.useEffect(() => {
-        const guest = dshWebRef.current
-        if (!dshWebOpen || host.kind !== 'app' || !guest || typeof guest.addEventListener !== 'function') return undefined
-        const attempt = dshWebLoadAttempt
-        const onStart = (event) => {
-          if (!isCurrentDshWebGuest(guest, attempt) || !event.isMainFrame) return
-          clearDshWebLoadTimer()
-          dshWebLoadTimerRef.current = setTimeout(() => {
-            if (dshWebLoadAttemptRef.current !== attempt) return
-            setDshWebLoad({ status: 'error', attempt, error: 'DSH Web 连接超时，请检查服务后重试。' })
-          }, 20000)
-          setDshWebLoad({ status: 'loading', attempt, error: '' })
-        }
-        const onFinish = () => {
-          if (!isCurrentDshWebGuest(guest, attempt) || typeof guest.getURL !== 'function'
-              || !dshWebGuestSameOrigin(dshWebUrl, guest.getURL())) return
-          finishDshWebLoad(attempt)
-        }
-        const onFail = (event) => {
-          if (!isCurrentDshWebGuest(guest, attempt) || !event.isMainFrame || event.errorCode === -3) return
-          finishDshWebLoad(attempt, 'DSH Web 加载失败，请检查服务后重试。')
-        }
-        guest.addEventListener('did-start-navigation', onStart)
-        guest.addEventListener('did-finish-load', onFinish)
-        guest.addEventListener('did-fail-load', onFail)
-        return () => {
-          guest.removeEventListener('did-start-navigation', onStart)
-          guest.removeEventListener('did-finish-load', onFinish)
-          guest.removeEventListener('did-fail-load', onFail)
-        }
-      }, [dshWebOpen, dshWebGuestReady, dshWebLoadAttempt, dshWebUrl, host.kind])
-      if (dshWebOpen && dshWebUrl && host.kind === 'app') {
-        const dshWebLoadOverlay = dshWebLoad.status === 'loading'
-          ? h('div', { role: 'status', 'aria-live': 'polite', style: { position: 'absolute', inset: 0, zIndex: 1,
-            display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,.84)', color: C.sub, fontSize: 13 } },
-          '正在连接 DSH Web…')
-          : dshWebLoad.status === 'error'
-            ? h('div', { style: { position: 'absolute', inset: 0, zIndex: 1, display: 'grid', placeItems: 'center',
-              alignContent: 'center', gap: 10, padding: 24, background: 'rgba(255,255,255,.94)', color: C.sub, textAlign: 'center' } },
-              h('div', { role: 'alert', style: { fontSize: 13 } }, dshWebLoad.error || 'DSH Web 暂时无法连接。'),
-              btn('重试', beginDshWebLoad, { primary: true }))
-            : null
-        return h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative', width: '100%', height: '100%', flex: '1 1 auto' } },
-          h('webview', {
-            key: deviceId + ':' + dshWebLoadAttempt,
-            partition: dshWeb.partition,
-            ref: dshWebRefCallback.current,
-            src: dshWebUrl,
-            style: { display: 'flex', flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
-          }),
-          dshWebLoadOverlay,
-          h('div', {
-            role: 'status', 'aria-live': 'polite',
-            style: { position: 'absolute', top: 10, left: 10, zIndex: 2, maxWidth: 460, padding: '5px 8px',
-              borderRadius: 6, background: 'rgba(255,255,255,.86)', color: C.sub, fontSize: 11, lineHeight: '15px',
-              pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis' }
-          }, surfaceIdentityText(dshWeb.identity, dshWebLoginState, dshWebLoginSource)),
-          h('div', { style: { position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, zIndex: 2 } },
-            h('button', {
-              type: 'button', className: 'tether-hover',
-              onClick: beginDshWebLoad,
-              style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
-            }, '重新加载'),
-            h('button', {
-              type: 'button', className: 'tether-hover', onClick: closeDshWeb,
-              style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
-            }, '关闭')
-          )
-        )
-      }
+      const activeDshError = dshActionError || dshError
+      const dshIconBadge = h('div', {
+        style: { width: 52, height: 52, borderRadius: 14, background: C.soft, color: C.ink,
+          display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(16,24,40,.06)' }
+      }, h(Glyph, { name: 'chat', size: 24 }))
+      const dshInstallOnly = !!(dsh && dsh.installed === false && dshInstallSupported
+        && !(dshWeb && ['ready', 'stopped', 'starting'].includes(dshWeb.state)))
+      const dshCanOfferStart = isLocalTargetDevice
+        || !!(dsh && dsh.installed !== false)
+        || !!(dshWebEnabled && ['ready', 'stopped', 'starting'].includes(dshWeb.state))
+        || dshInstallOnly
       return nativeSurfaceGuest || h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible, layered) },
         ['document-loading', 'document-loaded'].includes(currentState.status) && currentState.deviceId === deviceId && online && !dshStopped
           ? h('div', { style: { position: 'relative', display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0 } },
@@ -47958,18 +48099,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
                   ? { ...prev, status: 'document-loaded' } : prev)
               },
               onError: handleDocumentFailure,
-              title: '目标设备的 DSH 原生工作区',
+              title: 'DSH',
               referrerPolicy: 'no-referrer',
               style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
             }),
-            h('div', {
-              role: 'status', 'aria-live': 'polite',
-              style: { position: 'absolute', top: 8, left: 8, zIndex: 3, maxWidth: 460, padding: '5px 8px',
-                borderRadius: 6, background: 'rgba(255,255,255,.86)', color: C.sub, fontSize: 11, lineHeight: '15px',
-                pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis' }
-            }, surfaceIdentityText(currentState.identity, dshLoginState, dshLoginSource)),
             folderPick ? h(TetherFolderPickDialog, {
-              key: folderPick.id, React, C, Glyph, api, post, device: deviceId,
+              key: folderPick.id, React, C, Glyph, api, post, device: folderPick.deviceId || deviceId,
               kind: folderPick.kind === 'file' ? 'file' : 'folder',
               multiple: folderPick.multiple === true,
               onDone: closeFolderPick
@@ -47977,86 +48112,65 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             currentState.status === 'document-loading' ? h('div', {
               role: 'status', 'aria-live': 'polite',
               style: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,.92)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.12)', pointerEvents: 'none' }
-            }, '目标工作区页面正在加载…') : null,
+            }, '正在加载…') : null,
             slow && currentState.status === 'document-loading' ? h('div', {
               role: 'status',
               style: { position: 'absolute', bottom: 44, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,.95)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.14)' }
             }, '加载较慢', h('button', {
               type: 'button', onClick: retryDocument,
               style: { border: 0, background: 'transparent', color: C.blue, fontSize: 12, cursor: 'pointer', padding: 0 }
-            }, '重新加载')) : null,
+            }, '重试')) : null,
             styleBroken ? h('div', {
               role: 'alert',
               style: { position: 'absolute', inset: 0, zIndex: 7, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, padding: 24, background: C.bg, textAlign: 'center' }
             },
-              h('div', { style: { fontSize: 14, color: C.ink } }, 'DSH 界面样式与 Tether 版本不匹配'),
-              h('div', { style: { maxWidth: 460, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
-                '已自动尝试安装/修复 Tether 插件。若仍无法恢复，请等待 Tether 适配当前 DSH 版本。'),
+              dshIconBadge,
+              h('div', { style: { fontSize: 14, color: C.ink } }, 'DSH 样式异常'),
               btn('重试', retryDocument, { primary: true })
             ) : null,
             currentState.status === 'document-loaded' ? h('button', {
-              type: 'button', onClick: retryDocument, title: '重新加载目标工作区', 'aria-label': '重新加载目标工作区',
+              type: 'button', onClick: retryDocument, title: '重新加载', 'aria-label': '重新加载',
               style: { position: 'absolute', right: 10, bottom: 10, width: 26, height: 26, border: 0, borderRadius: 999, background: 'rgba(255,255,255,.9)', color: C.sub, fontSize: 14, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
             }, '↻') : null
           )
           : dshStarting
-            ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
-              h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
-              h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, dshStartingLabel),
+            ? h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+              dshIconBadge,
+              h('div', { role: 'status', 'aria-live': 'polite', style: { display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.sub } },
+                h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 15 })),
+                dshStartingLabel),
               dsh && dsh.installing ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, (Number(dsh.progress) || 0) + '%') : null)
-            : dshError && currentState.status === 'error'
-              ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
-                h('div', { role: 'status' }, dshError), btn('重新加载', () => { setDshError(''); retryDocument() }, { primary: true }))
-            : dshRelevant && dshRunning && !dshWebOpenable ? (dshStalled
-              ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
-                h('div', { style: { fontSize: 14, color: C.ink } }, '工作区还没有准备好'),
-                h('div', { style: { maxWidth: 460, fontSize: 12, color: C.mute, lineHeight: 1.6 } }, 'DSH 已在运行，但 Tether 工作区组件暂时没有响应。'),
+            : dshRelevant && dshRunning && !dshWebActive && dshStalled
+              ? h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+                dshIconBadge,
+                h('div', { style: { fontSize: 14, fontWeight: 600, color: C.ink } }, 'DSH 未响应'),
                 h('div', { style: { display: 'flex', gap: 8 } },
-                  btn(dshBusy === 'dsh_install_plugin' ? '修复中…' : '修复工作区', () => { dshAutoRepairRef.current = true; runDsh('dsh_install_plugin') }, { primary: true, disabled: !!dshBusy }),
-                  btn(dshBusy === 'dsh_restart' ? '重启中…' : '重启 DSH', () => runDsh('dsh_restart'), { disabled: !!dshBusy })))
-              : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
-                h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
-                h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, '正在载入工作区…')))
-              : (dshDetecting || (dshRelevant && !dsh)) && !dshWebOpenable
-                ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
-                  h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
-                  h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, '正在检测 DSH…'))
-                : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+                  btn(dshBusy === 'dsh_install_plugin' ? '修复中…' : '修复', () => { dshAutoRepairRef.current = true; runDsh('dsh_install_plugin') }, { primary: true, disabled: !!dshBusy }),
+                  btn(dshBusy === 'dsh_restart' ? '重启中…' : '重启', () => runDsh('dsh_restart'), { disabled: !!dshBusy })))
+              : dshDetecting
+                ? h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+                  h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 18 })),
+                  h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 12.5, color: C.mute } }, '检测中…'))
+                : h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+                  dshIconBadge,
                   dshSurfaceError
                     ? h(React.Fragment, null,
-                      h('div', { style: { fontSize: 14, color: C.ink } }, dshWebActive
-                        ? (dshWeb && dshWeb.running ? 'DSH Web 已就绪' : 'DSH Web 未启动')
-                        : dsh && dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
-                      dsh && dsh.version ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
-                      dshWebActive
-                        ? (host.kind === 'app'
-                          ? btn(dshWebOpenable ? '打开工作区' : (dshWebBusy === 'open' || (dshWeb && dshWeb.installing) ? '正在启动…' : '打开 DSH Web'), () => {
-                            if (dshWebOpenable) {
-                              beginDshWebLoad()
-                              setDshWebOpen(true)
-                            } else void runDshWeb()
-                          }, { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) })
-                          : btn('请在桌面 APP 内打开', () => {}, { disabled: true }))
-                        : dshWebEnabled && ['missing', 'stopped'].includes(dshWeb.state)
+                      h('div', { style: { fontSize: 15, fontWeight: 600, color: C.ink } },
+                        dshInstallOnly ? 'DSH 未安装' : 'DSH'),
+                      activeDshError
+                        ? h('div', { role: 'alert', style: { maxWidth: 420, fontSize: 12, color: C.red } }, activeDshError)
+                        : null,
+                      dshCanOfferStart
+                        ? btn(activeDshError ? '重试' : (dshInstallOnly ? '安装 DSH' : '启动 DSH'), startUnifiedDsh, { primary: true, disabled: !!dshBusy || !!dshWebBusy })
+                        : (dshWeb && dshWeb.state === 'failed'
                           ? h(React.Fragment, null,
-                            dshWeb.reason ? h('div', { role: 'status', style: { maxWidth: 480, fontSize: 12, color: C.mute, lineHeight: 1.6 } }, dshWeb.reason) : null,
-                            btn(dshWebBusy ? '正在启动…' : '启动 DSH Web', () => void runDshWeb(), { primary: true, disabled: !!dshWebBusy }))
-                          : dshWeb && dshWeb.state === 'failed'
-                            ? h('div', { role: 'alert', style: { maxWidth: 480, fontSize: 12, color: C.sub, lineHeight: 1.6 } }, dshWeb.reason || 'DSH Web 服务不可用。')
-                        : dsh && dsh.installed === false && !dshInstallSupported
-                          ? h(React.Fragment, null,
-                            h('div', { style: { maxWidth: 480, fontSize: 12, color: C.sub, lineHeight: 1.6 } }, '当前目标系统没有官方 DSH 桌面版，可以安装 DSH Web 作为远程工作区。'),
-                            dshWebEnabled
-                              ? btn(dshWebBusy || (dshWeb && dshWeb.installing) ? '启动中…' : '启动 DSH Web', () => void runDshWeb(), { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) })
-                              : null)
-                          : dsh
-                            ? btn(dsh.installed === false ? '安装 DSH' : '启动 DSH', () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'), { primary: true })
-                            : null)
-                    : h('div', null, message),
-                  dshError ? h('div', { role: 'status', style: { maxWidth: 460, fontSize: 12, color: C.mute } }, dshError) : null,
-                  dshWeb && dshWeb.error ? h('div', { role: 'alert', style: { maxWidth: 460, fontSize: 12, color: C.mute } }, dshWeb.error) : null,
-                  !dshSurfaceError && currentState.status !== 'loading' && currentState.status !== 'local'
-                    ? btn('重新加载', retryDocument) : null)
+                            h('div', { role: 'alert', style: { maxWidth: 420, fontSize: 12, color: C.sub } }, dshWeb.reason || 'DSH 不可用'),
+                            btn('重试', startUnifiedDsh, { primary: true }))
+                          : null))
+                    : h(React.Fragment, null,
+                      h('div', { style: { fontSize: 13, color: C.sub } }, message),
+                      currentState.status !== 'loading' && currentState.status !== 'local'
+                        ? btn('重试', retryDocument, { primary: true }) : null))
       )
     }
 
@@ -48292,7 +48406,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const projectsDeviceRef = React.useRef('')
       projectsRef.current = projects
       projectRef.current = project
-      const [view, setView] = usePersisted('tether.ui.view.v1', 'chat')
+      const [view, setView] = host && host.kind === 'app'
+        ? React.useState('chat')
+        : usePersisted('tether.ui.view.v1', 'chat')
       const [agentsMounted, setAgentsMounted] = React.useState(() => view === 'agents')
       React.useEffect(() => { if (view === 'agents') setAgentsMounted(true) }, [view])
       const [terminalOpen, setTerminalOpen] = React.useState(false)
@@ -48300,10 +48416,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       React.useEffect(() => { setTerminalCwd('') }, [deviceId])
       const [terminalHeight, setTerminalHeight] = React.useState(220)
       const [terminalKey, setTerminalKey] = React.useState(0)
-      const [storedActivePanel, setActivePanel] = usePersisted('tether.ui.panel.v2', 'workspaces')
-      const activePanel = storedActivePanel === 'herdr' ? 'agents' : storedActivePanel
+      const [storedActivePanel, setActivePanel] = host && host.kind === 'app'
+        ? React.useState('workspaces')
+        : usePersisted('tether.ui.panel.v2', 'workspaces')
+      const activePanel = host && host.kind === 'app'
+        ? storedActivePanel
+        : (storedActivePanel === 'herdr' ? 'agents' : storedActivePanel)
       React.useEffect(() => {
-        if (storedActivePanel === 'herdr') setActivePanel('agents')
+        if (!(host && host.kind === 'app') && storedActivePanel === 'herdr') setActivePanel('agents')
       }, [storedActivePanel])
       const [sidebarCollapsed, setSidebarCollapsed] = usePersisted('tether.ui.panelCollapsed', false)
       const [sidebarWidth, setSidebarWidth] = usePersisted('tether.ui.panelWidth.v2', UI.defaultSide)
@@ -48404,6 +48524,56 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [search, setSearch] = React.useState('')
       const [contextMenu, setContextMenu] = React.useState(null)
       const [deviceMenu, setDeviceMenu] = React.useState(null)
+      const [topbarDeviceMenuOpen, setTopbarDeviceMenuOpen] = React.useState(false)
+      const [remoteDesktopView, setRemoteDesktopView] = React.useState(null)
+      const [remoteDesktopBusy, setRemoteDesktopBusy] = React.useState(false)
+      const openRemoteDesktop = async (targetId) => {
+        if (!targetId || remoteDesktopBusy || !host || host.kind !== 'app' || !host.workbench || !host.workbench.open) return
+        setTopbarDeviceMenuOpen(false)
+        setDeviceMenu(null)
+        setRemoteDesktopBusy(true)
+        try {
+          const service = await host.workbench.open(targetId, 'desktop')
+          if (!service || service.targetId !== targetId || service.serviceId !== 'desktop'
+              || !service.endpoint || !service.partition) {
+            throw new Error('主进程没有返回有效的远程桌面会话。')
+          }
+          setRemoteDesktopView(service)
+        } catch (error) {
+          fail(error)
+        } finally {
+          setRemoteDesktopBusy(false)
+        }
+      }
+      const closeRemoteDesktop = async () => {
+        const current = remoteDesktopView
+        if (!current || !host || !host.workbench || !host.workbench.close) {
+          setRemoteDesktopView(null)
+          return
+        }
+        try {
+          await host.workbench.close(current.targetId, 'desktop', current.grantId)
+          setRemoteDesktopView(null)
+        } catch (error) {
+          fail(error)
+        }
+      }
+      React.useEffect(() => {
+        if (!remoteDesktopView || !host || !host.workbench || !host.workbench.view) return undefined
+        void host.workbench.view(remoteDesktopView.targetId, 'desktop', true).catch(() => {})
+        return undefined
+      }, [remoteDesktopView])
+      React.useEffect(() => {
+        if (!topbarDeviceMenuOpen) return undefined
+        const close = () => setTopbarDeviceMenuOpen(false)
+        const onKey = (event) => { if (event.key === 'Escape') close() }
+        window.addEventListener('pointerdown', close)
+        window.addEventListener('keydown', onKey)
+        return () => {
+          window.removeEventListener('pointerdown', close)
+          window.removeEventListener('keydown', onKey)
+        }
+      }, [topbarDeviceMenuOpen])
       const [previewBusy, setPreviewBusy] = React.useState(false)
       const [previewError, setPreviewError] = React.useState('')
       const [editMode, setEditMode] = React.useState(false)
@@ -51647,7 +51817,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           onPointerDown: (event) => event.stopPropagation(),
           style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 150)), width: 178, zIndex: 120, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
         },
-          menuItem('monitor', '打开原生工作区', () => { const item = deviceMenu.device; setDeviceMenu(null); openDevice(item) }),
+          menuItem('monitor', '打开工作区', () => { const item = deviceMenu.device; setDeviceMenu(null); openDevice(item) }),
+          host && host.kind === 'app' && host.workbench && deviceMenu.device && deviceMenu.device.online
+            ? menuItem('monitor', '远程桌面', () => { void openRemoteDesktop(deviceMenu.device.device_id) })
+            : null,
           menuItem('pencil', '重命名', () => renameDevice(deviceMenu.device)),
           menuItem('refresh', '重启 Node', () => {
             const item = deviceMenu.device
@@ -51889,12 +52062,41 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           h('span', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
             h(TetherMark, { size: 22 }),
             h('strong', { style: { fontSize: 15 } }, 'Tether')),
-          device ? h(DeviceSwitcher, {
-            devices: (deviceSnapshot && deviceSnapshot.devices) || [],
-            value: deviceId,
-            onChange: selectDevice,
-            onOpenNetwork: () => selectPanel('network')
-          }) : h('span', { style: { color: C.mute } }, deviceSnapshot
+          device ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, position: 'relative', WebkitAppRegion: 'no-drag' } },
+            h(DeviceSwitcher, {
+              devices: (deviceSnapshot && deviceSnapshot.devices) || [],
+              value: deviceId,
+              onChange: selectDevice,
+              onOpenNetwork: () => selectPanel('network')
+            }),
+            host && host.kind === 'app' && host.workbench && device.online ? h('button', {
+              type: 'button',
+              title: '设备更多操作',
+              'aria-label': '设备更多操作',
+              'aria-haspopup': 'menu',
+              'aria-expanded': topbarDeviceMenuOpen,
+              onPointerDown: (event) => event.stopPropagation(),
+              onClick: () => setTopbarDeviceMenuOpen((open) => !open),
+              className: 'tether-hover tether-press',
+              style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 7,
+                background: topbarDeviceMenuOpen ? C.active : 'transparent', color: C.sub, fontSize: 15, cursor: 'pointer' }
+            }, '⋯') : null,
+            topbarDeviceMenuOpen && host && host.kind === 'app' && host.workbench && device.online ? h('div', {
+              role: 'menu',
+              onPointerDown: (event) => event.stopPropagation(),
+              style: { position: 'absolute', top: 32, left: 0, minWidth: 160, zIndex: 90,
+                background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+            },
+              h('button', {
+                type: 'button', role: 'menuitem', disabled: remoteDesktopBusy,
+                onClick: () => { void openRemoteDesktop(device.device_id) },
+                className: 'tether-hover',
+                style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: 30, padding: '0 8px',
+                  border: 0, borderRadius: 6, background: 'transparent', color: C.ink, fontSize: 12.5,
+                  textAlign: 'left', cursor: remoteDesktopBusy ? 'default' : 'pointer', opacity: remoteDesktopBusy ? 0.6 : 1 }
+              }, h(Glyph, { name: 'monitor', size: 14 }), remoteDesktopBusy ? '正在连接…' : '远程桌面')
+            ) : null
+          ) : h('span', { style: { color: C.mute } }, deviceSnapshot
             ? '暂无设备'
             : (stateLoading ? '正在读取设备状态…' : '设备列表暂不可用')),
           device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
@@ -52051,7 +52253,28 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 onDeviceChange: selectDevice,
                 onOpenWorkbench: () => { setView('chat'); setActivePanel('workspaces'); setSidebarCollapsed(true) },
                 onError: fail
-              })) : null
+              })) : null,
+            remoteDesktopView ? h('div', { style: { position: 'absolute', inset: 0, zIndex: 18, display: 'flex', flexDirection: 'column', background: C.bg } },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, height: 38, flex: '0 0 38px', padding: '0 12px', borderBottom: '1px solid ' + C.line, background: C.panel } },
+                h(Glyph, { name: 'monitor', size: 15 }),
+                h('strong', { style: { fontSize: 12.5 } }, '远程桌面 · ' + (((deviceSnapshot && deviceSnapshot.devices) || []).find((d) => d.device_id === remoteDesktopView.targetId)?.name || remoteDesktopView.targetId)),
+                h('span', { role: 'status', style: { marginLeft: 'auto', color: C.sub, fontSize: 11.5 } },
+                  remoteDesktopView.viewOnly ? '只读' + (remoteDesktopView.viewOnlyReason ? ' · ' + remoteDesktopView.viewOnlyReason : '')
+                    : remoteDesktopView.consent === 'none' ? '已授权' : '等待目标确认',
+                  Number.isFinite(remoteDesktopView.nativeSessionExpiresAt) ? ' · 至 ' + new Date(remoteDesktopView.nativeSessionExpiresAt).toLocaleTimeString() : ''),
+                h('button', {
+                  type: 'button', onClick: () => { void closeRemoteDesktop() },
+                  className: 'tether-hover',
+                  style: { height: 26, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 6, background: C.bg, color: C.ink, fontSize: 11.5, cursor: 'pointer' }
+                }, '断开并撤销授权')
+              ),
+              h('webview', {
+                key: 'remote-desktop:' + remoteDesktopView.grantId,
+                src: remoteDesktopView.endpoint,
+                partition: remoteDesktopView.partition,
+                style: { flex: '1 1 auto', width: '100%', minHeight: 0, border: 0, background: '#000' }
+              })
+            ) : null
         ),
         ),
         relayDialog && canManageRelay ? h(SftpRelayDialog, {
@@ -52430,28 +52653,183 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             }
             } catch (_) { /* attachments are optional in an embedded surface */ }
             // tether-host-directory-flow v2
-            // tether_native=1 时，DSH 的目录/工作区选择动作整体交给 Tether 宿主资源管理器：
+            // tether_native=1 或宿主显式嵌入模式时，DSH 的目录/工作区与聊天文件附件选择整体交给 Tether 宿主资源管理器：
             // 1) 两个 directoryFlow 槽位保留无渲染 occupant（侧栏“+”自动 flow、快捷键、错误重试），
             //    升起 open 即向宿主发 pick，结果经 owner 的 onPicked 回填（createWorkspace→startSession）。
             // 2) conversation.hero.workspace 槽位直接换 occupant：hero 工作区 chip/“创建项目”不再弹
             //    DSH 自己的工作区列表 Menu，open 升起即发 pick，选中后 uiWorkspace.workspaces.create
             //    回填并 onPick 导航——弹窗外壳只有宿主资源管理器一个。
             // 3) uiWorkspace.pickDirectory 兜底改道宿主：即使原生 flow occupant 意外渲染，也不弹 OS 对话框。
+            // 4) 聊天输入框“+ → 文件”（commandUi 'file' 及隐藏 <input type="file">）拦截并改道宿主资源管理器：
+            //    打开 TetherFolderPickDialog 选择目标设备文件，分片读取真实字节构造 File 交回 DSH 原生 intakeFiles，
+            //    同时移除重复的 'tether-target-files' 菜单项，确保绝不弹出操作电脑的 OS Explorer。
             // 请求经 webview hash / iframe postMessage 发给 Tether 宿主（与 Codeg 附件选择同一桥协议），
-            // 宿主弹 TetherFolderPickDialog 并回传路径。桌面直连 DSH（无 tether_native）不注册，原样保留。
+            // 宿主弹 TetherFolderPickDialog 并回传路径。桌面直连 DSH（无 tether_native 且非嵌入宿主）不注册，原样保留。
             try {
-              if (new URL(window.location.href).searchParams.has('tether_native')) {
-                // 本机直连快路：DSH 页自身就在 127.0.0.1/localhost，冻结插件把回环页误当成
-                // 网关同源，把设备文件请求发到 <本页 origin>/tether-device-fs/…，DSH 的 404
-                // 被映射成“目标电脑的 Tether Node 版本过旧”。回环页一律改走本机节点通道：
-                // APP 18892 的本地设备代理 /api/devices/<id>/fs/*（与页面内插件的 baseList 同路）；
-                // 非回环网关页保持原 origin 路径（surface cookie 只在该 origin 生效）。
+              const tetherEmbeddedSurface = (() => {
+                try {
+                  if (window.__tetherEmbeddedHost === true) return true
+                  if (new URL(window.location.href).searchParams.has('tether_native')) return true
+                } catch (_) { /* ignore */ }
+                return false
+              })()
+              if (tetherEmbeddedSurface) {
+                // 本机直连与 Mesh 嵌入页设备文件通道：通过宿主桥（webview hash / iframe postMessage）
+                // 由宿主在 APP 同源完成 /api/devices/<pinned>/fs/* 并回传；Hub 网关页保留原同源 /tether-device-fs/。
                 const tetherLoopbackPage = (() => {
                   try {
                     const host = new URL(window.location.href).hostname
                     return host === '127.0.0.1' || host === 'localhost'
                   } catch (_) { return false }
                 })()
+                const tetherFsMode = () => {
+                  try { if (window.parent && window.parent !== window) return 'iframe' } catch (_) { return 'iframe' }
+                  try { if (window.__tetherEmbeddedHost === true || /Electron\//.test(navigator.userAgent || '')) return 'hash' } catch (_) { /* user agent is advisory */ }
+                  return ''
+                }
+                const tetherFsUuid = () => {
+                  let id = ''
+                  try { id = crypto.randomUUID() } catch (_) { /* insecure context fallback below */ }
+                  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+                    id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                      const r = Math.random() * 16 | 0
+                      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+                    })
+                  }
+                  return id
+                }
+                const tetherFsBase64Url = (text) => {
+                  const bytes = new TextEncoder().encode(String(text || ''))
+                  let binary = ''
+                  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+                    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+                  }
+                  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+                }
+                const tetherFsChunkChars = 262144
+                const tetherFsPending = new Map()
+                let tetherFsListening = false
+                const onTetherFsMessage = (event) => {
+                  const data = event && event.data
+                  if (!data || typeof data !== 'object') return
+                  if (data.type !== 'tether:fs-chunk' && data.type !== 'tether:fs-result') return
+                  const id = String(data.id || '')
+                  const entry = tetherFsPending.get(id)
+                  if (!entry) return
+                  if (data.type === 'tether:fs-chunk') {
+                    if (entry.ack) entry.ack(Number(data.seq))
+                    return
+                  }
+                  tetherFsPending.delete(id)
+                  clearTimeout(entry.timer)
+                  if (entry.removeAbort) entry.removeAbort()
+                  if (data.ok === true) {
+                    entry.resolve({ status: Number(data.status) || 200, data: data.data === undefined ? null : data.data })
+                    return
+                  }
+                  const error = new Error(String(data.message || ('HTTP ' + (Number(data.status) || 0))))
+                  error.status = Number(data.status) || 0
+                  error.code = typeof data.code === 'string' ? data.code : ''
+                  entry.reject(error)
+                }
+                // hash 通道同一时刻只允许一段在途：同步连写 hash 会被浏览器合并成一次导航，
+                // 拿两个并发请求（getRoots 的 drives+workspaces）就会丢一条。整段发送串行，
+                // 宿主逐片回执后才发下一条，回包按 request_id 各归各。
+                let tetherFsSendQueue = Promise.resolve()
+                const tetherFsRelay = (request, signal) => {
+                  const mode = tetherFsMode()
+                  if (!mode) return Promise.reject(new Error('当前页面没有宿主文件通道'))
+                  if (!tetherFsListening) {
+                    tetherFsListening = true
+                    window.addEventListener('message', onTetherFsMessage)
+                  }
+                  const id = tetherFsUuid()
+                  let settle = null
+                  const result = new Promise((resolve, reject) => { settle = { resolve, reject } })
+                  const entry = { resolve: settle.resolve, reject: settle.reject, timer: null, ack: null, removeAbort: null }
+                  const abortError = () => new DOMException('The operation was aborted', 'AbortError')
+                  const drop = () => {
+                    if (tetherFsPending.get(id) !== entry) return false
+                    tetherFsPending.delete(id)
+                    clearTimeout(entry.timer)
+                    return true
+                  }
+                  const failRequest = (error) => {
+                    if (!drop()) return
+                    entry.reject(error)
+                  }
+                  tetherFsPending.set(id, entry)
+                  entry.timer = setTimeout(() => {
+                    const error = new Error('宿主文件通道响应超时')
+                    error.status = 0
+                    failRequest(error)
+                  }, 120000)
+                  if (signal) {
+                    const onAbort = () => {
+                      if (entry.ack) entry.ack(-1)
+                      failRequest(abortError())
+                    }
+                    if (signal.aborted) { onAbort(); return result }
+                    try {
+                      signal.addEventListener('abort', onAbort, { once: true })
+                      entry.removeAbort = () => signal.removeEventListener('abort', onAbort)
+                    } catch (_) { /* an exotic signal simply skips cancellation */ }
+                  }
+                  if (mode === 'iframe') {
+                    try {
+                      window.parent.postMessage({ type: 'tether:fs-request', id, method: request.method,
+                        path: request.path, query: request.query || '', device: request.device || '',
+                        body: request.body === undefined ? null : request.body }, '*')
+                    } catch (_) {
+                      failRequest(new Error('宿主文件通道不可用'))
+                    }
+                    return result
+                  }
+                  const chunks = []
+                  if (typeof request.body === 'string' && request.body) {
+                    const encoded = tetherFsBase64Url(request.body)
+                    for (let offset = 0; offset < encoded.length; offset += tetherFsChunkChars) {
+                      chunks.push(encoded.slice(offset, offset + tetherFsChunkChars))
+                    }
+                  }
+                  const sendChunk = (seq) => new Promise((ackDone, ackFail) => {
+                    const timer = setTimeout(() => {
+                      if (!entry.ack) return
+                      entry.ack = null
+                      ackFail(new Error('宿主文件通道响应超时'))
+                    }, 20000)
+                    entry.ack = (got) => {
+                      if (got !== seq && got !== -1) return
+                      clearTimeout(timer)
+                      entry.ack = null
+                      if (got === -1) ackFail(abortError())
+                      else ackDone()
+                    }
+                    const params = new URLSearchParams({
+                      tether_action: 'fs', request_id: id, fs_device: request.device || '',
+                      fs_method: request.method, fs_path: request.path,
+                      fs_seq: String(seq), fs_total: String(chunks.length)
+                    })
+                    if (request.query) params.set('fs_query', request.query)
+                    if (chunks[seq]) params.set('fs_chunk', chunks[seq])
+                    window.location.hash = params.toString()
+                  })
+                  const sendAll = async () => {
+                    if (!tetherFsPending.has(id)) throw abortError()
+                    if (!chunks.length) { await sendChunk(0); return }
+                    for (let seq = 0; seq < chunks.length; seq += 1) {
+                      if (!tetherFsPending.has(id)) throw abortError()
+                      await sendChunk(seq)
+                    }
+                  }
+                  const sending = tetherFsSendQueue.then(sendAll, sendAll)
+                  tetherFsSendQueue = sending.catch(() => {})
+                  sending.catch((error) => {
+                    if (entry.ack) entry.ack = null
+                    failRequest(error)
+                  })
+                  return result
+                }
                 if (tetherLoopbackPage && !window.__tetherDeviceFsChannel && typeof window.fetch === 'function') {
                   window.__tetherDeviceFsChannel = true
                   const tetherFetch = window.fetch.bind(window)
@@ -52459,157 +52837,6 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
                     '/list': '/fs/list', '/read': '/fs/read', '/write_chunk': '/fs/write_chunk'
                   })[suffix] || suffix
                   const tetherFsRoutes = ['/drives', '/workspaces', '/list', '/read', '/write_chunk']
-                  // 回环页不能直连 APP 18892：页面 origin 与 APP 不同，proxy cookie 是
-                  // SameSite=Strict，跨源只会拿到 401/403。设备文件请求改投宿主桥（webview hash /
-                  // iframe postMessage），由宿主在 APP 同源完成 /api/devices/<本机>/fs/* 并回传。
-                  const tetherFsMode = () => {
-                    try { if (window.parent && window.parent !== window) return 'iframe' } catch (_) { return 'iframe' }
-                    try { if (/Electron\//.test(navigator.userAgent || '')) return 'hash' } catch (_) { /* user agent is advisory */ }
-                    return ''
-                  }
-                  const tetherFsUuid = () => {
-                    let id = ''
-                    try { id = crypto.randomUUID() } catch (_) { /* insecure context fallback below */ }
-                    if (!/^[0-9a-f-]{36}$/i.test(id)) {
-                      id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-                        const r = Math.random() * 16 | 0
-                        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
-                      })
-                    }
-                    return id
-                  }
-                  const tetherFsBase64Url = (text) => {
-                    const bytes = new TextEncoder().encode(String(text || ''))
-                    let binary = ''
-                    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-                      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
-                    }
-                    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-                  }
-                  const tetherFsChunkChars = 262144
-                  const tetherFsPending = new Map()
-                  let tetherFsListening = false
-                  const onTetherFsMessage = (event) => {
-                    const data = event && event.data
-                    if (!data || typeof data !== 'object') return
-                    if (data.type !== 'tether:fs-chunk' && data.type !== 'tether:fs-result') return
-                    const id = String(data.id || '')
-                    const entry = tetherFsPending.get(id)
-                    if (!entry) return
-                    if (data.type === 'tether:fs-chunk') {
-                      if (entry.ack) entry.ack(Number(data.seq))
-                      return
-                    }
-                    tetherFsPending.delete(id)
-                    clearTimeout(entry.timer)
-                    if (entry.removeAbort) entry.removeAbort()
-                    if (data.ok === true) {
-                      entry.resolve({ status: Number(data.status) || 200, data: data.data === undefined ? null : data.data })
-                      return
-                    }
-                    const error = new Error(String(data.message || ('HTTP ' + (Number(data.status) || 0))))
-                    error.status = Number(data.status) || 0
-                    error.code = typeof data.code === 'string' ? data.code : ''
-                    entry.reject(error)
-                  }
-                  // hash 通道同一时刻只允许一段在途：同步连写 hash 会被浏览器合并成一次导航，
-                  // 拿两个并发请求（getRoots 的 drives+workspaces）就会丢一条。整段发送串行，
-                  // 宿主逐片回执后才发下一条，回包按 request_id 各归各。
-                  let tetherFsSendQueue = Promise.resolve()
-                  const tetherFsRelay = (request, signal) => {
-                    const mode = tetherFsMode()
-                    if (!mode) return Promise.reject(new Error('当前页面没有宿主文件通道'))
-                    if (!tetherFsListening) {
-                      tetherFsListening = true
-                      window.addEventListener('message', onTetherFsMessage)
-                    }
-                    const id = tetherFsUuid()
-                    let settle = null
-                    const result = new Promise((resolve, reject) => { settle = { resolve, reject } })
-                    const entry = { resolve: settle.resolve, reject: settle.reject, timer: null, ack: null, removeAbort: null }
-                    const abortError = () => new DOMException('The operation was aborted', 'AbortError')
-                    const drop = () => {
-                      if (tetherFsPending.get(id) !== entry) return false
-                      tetherFsPending.delete(id)
-                      clearTimeout(entry.timer)
-                      return true
-                    }
-                    const failRequest = (error) => {
-                      if (!drop()) return
-                      entry.reject(error)
-                    }
-                    tetherFsPending.set(id, entry)
-                    entry.timer = setTimeout(() => {
-                      const error = new Error('宿主文件通道响应超时')
-                      error.status = 0
-                      failRequest(error)
-                    }, 120000)
-                    if (signal) {
-                      const onAbort = () => {
-                        if (entry.ack) entry.ack(-1)
-                        failRequest(abortError())
-                      }
-                      if (signal.aborted) { onAbort(); return result }
-                      try {
-                        signal.addEventListener('abort', onAbort, { once: true })
-                        entry.removeAbort = () => signal.removeEventListener('abort', onAbort)
-                      } catch (_) { /* an exotic signal simply skips cancellation */ }
-                    }
-                    if (mode === 'iframe') {
-                      try {
-                        window.parent.postMessage({ type: 'tether:fs-request', id, method: request.method,
-                          path: request.path, query: request.query || '', device: request.device,
-                          body: request.body === undefined ? null : request.body }, '*')
-                      } catch (_) {
-                        failRequest(new Error('宿主文件通道不可用'))
-                      }
-                      return result
-                    }
-                    const chunks = []
-                    if (typeof request.body === 'string' && request.body) {
-                      const encoded = tetherFsBase64Url(request.body)
-                      for (let offset = 0; offset < encoded.length; offset += tetherFsChunkChars) {
-                        chunks.push(encoded.slice(offset, offset + tetherFsChunkChars))
-                      }
-                    }
-                    const sendChunk = (seq) => new Promise((ackDone, ackFail) => {
-                      const timer = setTimeout(() => {
-                        if (!entry.ack) return
-                        entry.ack = null
-                        ackFail(new Error('宿主文件通道响应超时'))
-                      }, 20000)
-                      entry.ack = (got) => {
-                        if (got !== seq && got !== -1) return
-                        clearTimeout(timer)
-                        entry.ack = null
-                        if (got === -1) ackFail(abortError())
-                        else ackDone()
-                      }
-                      const params = new URLSearchParams({
-                        tether_action: 'fs', request_id: id, fs_device: request.device || '',
-                        fs_method: request.method, fs_path: request.path,
-                        fs_seq: String(seq), fs_total: String(chunks.length)
-                      })
-                      if (request.query) params.set('fs_query', request.query)
-                      if (chunks[seq]) params.set('fs_chunk', chunks[seq])
-                      window.location.hash = params.toString()
-                    })
-                    const sendAll = async () => {
-                      if (!tetherFsPending.has(id)) throw abortError()
-                      if (!chunks.length) { await sendChunk(0); return }
-                      for (let seq = 0; seq < chunks.length; seq += 1) {
-                        if (!tetherFsPending.has(id)) throw abortError()
-                        await sendChunk(seq)
-                      }
-                    }
-                    const sending = tetherFsSendQueue.then(sendAll, sendAll)
-                    tetherFsSendQueue = sending.catch(() => {})
-                    sending.catch((error) => {
-                      if (entry.ack) entry.ack = null
-                      failRequest(error)
-                    })
-                    return result
-                  }
                   window.fetch = function (input, init) {
                     try {
                       const raw = typeof input === 'string' ? input : (input && typeof input.url === 'string' ? input.url : '')
@@ -52652,7 +52879,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 let tetherPickListening = false
                 const tetherPickMode = () => {
                   try { if (window.parent && window.parent !== window) return 'iframe' } catch (_) { return 'iframe' }
-                  try { if (/Electron\//.test(navigator.userAgent || '')) return 'hash' } catch (_) { /* user agent is advisory */ }
+                  try { if (window.__tetherEmbeddedHost === true || /Electron\//.test(navigator.userAgent || '')) return 'hash' } catch (_) { /* user agent is advisory */ }
                   return ''
                 }
                 const onTetherPickResult = (event) => {
@@ -52678,14 +52905,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
                   }
                   const kind = options && options.kind === 'file' ? 'file' : 'folder'
                   const multiple = !!(options && options.multiple)
-                  let id = ''
-                  try { id = crypto.randomUUID() } catch (_) { /* insecure context fallback below */ }
-                  if (!/^[0-9a-f-]{36}$/i.test(id)) {
-                    id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-                      const r = Math.random() * 16 | 0
-                      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
-                    })
-                  }
+                  const id = tetherFsUuid()
                   return new Promise((resolve) => {
                     // 宿主缺席（版本错配）时不让 DSH 的选择流程永久挂起。
                     const timer = setTimeout(() => {
@@ -52705,6 +52925,166 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
                     window.location.hash = params.toString()
                   })
                 }
+
+                // 聊天附件统一走宿主资源管理器：读取目标设备文件真实字节，构造 File 交回 DSH 原生 composer。
+                const tetherMimeForPath = (filePath) => {
+                  const ext = String(filePath || '').split('.').pop().toLowerCase()
+                  return ({
+                    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+                    webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml', pdf: 'application/pdf',
+                    txt: 'text/plain', md: 'text/markdown', json: 'application/json', csv: 'text/csv'
+                  })[ext] || 'application/octet-stream'
+                }
+                const tetherBaseName = (filePath) => {
+                  const clean = String(filePath || '').replace(/[\\/]+$/, '')
+                  const idx = Math.max(clean.lastIndexOf('\\'), clean.lastIndexOf('/'))
+                  return idx >= 0 ? (clean.slice(idx + 1) || clean) : clean
+                }
+                const tetherShowToast = (() => {
+                  let el = null
+                  let timer = null
+                  return (text, duration = 3500) => {
+                    if (typeof document === 'undefined' || !document.body) return
+                    if (timer) { clearTimeout(timer); timer = null }
+                    if (!text) { if (el) el.remove(); el = null; return }
+                    if (!el) {
+                      el = document.createElement('div')
+                      el.setAttribute('role', 'status')
+                      el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483000;max-width:420px;padding:8px 12px;border-radius:8px;background:rgba(16,24,40,.88);color:#fff;font-size:12px;line-height:18px;box-shadow:0 4px 16px rgba(16,24,40,.22);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
+                      document.body.appendChild(el)
+                    }
+                    el.textContent = text
+                    if (duration > 0) timer = setTimeout(() => { if (el) el.remove(); el = null; timer = null }, duration)
+                  }
+                })()
+                const tetherReadTargetFile = async (filePath) => {
+                  const CHUNK = 4 * 1024 * 1024
+                  const slices = []
+                  let offset = 0
+                  let totalSize = null
+                  for (;;) {
+                    const reply = await tetherFsRelay({
+                      method: 'POST',
+                      path: '/fs/read',
+                      body: JSON.stringify({ path: filePath, offset, limit: CHUNK, encoding: 'base64' })
+                    })
+                    const data = reply && reply.data
+                    if (!data || typeof data !== 'object') throw new Error('目标文件读取响应无效')
+                    if (data.binary !== true || typeof data.base64 !== 'string') {
+                      throw new Error('目标节点未返回附件原始字节')
+                    }
+                    const size = Number(data.size)
+                    if (!Number.isSafeInteger(size) || size < 0) throw new Error('目标文件大小无效')
+                    if (totalSize === null) totalSize = size
+                    else if (size !== totalSize) throw new Error('目标文件在读取期间已变化，请重试')
+                    const bin = atob(data.base64)
+                    const bytes = new Uint8Array(bin.length)
+                    for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i)
+                    if (bytes.length) slices.push(bytes)
+                    offset += bytes.length
+                    if (!data.truncated || offset >= totalSize || bytes.length === 0) break
+                  }
+                  const name = tetherBaseName(filePath) || 'attachment'
+                  return new File(slices, name, { type: tetherMimeForPath(name), lastModified: Date.now() })
+                }
+                const tetherDeliverFilesToComposer = (files) => {
+                  if (!Array.isArray(files) || !files.length || typeof document === 'undefined') return false
+                  const inputs = [...document.querySelectorAll('input[type="file"]')]
+                  const input = inputs.find((el) => !el.disabled && el.multiple) || inputs.find((el) => !el.disabled) || inputs[0]
+                  if (!input) return false
+                  try {
+                    const dt = new DataTransfer()
+                    for (const file of files) dt.items.add(file)
+                    Object.defineProperty(input, 'files', { value: dt.files, configurable: true })
+                  } catch (_) {
+                    try {
+                      const dt = new DataTransfer()
+                      for (const file of files) dt.items.add(file)
+                      input.files = dt.files
+                    } catch (__) { return false }
+                  }
+                  const reactPropsKey = Object.keys(input).find((k) => k.indexOf('__reactProps$') === 0)
+                  const props = reactPropsKey ? input[reactPropsKey] : null
+                  if (props && typeof props.onChange === 'function') {
+                    props.onChange({ target: input, currentTarget: input })
+                    return true
+                  }
+                  input.dispatchEvent(new Event('change', { bubbles: true }))
+                  return true
+                }
+                let tetherAttachBusy = false
+                const tetherPickAndAttachFiles = async () => {
+                  if (tetherAttachBusy) return
+                  tetherAttachBusy = true
+                  const startHref = window.location.href
+                  try {
+                    const paths = await requestTetherHostPick({ kind: 'file', multiple: true })
+                    if (!paths || !paths.length) return
+                    if (window.location.href !== startHref) return
+                    const files = []
+                    for (let idx = 0; idx < paths.length; idx += 1) {
+                      const p = paths[idx]
+                      const label = tetherBaseName(p) + (paths.length > 1 ? '（' + (idx + 1) + '/' + paths.length + '）' : '')
+                      tetherShowToast('正在读取 ' + label + '…', 600000)
+                      const file = await tetherReadTargetFile(p)
+                      if (window.location.href !== startHref) { tetherShowToast(''); return }
+                      files.push(file)
+                    }
+                    if (!tetherDeliverFilesToComposer(files)) {
+                      throw new Error('当前会话暂不接受附件')
+                    }
+                    tetherShowToast(files.length === 1 ? '已添加附件 ' + files[0].name : '已添加 ' + files.length + ' 个附件', 3000)
+                  } catch (err) {
+                    tetherShowToast('添加附件失败：' + ((err && err.message) || String(err)), 4500)
+                  } finally {
+                    tetherAttachBusy = false
+                  }
+                }
+                const patchDshFileCommand = (commands) => {
+                  try {
+                    const map = commands && commands.live && commands.live.contributions
+                    if (!map || typeof map.get !== 'function') return false
+                    if (map.has('tether-target-files')) map.delete('tether-target-files')
+                    const fileCmd = map.get('file')
+                    if (!fileCmd || !fileCmd.ui || fileCmd.__tetherPatched) return !!fileCmd
+                    const wrapped = {
+                      ...fileCmd,
+                      __tetherPatched: true,
+                      ui: {
+                        ...fileCmd.ui,
+                        run: () => { void tetherPickAndAttachFiles() }
+                      }
+                    }
+                    map.set('file', wrapped)
+                    return true
+                  } catch (_) { return false }
+                }
+                try {
+                  ctx.inject(['commandUi'], (scope) => {
+                    const commands = scope.get('commandUi')
+                    if (!commands) return
+                    patchDshFileCommand(commands)
+                    let ticks = 0
+                    const timer = setInterval(() => {
+                      ticks += 1
+                      patchDshFileCommand(commands)
+                      if (ticks >= 40) clearInterval(timer)
+                    }, 250)
+                    if (typeof scope.effect === 'function') scope.effect(() => () => clearInterval(timer))
+                  })
+                } catch (_) { /* commandUi optional */ }
+                if (typeof HTMLInputElement !== 'undefined' && !window.__tetherFileInputGuard) {
+                  window.__tetherFileInputGuard = true
+                  const origClick = HTMLInputElement.prototype.click
+                  HTMLInputElement.prototype.click = function () {
+                    if (this && this.type === 'file' && tetherPickMode()) {
+                      void tetherPickAndAttachFiles()
+                      return
+                    }
+                    return origClick.apply(this, arguments)
+                  }
+                }
+
                 // 无渲染 directoryFlow occupant：owner（WorkspacePickFlow）负责 createWorkspace 与导航。
                 const TetherHostDirectoryFlow = (props) => {
                   const open = props.open

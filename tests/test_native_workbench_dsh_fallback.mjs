@@ -362,3 +362,46 @@ test('DSH close removes only __Host-tether_ gateway cookies and preserves dsh-au
   await workbench.clearActor('owner-1')
   assert.equal(fullCleared, 1, 'explicit logout via clearActor still wipes full partition storage')
 })
+
+test('local workbench open("dsh") starts stopped Windows desktop DSH via loopback without Hub', async () => {
+  const calls = []
+  let started = false
+  const token = 'c'.repeat(43)
+  const session = {
+    setProxy: async () => {},
+    closeAllConnections: async () => {},
+    clearStorageData: async () => {},
+    cookies: { get: async () => [], remove: async () => {} }
+  }
+  const workbench = createNativeWorkbench({
+    controllerUrl: 'https://controller.test',
+    loginSession: { fetch: async () => { throw new Error('local DSH open must not call Hub') } },
+    getServiceSession: () => session,
+    createBootstrapContents: () => { throw new Error('unused') },
+    getActorId: async () => 'owner-1',
+    getLocalDeviceId: async () => 'local-1',
+    getSourceRoute: async () => { throw new Error('local DSH open must not require mesh') },
+    getLocalNodeApiBase: () => 'http://127.0.0.1:18894',
+    localApiSession: {
+      fetch: async (url, options = {}) => {
+        const path = new URL(url).pathname
+        calls.push({ path })
+        if (path === '/api/devices/local-1/dsh/surface') {
+          if (!started) return response(404, { available: false, reason: 'stopped' })
+          return response(200, { available: true, url: `http://127.0.0.1:50669/?token=${token}`, pid: 4242, updated_at: Date.now() / 1000 })
+        }
+        if (path === '/api/devices/local-1/fs/dsh_status') return response(200, { installed: true, running: false })
+        if (path === '/api/devices/local-1/fs/dsh_start') {
+          started = true
+          return response(200, { running: true, pid: 4242 })
+        }
+        throw new Error('unexpected local request: ' + path)
+      }
+    }
+  })
+
+  const opened = await workbench.open('local-1', 'dsh')
+  assert.equal(opened.localDirect, true)
+  assert.equal(opened.endpoint, `http://127.0.0.1:50669/?token=${token}`)
+  assert.equal(calls.some((item) => item.path === '/api/devices/local-1/fs/dsh_start'), true, 'starts installed Windows desktop DSH')
+})

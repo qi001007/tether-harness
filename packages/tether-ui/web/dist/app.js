@@ -174292,6 +174292,21 @@ function isNativeJobConnectionError(error, target) {
   if (error?.status) return [502, 503, 504].includes(error.status);
   return /(?:failed to fetch|fetch failed|network error|net::ERR_[A-Z_]+)$/i.test(error?.message || "");
 }
+function isUnacceptedNativeStartError(error) {
+  if (!error) return false;
+  if (error.code === "bad_op") return true;
+  if (error.status === 405 || error.status === 501) return true;
+  if (error.status === 404) {
+    if (error.code === "bad_op" || error.code === "unsupported_operation" || error.code === "unknown_operation") return true;
+    return !error.code && /not found|unknown op|bad_op/i.test(error.message || "");
+  }
+  return false;
+}
+function hasSafeFallbackProof(job, confirmedZero) {
+  if (job?.write_started === true) return false;
+  if (typeof job?.fallback_safe === "boolean") return job.fallback_safe === true;
+  return confirmedZero === true;
+}
 function nativeJobUnconfirmed(operationId, message) {
   return Object.assign(failure(message + "\uFF08\u4EFB\u52A1\u53F7 " + operationId + "\uFF09", "native_job_unconfirmed"), { operationId });
 }
@@ -174309,7 +174324,7 @@ async function transferNativeJob({
   }
 }) {
   let started = Boolean(operationId);
-  let relayEligible = allowRelay && !started && items.length === 1;
+  let relayEligible = allowRelay && !started;
   let zeroSince = null;
   let stopRequestedAt = null;
   operationId = operationId || newTransferId();
@@ -174320,14 +174335,22 @@ async function transferNativeJob({
     signal?.throwIfAborted();
     if (!started) {
       started = true;
-      await post(target, "transfer_job_start", {
-        ...jobRequest,
-        source: { device_id: source.device_id, path: source.path },
-        destination: { device_id: target, path: destination.path },
-        items: items.map((path) => ({ kind: "file", path })),
-        mode: "copy",
-        conflict_policy: "fail"
-      }, signal);
+      try {
+        await post(target, "transfer_job_start", {
+          ...jobRequest,
+          source: { device_id: source.device_id, path: source.path },
+          destination: { device_id: target, path: destination.path },
+          items: items.map((path) => ({ kind: "file", path })),
+          mode: "copy",
+          conflict_policy: "fail"
+        }, signal);
+      } catch (error) {
+        if (relayEligible && isUnacceptedNativeStartError(error)) {
+          started = false;
+          return { operationId, useRelay: true, unaccepted: true };
+        }
+        throw error;
+      }
     }
     while (true) {
       signal?.throwIfAborted();
@@ -174358,15 +174381,17 @@ async function transferNativeJob({
       const filesDone = Number(job && job.files_done) || 0;
       const percent = bytesTotal ? Math.min(100, bytesDone / bytesTotal * 100) : 0;
       const confirmedZero = job?.bytes_done === 0 && job?.files_done === 0;
-      if (bytesDone > 0 || filesDone > 0 || job?.state === "verifying") relayEligible = false;
+      if (job?.write_started === true || bytesDone > 0 || filesDone > 0 || job?.state === "verifying") {
+        relayEligible = false;
+      }
       if (job && job.state === "completed") {
         onProgress({ transferred: bytesDone, total: bytesTotal, percent: 100, filesDone });
         return { operationId, bytes: bytesDone };
       }
-      if (stopRequestedAt !== null && relayEligible && job?.state === "cancelled" && confirmedZero) {
+      if (stopRequestedAt !== null && relayEligible && job?.state === "cancelled" && hasSafeFallbackProof(job, confirmedZero)) {
         return { operationId, useRelay: true };
       }
-      if (relayEligible && confirmedZero && job?.state === "failed" && ["network_not_connected", "source_connection_failed"].includes(job.error?.code)) {
+      if (relayEligible && hasSafeFallbackProof(job, confirmedZero) && job?.state === "failed" && ["network_not_connected", "source_connection_failed"].includes(job.error?.code)) {
         return { operationId, useRelay: true };
       }
       if (job && ["failed", "cancelled", "interrupted", "revocation_pending"].includes(job.state)) {
@@ -176402,8 +176427,10 @@ function createTransferPage({
       )
     });
   };
-  const runNativeJob = async ({ source, destination, items, total, relayItem }, controller, operationId) => {
+  const runNativeJob = async (input, controller, operationId) => {
+    const { source, destination, items, total, relayItem, relayItems, targetEntries } = input;
     try {
+      const fallbackItems = (Array.isArray(relayItems) && relayItems.length ? relayItems : relayItem ? [relayItem] : []).map((item) => ({ path: item.path, name: item.name, size: Number(item.size) || 0 }));
       const onProgress = (value) => setJob((current) => ({
         ...current,
         percent: Math.min(99, value.percent),
@@ -176417,31 +176444,132 @@ function createTransferPage({
       const sourceNode = devices.find((device) => device?.device_id === sourceDevice);
       const targetNode = devices.find((device) => device?.device_id === targetDevice);
       const ownsBoth = userId && sourceNode?.owner_id === userId && targetNode?.owner_id === userId;
-      const routeKey = !operationId && relayItem && ownsBoth ? JSON.stringify([userId, sourceDevice, targetDevice]) : null;
+      const crocTarget = hubOnly && fallbackItems.length === 1 && total > 0 ? fallbackItems[0] : null;
+      const routeKey = !operationId && crocTarget && ownsBoth ? JSON.stringify([userId, sourceDevice, targetDevice]) : null;
       const previous = routeKey ? crocRouteRef.current.get(routeKey) : void 0;
       const recent = previous?.until > Date.now() ? previous : void 0;
       const preferCroc = recent?.worked === true;
-      const preferCrocUpload = routeKey && !recent && items.length === 1 && isCrocUploadCandidate(sourceNode, targetNode, total);
+      const preferCrocUpload = Boolean(routeKey) && !recent && isCrocUploadCandidate(sourceNode, targetNode, total);
       if (routeKey && recent?.worked !== false) crocRouteRef.current.delete(routeKey);
       const rememberCroc = (worked) => {
         if (routeKey) crocRouteRef.current.set(routeKey, { worked, until: Date.now() + CROC_ROUTE_PREFERENCE_MS });
       };
-      const tryCroc = (notice) => transferCrocViaHub({
+      const tryCroc = (item, notice) => transferCrocViaHub({
         post: postHubFs,
         sourceDevice,
         targetDevice,
-        source: relayItem.path,
+        source: item.path,
         destination: destination.path,
-        name: relayItem.name,
+        name: item.name,
         signal: controller.signal,
         onStart: () => {
-          if (onNotice) onNotice(notice);
+          if (notice && onNotice) onNotice(notice);
         },
-        onProgress: (value) => onProgress({ ...value, transferred: Math.round(total * value.percent / 100) }),
+        onProgress: (value) => onProgress({
+          ...value,
+          transferred: Math.round((Number(item.size) || 0) * (Number(value && value.percent) || 0) / 100)
+        }),
         onReconnecting
       });
-      const triedCroc = preferCroc || preferCrocUpload;
-      let result = triedCroc ? await tryCroc(preferCrocUpload ? "\u6B63\u5728\u4F7F\u7528 Croc \u53D1\u9001\u5927\u6587\u4EF6" : "\u4F7F\u7528\u4E0A\u6B21\u6210\u529F\u7684 Croc \u4E2D\u8F6C") : null;
+      const runCompatibleFallback = async () => {
+        const entries2 = Array.isArray(targetEntries) ? targetEntries : [];
+        let done = 0;
+        let crocUsable = true;
+        for (let index = 0; index < fallbackItems.length; index += 1) {
+          controller.signal.throwIfAborted();
+          const item = fallbackItems[index];
+          setJob((current) => ({ ...current || {}, state: "running", index, count: fallbackItems.length }));
+          let itemBytes = null;
+          if (crocUsable && item.size > 0) {
+            try {
+              const croc = await transferCrocViaHub({
+                post: postHubFs,
+                sourceDevice,
+                targetDevice,
+                source: item.path,
+                destination: destination.path,
+                name: item.name,
+                signal: controller.signal,
+                onStart: () => {
+                  if (onNotice) onNotice("\u76F4\u4F20\u672A\u5F00\u59CB\uFF0C\u5DF2\u5207\u6362\u5230 Croc \u4E2D\u8F6C");
+                },
+                onProgress: (value) => {
+                  const currentBytes = done + item.size * (Number(value && value.percent) || 0) / 100;
+                  setJob((current) => ({
+                    ...current || {},
+                    percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                    transferred: currentBytes,
+                    index,
+                    count: fallbackItems.length,
+                    state: "running"
+                  }));
+                },
+                onReconnecting
+              });
+              if (croc) itemBytes = Number(croc.bytes) || item.size;
+            } catch (error) {
+              if (isTransferAbort(error, controller.signal)) throw error;
+            }
+            if (itemBytes === null) crocUsable = false;
+          }
+          if (itemBytes === null) {
+            let dest = joinPath(destination.path, item.name);
+            let overwrite = false;
+            while (true) {
+              try {
+                const chunk = await copyFileInChunks({
+                  sourceDevice,
+                  targetDevice,
+                  source: item.path,
+                  destination: dest,
+                  overwrite,
+                  signal: controller.signal,
+                  relay: true,
+                  onProgress: (value) => {
+                    const currentBytes = done + Math.max(0, Number(value && value.transferred) || 0);
+                    setJob((current) => ({
+                      ...current || {},
+                      percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                      transferred: currentBytes,
+                      index,
+                      count: fallbackItems.length,
+                      state: "running"
+                    }));
+                  }
+                });
+                itemBytes = Number(chunk && chunk.bytes) || item.size;
+                break;
+              } catch (cause) {
+                if (!cause || cause.code !== "exists") throw cause;
+                const choice = await askConflict(item, dest);
+                if (choice === "cancel") throw Object.assign(new Error("\u5DF2\u53D6\u6D88"), { code: "aborted" });
+                if (choice === "overwrite") {
+                  overwrite = true;
+                  continue;
+                }
+                if (choice === "keep") {
+                  dest = uniqueName(dest, entries2.map((entry) => entry.name));
+                  overwrite = false;
+                  continue;
+                }
+                throw cause;
+              }
+            }
+          }
+          done += Number(itemBytes) || 0;
+          setJob((current) => ({
+            ...current || {},
+            percent: total ? Math.round(done / total * 100) : 100,
+            transferred: done,
+            index,
+            count: fallbackItems.length,
+            state: "running"
+          }));
+        }
+        return { bytes: done };
+      };
+      const triedCroc = Boolean(preferCroc) || preferCrocUpload;
+      let result = triedCroc ? await tryCroc(crocTarget, preferCrocUpload ? "\u6B63\u5728\u4F7F\u7528 Croc \u53D1\u9001\u5927\u6587\u4EF6" : "\u4F7F\u7528\u4E0A\u6B21\u6210\u529F\u7684 Croc \u4E2D\u8F6C") : null;
       if (result && preferCroc) crocRouteRef.current.set(routeKey, recent);
       if (triedCroc && !result) rememberCroc(false);
       if (!result) {
@@ -176452,27 +176580,13 @@ function createTransferPage({
           items,
           operationId,
           signal: controller.signal,
-          allowRelay: Boolean(relayItem),
+          allowRelay: fallbackItems.length > 0,
           onProgress,
           onReconnecting
         });
       }
       if (result.useRelay) {
-        result = routeKey && !triedCroc ? await tryCroc("\u76F4\u4F20\u672A\u5F00\u59CB\uFF0C\u5DF2\u5207\u6362\u5230 Croc \u4E2D\u8F6C") : null;
-        if (routeKey && !triedCroc) rememberCroc(Boolean(result));
-        if (!result) {
-          if (onNotice) onNotice("\u5DF2\u5207\u6362\u5230 Hub \u5206\u5757\u590D\u5236");
-          result = await copyFileInChunks({
-            sourceDevice,
-            targetDevice,
-            source: relayItem.path,
-            destination: joinPath(destination.path, relayItem.name),
-            overwrite: false,
-            signal: controller.signal,
-            onProgress,
-            relay: true
-          });
-        }
+        result = await runCompatibleFallback();
       }
       const doneBytes = result.bytes || total;
       setJob((current) => ({ ...current, state: "done", percent: 100, transferred: doneBytes }));
@@ -176485,7 +176599,7 @@ function createTransferPage({
     } catch (error) {
       const cancelled = isTransferAbort(error, controller.signal) || error.code === "cancelled";
       const unconfirmed = error.code === "native_job_unconfirmed";
-      if (unconfirmed) pendingNativeJobRef.current = { source, destination, items, total, operationId: error.operationId };
+      if (unconfirmed) pendingNativeJobRef.current = { ...input, operationId: error.operationId };
       setJob((current) => ({
         ...current,
         state: unconfirmed ? "unconfirmed" : cancelled ? "cancelled" : "error",
@@ -176525,12 +176639,25 @@ function createTransferPage({
       }
     }
     if (useNativeJob) {
+      try {
+        const [sourceInfo, targetInfo] = await Promise.all([
+          postFs(side(fromSide).device, "transfer_info", {}, controller.signal).catch(() => null),
+          postFs(target2.device, "transfer_info", {}, controller.signal).catch(() => null)
+        ]);
+        if (sourceInfo?.transfer_engines?.native_source === false || targetInfo?.transfer_engines?.native_target === false) {
+          useNativeJob = false;
+        }
+      } catch (_2) {
+      }
+    }
+    if (useNativeJob) {
       return runNativeJob({
         source: { device_id: side(fromSide).device, path: nativeBatch.path },
         destination: { device_id: target2.device, path: target2.path },
         items: nativeBatch.names,
         total,
-        relayItem: hubOnly && items.length === 1 && total > 0 ? items[0] : void 0
+        relayItems: items.map((item) => ({ path: item.path, name: item.name, size: Number(item.size) || 0 })),
+        targetEntries: target2.entries || []
       }, controller);
     }
     if (!hubOnly) {
@@ -179620,23 +179747,46 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
   const codegRedirected = React2.useRef("");
   const handledAgentLaunchRequests = React2.useRef(/* @__PURE__ */ new Set());
   const [folderPick, setFolderPick] = React2.useState(null);
+  React2.useEffect(() => {
+    setFolderPick((current) => {
+      if (!current) return null;
+      const rev = serviceView && serviceView.openRevision || 0;
+      if (current.deviceId === device && current.openRevision === rev) return current;
+      const payload = { type: "tether:pick-folder-result", id: current.id, cancelled: true };
+      if (current.mode === "iframe") {
+        try {
+          if (current.source && typeof current.source.postMessage === "function") current.source.postMessage(payload, "*");
+        } catch (_2) {
+        }
+      } else if (current.guest && typeof current.guest.executeJavaScript === "function") {
+        try {
+          void current.guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {
+          });
+        } catch (_2) {
+        }
+      }
+      return null;
+    });
+  }, [device, serviceView && serviceView.openRevision]);
   const closeFolderPick = (value) => {
     const request = folderPick;
     if (!request) return;
     setFolderPick(null);
     const chosen = (Array.isArray(value) ? value : [value]).map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean);
-    const payload = chosen.length ? { type: "tether:pick-folder-result", id: request.id, path: chosen[0], paths: chosen } : { type: "tether:pick-folder-result", id: request.id, cancelled: true };
+    const stillCurrent = request.deviceId === device && request.openRevision === (serviceView && serviceView.openRevision || 0);
+    const payload = chosen.length && stillCurrent ? { type: "tether:pick-folder-result", id: request.id, path: chosen[0], paths: chosen } : { type: "tether:pick-folder-result", id: request.id, cancelled: true };
     if (request.mode === "iframe") {
       try {
-        if (request.source && typeof request.source.postMessage === "function") {
+        const frame = runtimeFrame.current;
+        if (request.source && (!frame || request.source === frame.contentWindow) && typeof request.source.postMessage === "function") {
           request.source.postMessage(payload, "*");
         }
       } catch (_2) {
       }
       return;
     }
-    const guest = serviceWebviewRef.current;
-    if (!guest || typeof guest.executeJavaScript !== "function") return;
+    const guest = request.guest;
+    if (!guest || guest !== serviceWebviewRef.current || typeof guest.executeJavaScript !== "function") return;
     try {
       void guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {
       });
@@ -180136,6 +180286,9 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
             id,
             mode: "iframe",
             source: event.source || null,
+            guest: null,
+            deviceId: device,
+            openRevision: serviceView && serviceView.openRevision || 0,
             kind: data.kind === "file" ? "file" : "folder",
             multiple: data.multiple === true
           });
@@ -180527,7 +180680,7 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
     const auth = codegGuestAuth;
     if (!auth || !serviceView || serviceView.serviceId !== "codeg" || serviceView.targetId !== auth.targetId || !guest || typeof guest.addEventListener !== "function" || typeof guest.executeJavaScript !== "function") return void 0;
     const expectedOrigin = auth.origin;
-    const storeToken = "localStorage.setItem('codeg_token'," + JSON.stringify(auth.token) + ")";
+    const storeToken = "window.__tetherEmbeddedHost=true;try{sessionStorage.setItem('tether_embedded_host','1')}catch(_){}localStorage.setItem('codeg_token'," + JSON.stringify(auth.token) + ")";
     const guestRoute = () => {
       try {
         const current = new URL(guest.getURL());
@@ -180612,6 +180765,9 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
             id: requestId,
             mode: "webview",
             source: null,
+            guest,
+            deviceId: device,
+            openRevision: serviceView && serviceView.openRevision || 0,
             kind: pickKind === "file" ? "file" : "folder",
             multiple: pickMultiple === "1"
           };
@@ -180966,6 +181122,31 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
       h3("button", { type: "submit", disabled: busy || !ready || !input.trim(), style: { ...button, alignSelf: "flex-end" } }, busy ? "\u5904\u7406\u4E2D\u2026" : "\u53D1\u9001")
     )
   ) : null;
+  const autoOpenAttemptedRef = React2.useRef("");
+  React2.useEffect(() => {
+    if (!isActive || !nativeWorkbench || !device || catalogOpen || panes.length || homeOpen || session) return;
+    if (serviceCatalogBusy || serviceOpening || workbenchLoginRequired || workbenchLoginBusy) return;
+    if (!codegService || legacyCodegBlocked || !["ready", "stopped"].includes(codegService.state)) return;
+    const attemptKey = device + ":" + homeRetry;
+    if (autoOpenAttemptedRef.current === attemptKey) return;
+    autoOpenAttemptedRef.current = attemptKey;
+    void openNativeCodeg();
+  }, [
+    isActive,
+    nativeWorkbench,
+    device,
+    catalogOpen,
+    panes.length,
+    homeOpen,
+    session,
+    serviceCatalogBusy,
+    serviceOpening,
+    workbenchLoginRequired,
+    workbenchLoginBusy,
+    codegService && codegService.state,
+    legacyCodegBlocked,
+    homeRetry
+  ]);
   return h3(
     "div",
     {
@@ -180974,47 +181155,48 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
     sessionView,
     agentHomeView,
     workspace,
-    !panes.length && !homeOpen && !session && nativeWorkbench ? h3(
-      "div",
-      { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 10, flex: "1 1 auto", padding: 24, color: C2.mute, fontSize: 12 } },
-      h3("div", { style: { fontSize: 16, fontWeight: 600, color: C2.ink } }, "\u76EE\u6807\u8BBE\u5907\u5DE5\u4F5C\u53F0"),
-      serviceCatalogBusy ? h3("div", null, "\u6B63\u5728\u8BFB\u53D6\u76EE\u6807\u670D\u52A1\u72B6\u6001\u2026") : codegService ? h3(
+    !panes.length && !homeOpen && !session && nativeWorkbench ? (() => {
+      const codegReadyToAutoOpen = isActive && !!codegService && !legacyCodegBlocked && ["ready", "stopped"].includes(codegService.state) && !homeError && !workbenchLoginRequired;
+      const loading = serviceCatalogBusy || serviceOpening || codegReadyToAutoOpen;
+      const statusText = workbenchLoginRequired ? "\u9700\u8981\u767B\u5F55" : homeError ? homeError : legacyCodegBlocked ? legacyCodegLabel : codegService && codegService.state === "missing" ? codegUnavailableLabel : codegService && codegService.reason ? codegService.reason : "\u591A Agent \u4E0D\u53EF\u7528";
+      return h3(
         "div",
-        { style: { textAlign: "center", lineHeight: 1.6 } },
-        h3("div", { style: { color: C2.sub } }, "\u76EE\u6807\u8BBE\u5907\uFF1A" + (devices.find((item) => item.device_id === device)?.name || device)),
-        h3("div", { style: { color: C2.sub } }, "\u670D\u52A1\u72B6\u6001\uFF1A" + (serviceStateLabel[codegService.state] || codegService.state || "\u672A\u77E5")),
-        codegService.reason ? h3("div", { style: { maxWidth: 520, color: C2.sub } }, codegService.reason) : null
-      ) : h3("div", { style: { color: homeError ? C2.danger : C2.sub, textAlign: "center" } }, homeError || "Controller \u670D\u52A1\u76EE\u5F55\u672A\u8FD4\u56DE Codeg \u72B6\u6001\u3002"),
-      homeError && codegService ? h3("div", { role: "alert", style: { maxWidth: 520, color: C2.danger, textAlign: "center" } }, homeError) : null,
-      h3(
-        "button",
-        {
-          type: "button",
-          disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy || legacyCodegBlocked || codegService && codegService.state === "missing",
-          onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : codegService ? () => void openNativeCodeg() : retryAgentsHome,
-          style: { ...button, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy || legacyCodegBlocked || codegService && codegService.state === "missing" ? 0.55 : 1 }
-        },
-        workbenchLoginBusy ? "\u7B49\u5F85\u767B\u5F55\u5B8C\u6210\u2026" : workbenchLoginRequired ? "\u901A\u8FC7\u4E3B\u8FDB\u7A0B\u767B\u5F55" : serviceOpening ? "\u6B63\u5728\u6253\u5F00\u2026" : codegService ? legacyCodegBlocked ? legacyCodegLabel : codegService.state === "ready" ? "\u6253\u5F00 Codeg" : codegService.state === "missing" ? codegUnavailableLabel : "\u542F\u52A8\u5E76\u6253\u5F00 Codeg" : "\u91CD\u8BD5\u670D\u52A1\u76EE\u5F55"
-      ),
-      h3("button", { type: "button", onClick: () => setHomeOpen(true), style: { ...button, marginTop: 8 } }, "Agent \u4E3B\u9875"),
-      desktopService ? h3(
-        "div",
-        { style: { marginTop: 4, textAlign: "center", lineHeight: 1.55 } },
-        h3("div", { style: { color: C2.sub } }, "\u8FDC\u7A0B\u684C\u9762\uFF1A" + (serviceStateLabel[desktopService.state] || desktopService.state || "\u672A\u77E5")),
-        desktopService.reason ? h3("div", { style: { maxWidth: 520, color: C2.sub } }, desktopService.reason) : null,
-        desktopService.agent_busy ? h3("div", { style: { maxWidth: 520, color: C2.sub } }, "\u76EE\u6807 Agent \u6B63\u5728\u5904\u7406\u4EFB\u52A1\uFF0C\u8FDE\u63A5\u5C06\u4EE5\u53EA\u8BFB\u65B9\u5F0F\u6253\u5F00\u3002") : null,
-        h3(
-          "button",
-          {
-            type: "button",
-            disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy || !["ready", "stopped"].includes(desktopService.state),
-            onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : () => void openNativeDesktop(),
-            style: { ...button, marginTop: 8, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy || !["ready", "stopped"].includes(desktopService.state) ? 0.55 : 1 }
-          },
-          serviceOpening ? "\u6B63\u5728\u6388\u6743\u5E76\u8FDE\u63A5\u2026" : desktopService.state === "ready" ? "\u6253\u5F00\u8FDC\u7A0B\u684C\u9762\uFF08\u76EE\u6807\u540C\u610F\u540E\u8FDE\u63A5\uFF09" : "\u542F\u52A8\u5E76\u6253\u5F00\u8FDC\u7A0B\u684C\u9762"
+        { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, flex: "1 1 auto", padding: 24, color: C2.mute, fontSize: 12.5, textAlign: "center" } },
+        h3("div", {
+          style: {
+            width: 52,
+            height: 52,
+            borderRadius: 14,
+            background: C2.soft,
+            color: C2.ink,
+            display: "grid",
+            placeItems: "center",
+            boxShadow: "0 1px 3px rgba(16,24,40,.06)"
+          }
+        }, h3(Glyph, { name: "bot", size: 24 })),
+        loading ? h3(
+          "div",
+          { role: "status", "aria-live": "polite", style: { display: "inline-flex", alignItems: "center", gap: 8, color: C2.sub } },
+          h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.mute } }, h3(Glyph, { name: "refresh", size: 15 })),
+          "\u6B63\u5728\u6253\u5F00\u591A Agent\u2026"
+        ) : h3(
+          React2.Fragment,
+          null,
+          h3("div", { role: "alert", style: { maxWidth: 420, color: homeError ? C2.danger : C2.sub } }, statusText),
+          h3(
+            "div",
+            { style: { display: "flex", alignItems: "center", gap: 8 } },
+            h3("button", {
+              type: "button",
+              disabled: workbenchLoginBusy || legacyCodegBlocked || codegService && codegService.state === "missing",
+              onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : codegService && ["ready", "stopped"].includes(codegService.state) ? () => void openNativeCodeg() : retryAgentsHome,
+              style: { ...button, opacity: workbenchLoginBusy || legacyCodegBlocked || codegService && codegService.state === "missing" ? 0.55 : 1 }
+            }, workbenchLoginBusy ? "\u767B\u5F55\u4E2D\u2026" : workbenchLoginRequired ? "\u767B\u5F55" : "\u91CD\u8BD5"),
+            legacyCodegBlocked || codegService && codegService.state === "missing" || homeError ? h3("button", { type: "button", onClick: () => setHomeOpen(true), style: homeButton }, "Agent \u4E3B\u9875") : null
+          )
         )
-      ) : null
-    ) : null,
+      );
+    })() : null,
     !panes.length && !nativeWorkbench && homeError ? h3(
       "div",
       { role: "alert", style: { display: "grid", placeItems: "center", alignContent: "center", gap: 10, flex: "1 1 auto", color: C2.mute, fontSize: 12 } },
@@ -181025,7 +181207,7 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
       "div",
       { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 10, flex: "1 1 auto", color: C2.mute, fontSize: 12 } },
       h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center" } }, h3(Glyph, { name: "refresh", size: 18 })),
-      "\u6B63\u5728\u6253\u5F00 Agent \u4E3B\u9875\u2026"
+      "\u6B63\u5728\u6253\u5F00\u591A Agent\u2026"
     ) : null,
     folderPick ? h3(TetherFolderPickDialog, {
       key: folderPick.id,
@@ -181034,7 +181216,7 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
       Glyph,
       api: api2,
       post,
-      device,
+      device: folderPick.deviceId || device,
       kind: folderPick.kind === "file" ? "file" : "folder",
       multiple: folderPick.multiple === true,
       onDone: closeFolderPick
@@ -181045,7 +181227,15 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
 // tether-dsh-flow:tether-dsh-flow-fn
 function tether_dsh_flow_fn_default(ctx, React2) {
   try {
-    if (new URL(window.location.href).searchParams.has("tether_native")) {
+    const tetherEmbeddedSurface = (() => {
+      try {
+        if (window.__tetherEmbeddedHost === true) return true;
+        if (new URL(window.location.href).searchParams.has("tether_native")) return true;
+      } catch (_2) {
+      }
+      return false;
+    })();
+    if (tetherEmbeddedSurface) {
       const tetherLoopbackPage = (() => {
         try {
           const host = new URL(window.location.href).hostname;
@@ -181054,6 +181244,181 @@ function tether_dsh_flow_fn_default(ctx, React2) {
           return false;
         }
       })();
+      const tetherFsMode = () => {
+        try {
+          if (window.parent && window.parent !== window) return "iframe";
+        } catch (_2) {
+          return "iframe";
+        }
+        try {
+          if (window.__tetherEmbeddedHost === true || /Electron\//.test(navigator.userAgent || "")) return "hash";
+        } catch (_2) {
+        }
+        return "";
+      };
+      const tetherFsUuid = () => {
+        let id = "";
+        try {
+          id = crypto.randomUUID();
+        } catch (_2) {
+        }
+        if (!/^[0-9a-f-]{36}$/i.test(id)) {
+          id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+            const r = Math.random() * 16 | 0;
+            return (c === "x" ? r : r & 3 | 8).toString(16);
+          });
+        }
+        return id;
+      };
+      const tetherFsBase64Url = (text2) => {
+        const bytes = new TextEncoder().encode(String(text2 || ""));
+        let binary = "";
+        for (let offset = 0; offset < bytes.length; offset += 32768) {
+          binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+        }
+        return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      };
+      const tetherFsChunkChars = 262144;
+      const tetherFsPending = /* @__PURE__ */ new Map();
+      let tetherFsListening = false;
+      const onTetherFsMessage = (event) => {
+        const data = event && event.data;
+        if (!data || typeof data !== "object") return;
+        if (data.type !== "tether:fs-chunk" && data.type !== "tether:fs-result") return;
+        const id = String(data.id || "");
+        const entry = tetherFsPending.get(id);
+        if (!entry) return;
+        if (data.type === "tether:fs-chunk") {
+          if (entry.ack) entry.ack(Number(data.seq));
+          return;
+        }
+        tetherFsPending.delete(id);
+        clearTimeout(entry.timer);
+        if (entry.removeAbort) entry.removeAbort();
+        if (data.ok === true) {
+          entry.resolve({ status: Number(data.status) || 200, data: data.data === void 0 ? null : data.data });
+          return;
+        }
+        const error = new Error(String(data.message || "HTTP " + (Number(data.status) || 0)));
+        error.status = Number(data.status) || 0;
+        error.code = typeof data.code === "string" ? data.code : "";
+        entry.reject(error);
+      };
+      let tetherFsSendQueue = Promise.resolve();
+      const tetherFsRelay = (request, signal) => {
+        const mode = tetherFsMode();
+        if (!mode) return Promise.reject(new Error("\u5F53\u524D\u9875\u9762\u6CA1\u6709\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053"));
+        if (!tetherFsListening) {
+          tetherFsListening = true;
+          window.addEventListener("message", onTetherFsMessage);
+        }
+        const id = tetherFsUuid();
+        let settle = null;
+        const result = new Promise((resolve3, reject) => {
+          settle = { resolve: resolve3, reject };
+        });
+        const entry = { resolve: settle.resolve, reject: settle.reject, timer: null, ack: null, removeAbort: null };
+        const abortError = () => new DOMException("The operation was aborted", "AbortError");
+        const drop = () => {
+          if (tetherFsPending.get(id) !== entry) return false;
+          tetherFsPending.delete(id);
+          clearTimeout(entry.timer);
+          return true;
+        };
+        const failRequest = (error) => {
+          if (!drop()) return;
+          entry.reject(error);
+        };
+        tetherFsPending.set(id, entry);
+        entry.timer = setTimeout(() => {
+          const error = new Error("\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053\u54CD\u5E94\u8D85\u65F6");
+          error.status = 0;
+          failRequest(error);
+        }, 12e4);
+        if (signal) {
+          const onAbort = () => {
+            if (entry.ack) entry.ack(-1);
+            failRequest(abortError());
+          };
+          if (signal.aborted) {
+            onAbort();
+            return result;
+          }
+          try {
+            signal.addEventListener("abort", onAbort, { once: true });
+            entry.removeAbort = () => signal.removeEventListener("abort", onAbort);
+          } catch (_2) {
+          }
+        }
+        if (mode === "iframe") {
+          try {
+            window.parent.postMessage({
+              type: "tether:fs-request",
+              id,
+              method: request.method,
+              path: request.path,
+              query: request.query || "",
+              device: request.device || "",
+              body: request.body === void 0 ? null : request.body
+            }, "*");
+          } catch (_2) {
+            failRequest(new Error("\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053\u4E0D\u53EF\u7528"));
+          }
+          return result;
+        }
+        const chunks = [];
+        if (typeof request.body === "string" && request.body) {
+          const encoded = tetherFsBase64Url(request.body);
+          for (let offset = 0; offset < encoded.length; offset += tetherFsChunkChars) {
+            chunks.push(encoded.slice(offset, offset + tetherFsChunkChars));
+          }
+        }
+        const sendChunk = (seq) => new Promise((ackDone, ackFail) => {
+          const timer = setTimeout(() => {
+            if (!entry.ack) return;
+            entry.ack = null;
+            ackFail(new Error("\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053\u54CD\u5E94\u8D85\u65F6"));
+          }, 2e4);
+          entry.ack = (got) => {
+            if (got !== seq && got !== -1) return;
+            clearTimeout(timer);
+            entry.ack = null;
+            if (got === -1) ackFail(abortError());
+            else ackDone();
+          };
+          const params = new URLSearchParams({
+            tether_action: "fs",
+            request_id: id,
+            fs_device: request.device || "",
+            fs_method: request.method,
+            fs_path: request.path,
+            fs_seq: String(seq),
+            fs_total: String(chunks.length)
+          });
+          if (request.query) params.set("fs_query", request.query);
+          if (chunks[seq]) params.set("fs_chunk", chunks[seq]);
+          window.location.hash = params.toString();
+        });
+        const sendAll = async () => {
+          if (!tetherFsPending.has(id)) throw abortError();
+          if (!chunks.length) {
+            await sendChunk(0);
+            return;
+          }
+          for (let seq = 0; seq < chunks.length; seq += 1) {
+            if (!tetherFsPending.has(id)) throw abortError();
+            await sendChunk(seq);
+          }
+        };
+        const sending = tetherFsSendQueue.then(sendAll, sendAll);
+        tetherFsSendQueue = sending.catch(() => {
+        });
+        sending.catch((error) => {
+          if (entry.ack) entry.ack = null;
+          failRequest(error);
+        });
+        return result;
+      };
       if (tetherLoopbackPage && !window.__tetherDeviceFsChannel && typeof window.fetch === "function") {
         window.__tetherDeviceFsChannel = true;
         const tetherFetch = window.fetch.bind(window);
@@ -181063,181 +181428,6 @@ function tether_dsh_flow_fn_default(ctx, React2) {
           "/write_chunk": "/fs/write_chunk"
         })[suffix] || suffix;
         const tetherFsRoutes = ["/drives", "/workspaces", "/list", "/read", "/write_chunk"];
-        const tetherFsMode = () => {
-          try {
-            if (window.parent && window.parent !== window) return "iframe";
-          } catch (_2) {
-            return "iframe";
-          }
-          try {
-            if (/Electron\//.test(navigator.userAgent || "")) return "hash";
-          } catch (_2) {
-          }
-          return "";
-        };
-        const tetherFsUuid = () => {
-          let id = "";
-          try {
-            id = crypto.randomUUID();
-          } catch (_2) {
-          }
-          if (!/^[0-9a-f-]{36}$/i.test(id)) {
-            id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-              const r = Math.random() * 16 | 0;
-              return (c === "x" ? r : r & 3 | 8).toString(16);
-            });
-          }
-          return id;
-        };
-        const tetherFsBase64Url = (text2) => {
-          const bytes = new TextEncoder().encode(String(text2 || ""));
-          let binary = "";
-          for (let offset = 0; offset < bytes.length; offset += 32768) {
-            binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
-          }
-          return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-        };
-        const tetherFsChunkChars = 262144;
-        const tetherFsPending = /* @__PURE__ */ new Map();
-        let tetherFsListening = false;
-        const onTetherFsMessage = (event) => {
-          const data = event && event.data;
-          if (!data || typeof data !== "object") return;
-          if (data.type !== "tether:fs-chunk" && data.type !== "tether:fs-result") return;
-          const id = String(data.id || "");
-          const entry = tetherFsPending.get(id);
-          if (!entry) return;
-          if (data.type === "tether:fs-chunk") {
-            if (entry.ack) entry.ack(Number(data.seq));
-            return;
-          }
-          tetherFsPending.delete(id);
-          clearTimeout(entry.timer);
-          if (entry.removeAbort) entry.removeAbort();
-          if (data.ok === true) {
-            entry.resolve({ status: Number(data.status) || 200, data: data.data === void 0 ? null : data.data });
-            return;
-          }
-          const error = new Error(String(data.message || "HTTP " + (Number(data.status) || 0)));
-          error.status = Number(data.status) || 0;
-          error.code = typeof data.code === "string" ? data.code : "";
-          entry.reject(error);
-        };
-        let tetherFsSendQueue = Promise.resolve();
-        const tetherFsRelay = (request, signal) => {
-          const mode = tetherFsMode();
-          if (!mode) return Promise.reject(new Error("\u5F53\u524D\u9875\u9762\u6CA1\u6709\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053"));
-          if (!tetherFsListening) {
-            tetherFsListening = true;
-            window.addEventListener("message", onTetherFsMessage);
-          }
-          const id = tetherFsUuid();
-          let settle = null;
-          const result = new Promise((resolve3, reject) => {
-            settle = { resolve: resolve3, reject };
-          });
-          const entry = { resolve: settle.resolve, reject: settle.reject, timer: null, ack: null, removeAbort: null };
-          const abortError = () => new DOMException("The operation was aborted", "AbortError");
-          const drop = () => {
-            if (tetherFsPending.get(id) !== entry) return false;
-            tetherFsPending.delete(id);
-            clearTimeout(entry.timer);
-            return true;
-          };
-          const failRequest = (error) => {
-            if (!drop()) return;
-            entry.reject(error);
-          };
-          tetherFsPending.set(id, entry);
-          entry.timer = setTimeout(() => {
-            const error = new Error("\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053\u54CD\u5E94\u8D85\u65F6");
-            error.status = 0;
-            failRequest(error);
-          }, 12e4);
-          if (signal) {
-            const onAbort = () => {
-              if (entry.ack) entry.ack(-1);
-              failRequest(abortError());
-            };
-            if (signal.aborted) {
-              onAbort();
-              return result;
-            }
-            try {
-              signal.addEventListener("abort", onAbort, { once: true });
-              entry.removeAbort = () => signal.removeEventListener("abort", onAbort);
-            } catch (_2) {
-            }
-          }
-          if (mode === "iframe") {
-            try {
-              window.parent.postMessage({
-                type: "tether:fs-request",
-                id,
-                method: request.method,
-                path: request.path,
-                query: request.query || "",
-                device: request.device,
-                body: request.body === void 0 ? null : request.body
-              }, "*");
-            } catch (_2) {
-              failRequest(new Error("\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053\u4E0D\u53EF\u7528"));
-            }
-            return result;
-          }
-          const chunks = [];
-          if (typeof request.body === "string" && request.body) {
-            const encoded = tetherFsBase64Url(request.body);
-            for (let offset = 0; offset < encoded.length; offset += tetherFsChunkChars) {
-              chunks.push(encoded.slice(offset, offset + tetherFsChunkChars));
-            }
-          }
-          const sendChunk = (seq) => new Promise((ackDone, ackFail) => {
-            const timer = setTimeout(() => {
-              if (!entry.ack) return;
-              entry.ack = null;
-              ackFail(new Error("\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053\u54CD\u5E94\u8D85\u65F6"));
-            }, 2e4);
-            entry.ack = (got) => {
-              if (got !== seq && got !== -1) return;
-              clearTimeout(timer);
-              entry.ack = null;
-              if (got === -1) ackFail(abortError());
-              else ackDone();
-            };
-            const params = new URLSearchParams({
-              tether_action: "fs",
-              request_id: id,
-              fs_device: request.device || "",
-              fs_method: request.method,
-              fs_path: request.path,
-              fs_seq: String(seq),
-              fs_total: String(chunks.length)
-            });
-            if (request.query) params.set("fs_query", request.query);
-            if (chunks[seq]) params.set("fs_chunk", chunks[seq]);
-            window.location.hash = params.toString();
-          });
-          const sendAll = async () => {
-            if (!tetherFsPending.has(id)) throw abortError();
-            if (!chunks.length) {
-              await sendChunk(0);
-              return;
-            }
-            for (let seq = 0; seq < chunks.length; seq += 1) {
-              if (!tetherFsPending.has(id)) throw abortError();
-              await sendChunk(seq);
-            }
-          };
-          const sending = tetherFsSendQueue.then(sendAll, sendAll);
-          tetherFsSendQueue = sending.catch(() => {
-          });
-          sending.catch((error) => {
-            if (entry.ack) entry.ack = null;
-            failRequest(error);
-          });
-          return result;
-        };
         window.fetch = function(input, init) {
           try {
             const raw = typeof input === "string" ? input : input && typeof input.url === "string" ? input.url : "";
@@ -181295,7 +181485,7 @@ function tether_dsh_flow_fn_default(ctx, React2) {
           return "iframe";
         }
         try {
-          if (/Electron\//.test(navigator.userAgent || "")) return "hash";
+          if (window.__tetherEmbeddedHost === true || /Electron\//.test(navigator.userAgent || "")) return "hash";
         } catch (_2) {
         }
         return "";
@@ -181321,17 +181511,7 @@ function tether_dsh_flow_fn_default(ctx, React2) {
         }
         const kind = options && options.kind === "file" ? "file" : "folder";
         const multiple = !!(options && options.multiple);
-        let id = "";
-        try {
-          id = crypto.randomUUID();
-        } catch (_2) {
-        }
-        if (!/^[0-9a-f-]{36}$/i.test(id)) {
-          id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-            const r = Math.random() * 16 | 0;
-            return (c === "x" ? r : r & 3 | 8).toString(16);
-          });
-        }
+        const id = tetherFsUuid();
         return new Promise((resolve3) => {
           const timer = setTimeout(() => {
             if (!tetherPickPending.has(id)) return;
@@ -181358,6 +181538,193 @@ function tether_dsh_flow_fn_default(ctx, React2) {
           window.location.hash = params.toString();
         });
       };
+      const tetherMimeForPath = (filePath) => {
+        const ext = String(filePath || "").split(".").pop().toLowerCase();
+        return {
+          png: "image/png",
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          gif: "image/gif",
+          webp: "image/webp",
+          bmp: "image/bmp",
+          svg: "image/svg+xml",
+          pdf: "application/pdf",
+          txt: "text/plain",
+          md: "text/markdown",
+          json: "application/json",
+          csv: "text/csv"
+        }[ext] || "application/octet-stream";
+      };
+      const tetherBaseName = (filePath) => {
+        const clean = String(filePath || "").replace(/[\\/]+$/, "");
+        const idx = Math.max(clean.lastIndexOf("\\"), clean.lastIndexOf("/"));
+        return idx >= 0 ? clean.slice(idx + 1) || clean : clean;
+      };
+      const tetherShowToast = /* @__PURE__ */ (() => {
+        let el2 = null;
+        let timer = null;
+        return (text2, duration = 3500) => {
+          if (typeof document === "undefined" || !document.body) return;
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          if (!text2) {
+            if (el2) el2.remove();
+            el2 = null;
+            return;
+          }
+          if (!el2) {
+            el2 = document.createElement("div");
+            el2.setAttribute("role", "status");
+            el2.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483000;max-width:420px;padding:8px 12px;border-radius:8px;background:rgba(16,24,40,.88);color:#fff;font-size:12px;line-height:18px;box-shadow:0 4px 16px rgba(16,24,40,.22);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+            document.body.appendChild(el2);
+          }
+          el2.textContent = text2;
+          if (duration > 0) timer = setTimeout(() => {
+            if (el2) el2.remove();
+            el2 = null;
+            timer = null;
+          }, duration);
+        };
+      })();
+      const tetherReadTargetFile = async (filePath) => {
+        const CHUNK = 4 * 1024 * 1024;
+        const slices = [];
+        let offset = 0;
+        let totalSize = null;
+        for (; ; ) {
+          const reply = await tetherFsRelay({
+            method: "POST",
+            path: "/fs/read",
+            body: JSON.stringify({ path: filePath, offset, limit: CHUNK, encoding: "base64" })
+          });
+          const data = reply && reply.data;
+          if (!data || typeof data !== "object") throw new Error("\u76EE\u6807\u6587\u4EF6\u8BFB\u53D6\u54CD\u5E94\u65E0\u6548");
+          if (data.binary !== true || typeof data.base64 !== "string") {
+            throw new Error("\u76EE\u6807\u8282\u70B9\u672A\u8FD4\u56DE\u9644\u4EF6\u539F\u59CB\u5B57\u8282");
+          }
+          const size = Number(data.size);
+          if (!Number.isSafeInteger(size) || size < 0) throw new Error("\u76EE\u6807\u6587\u4EF6\u5927\u5C0F\u65E0\u6548");
+          if (totalSize === null) totalSize = size;
+          else if (size !== totalSize) throw new Error("\u76EE\u6807\u6587\u4EF6\u5728\u8BFB\u53D6\u671F\u95F4\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u8BD5");
+          const bin = atob(data.base64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+          if (bytes.length) slices.push(bytes);
+          offset += bytes.length;
+          if (!data.truncated || offset >= totalSize || bytes.length === 0) break;
+        }
+        const name = tetherBaseName(filePath) || "attachment";
+        return new File(slices, name, { type: tetherMimeForPath(name), lastModified: Date.now() });
+      };
+      const tetherDeliverFilesToComposer = (files) => {
+        if (!Array.isArray(files) || !files.length || typeof document === "undefined") return false;
+        const inputs = [...document.querySelectorAll('input[type="file"]')];
+        const input = inputs.find((el2) => !el2.disabled && el2.multiple) || inputs.find((el2) => !el2.disabled) || inputs[0];
+        if (!input) return false;
+        try {
+          const dt2 = new DataTransfer();
+          for (const file of files) dt2.items.add(file);
+          Object.defineProperty(input, "files", { value: dt2.files, configurable: true });
+        } catch (_2) {
+          try {
+            const dt2 = new DataTransfer();
+            for (const file of files) dt2.items.add(file);
+            input.files = dt2.files;
+          } catch (__) {
+            return false;
+          }
+        }
+        const reactPropsKey = Object.keys(input).find((k) => k.indexOf("__reactProps$") === 0);
+        const props = reactPropsKey ? input[reactPropsKey] : null;
+        if (props && typeof props.onChange === "function") {
+          props.onChange({ target: input, currentTarget: input });
+          return true;
+        }
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      };
+      let tetherAttachBusy = false;
+      const tetherPickAndAttachFiles = async () => {
+        if (tetherAttachBusy) return;
+        tetherAttachBusy = true;
+        const startHref = window.location.href;
+        try {
+          const paths = await requestTetherHostPick({ kind: "file", multiple: true });
+          if (!paths || !paths.length) return;
+          if (window.location.href !== startHref) return;
+          const files = [];
+          for (let idx = 0; idx < paths.length; idx += 1) {
+            const p = paths[idx];
+            const label = tetherBaseName(p) + (paths.length > 1 ? "\uFF08" + (idx + 1) + "/" + paths.length + "\uFF09" : "");
+            tetherShowToast("\u6B63\u5728\u8BFB\u53D6 " + label + "\u2026", 6e5);
+            const file = await tetherReadTargetFile(p);
+            if (window.location.href !== startHref) {
+              tetherShowToast("");
+              return;
+            }
+            files.push(file);
+          }
+          if (!tetherDeliverFilesToComposer(files)) {
+            throw new Error("\u5F53\u524D\u4F1A\u8BDD\u6682\u4E0D\u63A5\u53D7\u9644\u4EF6");
+          }
+          tetherShowToast(files.length === 1 ? "\u5DF2\u6DFB\u52A0\u9644\u4EF6 " + files[0].name : "\u5DF2\u6DFB\u52A0 " + files.length + " \u4E2A\u9644\u4EF6", 3e3);
+        } catch (err) {
+          tetherShowToast("\u6DFB\u52A0\u9644\u4EF6\u5931\u8D25\uFF1A" + (err && err.message || String(err)), 4500);
+        } finally {
+          tetherAttachBusy = false;
+        }
+      };
+      const patchDshFileCommand = (commands) => {
+        try {
+          const map = commands && commands.live && commands.live.contributions;
+          if (!map || typeof map.get !== "function") return false;
+          if (map.has("tether-target-files")) map.delete("tether-target-files");
+          const fileCmd = map.get("file");
+          if (!fileCmd || !fileCmd.ui || fileCmd.__tetherPatched) return !!fileCmd;
+          const wrapped = {
+            ...fileCmd,
+            __tetherPatched: true,
+            ui: {
+              ...fileCmd.ui,
+              run: () => {
+                void tetherPickAndAttachFiles();
+              }
+            }
+          };
+          map.set("file", wrapped);
+          return true;
+        } catch (_2) {
+          return false;
+        }
+      };
+      try {
+        ctx.inject(["commandUi"], (scope) => {
+          const commands = scope.get("commandUi");
+          if (!commands) return;
+          patchDshFileCommand(commands);
+          let ticks = 0;
+          const timer = setInterval(() => {
+            ticks += 1;
+            patchDshFileCommand(commands);
+            if (ticks >= 40) clearInterval(timer);
+          }, 250);
+          if (typeof scope.effect === "function") scope.effect(() => () => clearInterval(timer));
+        });
+      } catch (_2) {
+      }
+      if (typeof HTMLInputElement !== "undefined" && !window.__tetherFileInputGuard) {
+        window.__tetherFileInputGuard = true;
+        const origClick = HTMLInputElement.prototype.click;
+        HTMLInputElement.prototype.click = function() {
+          if (this && this.type === "file" && tetherPickMode()) {
+            void tetherPickAndAttachFiles();
+            return;
+          }
+          return origClick.apply(this, arguments);
+        };
+      }
       const TetherHostDirectoryFlow = (props) => {
         const open = props.open;
         const armed = React2.useRef(false);
@@ -181461,8 +181828,8 @@ function dshGuestFlowScript() {
   const flowFnSource = typeof tether_dsh_flow_fn_default === "function" ? tether_dsh_flow_fn_default.toString() : "";
   if (!flowFnSource) return "";
   return `(function () {
+  window.__tetherEmbeddedHost = true
   if (window.__tetherGuestFlowV2) return
-  try { if (!new URL(location.href).searchParams.has('tether_native')) return } catch (_) { return }
   window.__tetherGuestFlowV2 = true
   var runFlow = ${flowFnSource}
   var id = 'tether-dsh-guest-flow'
@@ -184780,23 +185147,46 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const nativeGuestRef = React2.useRef(null);
     const nativeIframeRef = React2.useRef(null);
     const [folderPick, setFolderPick] = React2.useState(null);
+    React2.useEffect(() => {
+      setFolderPick((current) => {
+        if (!current) return null;
+        if (current.deviceId === deviceId && current.grantId === (currentState.grantId || "")) return current;
+        const payload = { type: "tether:pick-folder-result", id: current.id, cancelled: true };
+        if (current.mode === "iframe") {
+          try {
+            if (current.source && typeof current.source.postMessage === "function") current.source.postMessage(payload, "*");
+          } catch (_2) {
+          }
+        } else if (current.guest && typeof current.guest.executeJavaScript === "function") {
+          try {
+            void current.guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {
+            });
+          } catch (_2) {
+          }
+        }
+        return null;
+      });
+    }, [deviceId, currentState.grantId]);
     const closeFolderPick = (value) => {
       const request = folderPick;
       if (!request) return;
       setFolderPick(null);
       const chosen = (Array.isArray(value) ? value : [value]).map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean);
-      const payload = chosen.length ? { type: "tether:pick-folder-result", id: request.id, path: chosen[0], paths: chosen } : { type: "tether:pick-folder-result", id: request.id, cancelled: true };
+      const activeState = surfaceStateRef.current;
+      const stillMatchesDevice = request.deviceId === deviceId && (!request.grantId || activeState && activeState.grantId === request.grantId);
+      const payload = chosen.length && stillMatchesDevice ? { type: "tether:pick-folder-result", id: request.id, path: chosen[0], paths: chosen } : { type: "tether:pick-folder-result", id: request.id, cancelled: true };
       if (request.mode === "iframe") {
         try {
-          if (request.source && typeof request.source.postMessage === "function") {
+          const frame = nativeIframeRef.current;
+          if (request.source && (!frame || request.source === frame.contentWindow) && typeof request.source.postMessage === "function") {
             request.source.postMessage(payload, "*");
           }
         } catch (_2) {
         }
         return;
       }
-      const guest = nativeGuestRef.current;
-      if (!guest || typeof guest.executeJavaScript !== "function") return;
+      const guest = request.guest;
+      if (!guest || guest !== nativeGuestRef.current || typeof guest.executeJavaScript !== "function") return;
       try {
         void guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {
         });
@@ -184805,6 +185195,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     };
     const fsRelayLocalDeviceRef = React2.useRef(localDeviceId);
     fsRelayLocalDeviceRef.current = localDeviceId;
+    const fsRelayTargetDeviceRef = React2.useRef(deviceId);
+    fsRelayTargetDeviceRef.current = deviceId;
     const fsRelayChunksRef = React2.useRef(/* @__PURE__ */ new Map());
     const fsRelayReplyGuest = (guest, payload) => {
       if (!guest || typeof guest.executeJavaScript !== "function") return;
@@ -184824,7 +185216,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return "";
       }
     };
-    const fsRelayPerform = async (reply, request) => {
+    const fsRelayPerform = async (reply, request, pinnedDevice = "") => {
       const id = String(request && request.id || "");
       const fail2 = (status2, code, message2) => reply({ type: "tether:fs-result", id, ok: false, status: status2, code, message: message2 });
       if (!/^[0-9a-f-]{36}$/i.test(id) || !tetherFsRelayHostReady()) return;
@@ -184842,9 +185234,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         fail2(400, "bad_query", "\u8BBE\u5907\u6587\u4EF6\u4E2D\u7EE7\u67E5\u8BE2\u4E32\u65E0\u6548");
         return;
       }
-      const localDevice = await fsRelayLocalDevice();
-      if (!localDevice || request.device !== localDevice) {
-        fail2(404, "device_not_found", "\u53EA\u5141\u8BB8\u4E2D\u7EE7\u672C\u673A\u8BBE\u5907");
+      const targetDevice = pinnedDevice || fsRelayTargetDeviceRef.current || await fsRelayLocalDevice();
+      if (!targetDevice || request.device && request.device !== targetDevice) {
+        fail2(404, "device_not_found", "\u8BBE\u5907\u8EAB\u4EFD\u4E0E\u5F53\u524D\u5DE5\u4F5C\u533A\u4E0D\u5339\u914D");
         return;
       }
       let body;
@@ -184863,8 +185255,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           fail2(400, "bad_body", "\u8BBE\u5907\u6587\u4EF6\u4E2D\u7EE7\u8BF7\u6C42\u4F53\u65E0\u6548");
           return;
         }
-        if (parsed.device_id != null && String(parsed.device_id) !== localDevice) {
-          fail2(404, "device_not_found", "\u53EA\u5141\u8BB8\u4E2D\u7EE7\u672C\u673A\u8BBE\u5907");
+        if (parsed.device_id != null && String(parsed.device_id) !== targetDevice) {
+          fail2(404, "device_not_found", "\u8BBE\u5907\u8EAB\u4EFD\u4E0E\u5F53\u524D\u5DE5\u4F5C\u533A\u4E0D\u5339\u914D");
           return;
         }
         body = request.body;
@@ -184875,7 +185267,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const startedAt = performance.now();
       let response;
       try {
-        response = await fetch("/api/devices/" + encodeURIComponent(localDevice) + path, {
+        response = await fetch("/api/devices/" + encodeURIComponent(targetDevice) + path, {
           method,
           headers: body === void 0 ? void 0 : { "Content-Type": "application/json" },
           body: body === void 0 ? void 0 : body,
@@ -184883,7 +185275,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           cache: "no-store"
         });
       } catch (_2) {
-        fail2(502, "local_unreachable", "\u672C\u673A\u8BBE\u5907\u6587\u4EF6\u670D\u52A1\u4E0D\u53EF\u8FBE");
+        fail2(502, "local_unreachable", "\u76EE\u6807\u8BBE\u5907\u6587\u4EF6\u670D\u52A1\u4E0D\u53EF\u8FBE");
         return;
       }
       const data = await response.json().catch(() => null);
@@ -184947,9 +185339,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           return;
         }
       }
+      const pinnedDevice = surfaceStateRef.current && surfaceStateRef.current.deviceId || deviceId;
       void fsRelayPerform(
         (payload) => fsRelayReplyGuest(guest, payload),
-        { id, method, path, device, query, body }
+        { id, method, path, device, query, body },
+        pinnedDevice
       );
     };
     const pollFlightRef = React2.useRef(null);
@@ -185610,56 +186004,60 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [dshBusy, setDshBusy] = React2.useState("");
     const dshWatch = visible && (deviceId === localDeviceId || dshRelevant || !!dshBusy);
     const [dshError, setDshError] = React2.useState("");
+    const [dshActionError, setDshActionError] = React2.useState("");
     const [dshWeb, setDshWeb] = React2.useState(null);
     const [dshWebBusy, setDshWebBusy] = React2.useState("");
-    const [dshWebOpen, setDshWebOpen] = React2.useState(false);
-    const [dshWebLoad, setDshWebLoad] = React2.useState({ status: "idle", attempt: 0, error: "" });
-    const [dshWebGuestReady, setDshWebGuestReady] = React2.useState(false);
-    const dshWebRef = React2.useRef(null);
-    const dshWebRefCallback = React2.useRef(null);
-    if (!dshWebRefCallback.current) dshWebRefCallback.current = (guest) => {
-      if (dshWebRef.current === guest) return;
-      dshWebRef.current = guest;
-      if (guest) bindDshGuestFlowInjection(guest);
-      setDshWebGuestReady(!!guest);
+    const dshPendingAutoOpenRef = React2.useRef(false);
+    const [nativeGuestAttempt, setNativeGuestAttempt] = React2.useState(0);
+    const nativeGuestAttemptRef = React2.useRef(0);
+    nativeGuestAttemptRef.current = nativeGuestAttempt;
+    const nativeGuestTimerRef = React2.useRef(null);
+    const clearNativeGuestTimer = () => {
+      if (nativeGuestTimerRef.current) clearTimeout(nativeGuestTimerRef.current);
+      nativeGuestTimerRef.current = null;
     };
-    const dshWebLoadAttemptRef = React2.useRef(0);
-    const dshWebLoadTimerRef = React2.useRef(null);
-    const clearDshWebLoadTimer = () => {
-      if (dshWebLoadTimerRef.current) clearTimeout(dshWebLoadTimerRef.current);
-      dshWebLoadTimerRef.current = null;
+    const armNativeGuestTimer = (attemptNum, timeoutMs) => {
+      clearNativeGuestTimer();
+      nativeGuestTimerRef.current = setTimeout(() => {
+        if (nativeGuestAttemptRef.current !== attemptNum) return;
+        setState((prev) => prev.deviceId === deviceId && prev.status === "native-document-loading" ? { ...prev, status: "native-document-error", message: "DSH \u8FDE\u63A5\u8D85\u65F6\uFF0C\u8BF7\u91CD\u8BD5\u3002" } : prev);
+      }, timeoutMs);
     };
-    const beginDshWebLoad = () => {
-      const attempt2 = dshWebLoadAttemptRef.current + 1;
-      dshWebLoadAttemptRef.current = attempt2;
-      clearDshWebLoadTimer();
-      setDshWebLoad({ status: "loading", attempt: attempt2, error: "" });
-      dshWebLoadTimerRef.current = setTimeout(() => {
-        if (dshWebLoadAttemptRef.current !== attempt2) return;
-        setDshWebLoad({ status: "error", attempt: attempt2, error: "DSH Web \u8FDE\u63A5\u8D85\u65F6\uFF0C\u8BF7\u68C0\u67E5\u670D\u52A1\u540E\u91CD\u8BD5\u3002" });
-      }, 2e4);
-      return attempt2;
+    const reloadNativeGuest = () => {
+      const nextAttempt = nativeGuestAttemptRef.current + 1;
+      nativeGuestAttemptRef.current = nextAttempt;
+      setNativeGuestAttempt(nextAttempt);
+      setState((prev) => prev.deviceId === deviceId && prev.url ? { ...prev, status: "native-document-loading", message: "" } : prev);
+      const current = surfaceStateRef.current;
+      armNativeGuestTimer(nextAttempt, current && current.fromWorkbenchOpen ? 2e4 : NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS);
     };
-    const closeDshWeb = () => {
-      dshWebLoadAttemptRef.current += 1;
-      clearDshWebLoadTimer();
-      setDshWebLoad({ status: "idle", attempt: dshWebLoadAttemptRef.current, error: "" });
-      const grantId = dshWeb && dshWeb.grantId;
+    const closeWorkbenchDsh = () => {
+      nativeGuestAttemptRef.current += 1;
+      setNativeGuestAttempt(nativeGuestAttemptRef.current);
+      clearNativeGuestTimer();
+      const current = surfaceStateRef.current;
+      const grantId = current && current.grantId;
+      const svcId = current && current.serviceId || "dsh";
       if (grantId && host.kind === "app" && host.workbench && host.workbench.close) {
         setDshWebBusy("close");
-        void host.workbench.close(deviceId, "dsh", grantId).then(() => {
-          setDshWebOpen(false);
-          setDshWeb((current) => ({ ...current || {}, grantId: "", endpoint: "", partition: "", running: false }));
+        void host.workbench.close(deviceId, svcId, grantId).then(() => {
+          setState({ deviceId, status: "error", url: "", code: "descriptor_missing", message: "DSH \u672A\u542F\u52A8" });
+          setDshWeb((cur) => ({ ...cur || {}, running: false }));
         }).catch((error) => {
-          setDshWeb((current) => ({ ...current || {}, error: error.message || "\u65E0\u6CD5\u64A4\u9500 DSH Web \u6388\u6743\u3002" }));
+          setDshActionError(error && error.message || "\u65E0\u6CD5\u5173\u95ED DSH \u5DE5\u4F5C\u533A\u3002");
         }).finally(() => setDshWebBusy(""));
         return;
       }
-      setDshWebOpen(false);
+      setState({ deviceId, status: "error", url: "", code: "descriptor_missing", message: "DSH \u672A\u542F\u52A8" });
     };
-    React2.useEffect(() => () => {
-      dshWebLoadAttemptRef.current += 1;
-      clearDshWebLoadTimer();
+    React2.useEffect(() => {
+      setDshActionError("");
+      setDshError("");
+      dshPendingAutoOpenRef.current = false;
+      clearNativeGuestTimer();
+      return () => {
+        clearNativeGuestTimer();
+      };
     }, [deviceId]);
     const dshWebEnabled = host.kind === "app" && !!(host.workbench && host.workbench.open) && !!dshWeb;
     const dshWebActive = !!(dshWeb && (dshWeb.state === "ready" || dshWeb.running || dshWeb.installing || dshWebBusy));
@@ -185685,10 +186083,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             state: "missing",
             running: false,
             installing: false,
-            reason: "service_not_advertised"
+            reason: "service_not_advertised",
+            error: ""
           });
-        } catch (error) {
-          if (alive) setDshWeb((current) => ({ ...current || {}, error: error.message || "\u65E0\u6CD5\u8BFB\u53D6 DSH \u670D\u52A1\u72B6\u6001\u3002" }));
+        } catch (_2) {
         }
       };
       void load3();
@@ -185698,61 +186096,78 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         clearInterval(timer);
       };
     }, [deviceId, host.kind, dshWeb && dshWeb.state === "starting"]);
-    const runDshWeb = async () => {
+    const openWorkbenchDsh = async () => {
       if (!deviceId || !host.workbench || !host.workbench.open) return;
+      setDshActionError("");
+      setDshError("");
       setDshWebBusy("open");
       try {
         const service = await host.workbench.open(deviceId, "dsh");
         if (!service || service.targetId !== deviceId || service.serviceId !== "dsh" || !service.endpoint || !service.partition || !service.grantId) {
           throw new Error("\u4E3B\u8FDB\u7A0B\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684 DSH \u5DE5\u4F5C\u533A\u4F1A\u8BDD\u3002");
         }
+        dshPendingAutoOpenRef.current = false;
+        const isLocal = service.localDirect === true;
+        const isMesh = !isLocal && !!safeMeshDshEndpoint(service.endpoint);
+        const nextAttempt = nativeGuestAttemptRef.current + 1;
+        nativeGuestAttemptRef.current = nextAttempt;
+        setNativeGuestAttempt(nextAttempt);
         setDshWeb((current) => ({
           ...current || {},
           supported: true,
           state: "ready",
           running: true,
           installing: false,
-          endpoint: service.endpoint,
-          partition: service.partition,
-          grantId: service.grantId,
-          identity: safeSurfaceIdentity(service.surface || service),
-          loginState: "unknown",
-          reason: "",
-          error: ""
+          reason: ""
         }));
-        beginDshWebLoad();
-        setDshWebOpen(true);
+        setState({
+          deviceId,
+          status: "native-document-loading",
+          url: service.endpoint,
+          grantId: service.grantId,
+          partition: service.partition,
+          localDirect: isLocal,
+          mesh: isMesh,
+          serviceId: "dsh",
+          fromWorkbenchOpen: !isLocal,
+          sourceKey: surfaceSourceKey,
+          identity: safeSurfaceIdentity(service.surface || service),
+          loginState: "unknown"
+        });
+        armNativeGuestTimer(nextAttempt, isLocal ? NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS : 2e4);
       } catch (error) {
         if (error && error.code === "service_starting") {
+          dshPendingAutoOpenRef.current = true;
           setDshWeb((current) => ({
             ...current || {},
             state: "starting",
             running: false,
             installing: true,
-            reason: "",
-            error: ""
+            reason: ""
           }));
         } else {
-          setDshWeb((current) => ({ ...current || {}, error: error.message || "\u64CD\u4F5C\u5931\u8D25" }));
+          dshPendingAutoOpenRef.current = false;
+          setDshActionError(error && error.message || "\u542F\u52A8 DSH \u5931\u8D25");
         }
       } finally {
         setDshWebBusy("");
       }
     };
     React2.useEffect(() => {
-      if (host.kind !== "app" || !host.workbench || !host.workbench.view || !dshWeb || !dshWeb.grantId) return void 0;
-      void host.workbench.view(deviceId, "dsh", !!visible && dshWebOpen).catch((error) => {
-        setDshWeb((current) => ({ ...current || {}, error: error.message || "DSH \u5DE5\u4F5C\u533A\u53EF\u89C1\u72B6\u6001\u540C\u6B65\u5931\u8D25\u3002" }));
-      });
-      return void 0;
-    }, [deviceId, dshWeb && dshWeb.grantId, dshWebOpen, visible]);
+      if (!dshPendingAutoOpenRef.current || dshWebBusy) return;
+      if (dshWeb && dshWeb.state === "ready") {
+        dshPendingAutoOpenRef.current = false;
+        void openWorkbenchDsh();
+      }
+    }, [dshWeb && dshWeb.state, dshWebBusy]);
     React2.useEffect(() => {
       if (host.kind !== "app" || !host.workbench || !host.workbench.view) return void 0;
-      if (!currentState.mesh || currentState.deviceId !== deviceId || !currentState.grantId) return void 0;
-      void host.workbench.view(deviceId, "dsh", !!visible).catch(() => {
+      if (currentState.deviceId !== deviceId || !currentState.grantId) return void 0;
+      if (!currentState.mesh && !currentState.fromWorkbenchOpen) return void 0;
+      void host.workbench.view(deviceId, currentState.serviceId || "dsh", !!visible).catch(() => {
       });
       return void 0;
-    }, [deviceId, currentState.mesh, currentState.grantId, visible]);
+    }, [deviceId, currentState.mesh, currentState.fromWorkbenchOpen, currentState.serviceId, currentState.grantId, visible]);
     React2.useEffect(() => {
       if (!dshWatch && !dshRelevant) {
         setDsh(null);
@@ -185790,7 +186205,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           retryDocument();
           return;
         }
-      } else if (dsh && dsh.running && dsh.surface && ["document-loaded", "local"].includes(currentState.status)) {
+      } else if (dsh && dsh.running && dsh.surface && ["document-loaded", "local", "native-document-loaded"].includes(currentState.status)) {
         dshAwaitingDescriptorRef.current = false;
         setDshBusy("");
         setDshError("");
@@ -185805,6 +186220,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const dshActionBusy = dshBusy === "dsh_start" || dshBusy === "dsh_install" || dshBusy === "dsh_restart" || dshBusy === "dsh_install_plugin";
     const runDsh = async (action) => {
       setDshError("");
+      setDshActionError("");
       setDshBusy(action);
       dshAwaitingDescriptorRef.current = false;
       if (action === "dsh_restart" || action === "dsh_install_plugin") {
@@ -185814,15 +186230,44 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         const result = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/" + action, {});
         if (result) {
           setDsh(result);
-          if ((action === "dsh_start" || action === "dsh_install") && !result.error) {
+          if (result.error) {
+            setDshActionError(String(result.error));
+            setDshBusy("");
+          } else if (action === "dsh_start" || action === "dsh_install") {
             dshAwaitingDescriptorRef.current = true;
             retryDocument();
           }
         }
       } catch (error) {
-        setDshError(error.message || "\u64CD\u4F5C\u5931\u8D25");
+        setDshActionError(error.message || "\u64CD\u4F5C\u5931\u8D25");
         setDshBusy("");
       }
+    };
+    const isLocalTargetDevice = !!(localDeviceId && deviceId === localDeviceId);
+    const startUnifiedDsh = () => {
+      if (host.kind === "app" && host.workbench && host.workbench.open) {
+        if (isLocalTargetDevice) {
+          void openWorkbenchDsh();
+          return;
+        }
+        if (dshWeb && ["ready", "stopped", "starting"].includes(dshWeb.state)) {
+          void openWorkbenchDsh();
+          return;
+        }
+      }
+      if (dsh && dsh.installed === false && dshInstallSupported) {
+        void runDsh("dsh_install");
+        return;
+      }
+      if (dsh && dsh.installed !== false) {
+        void runDsh("dsh_start");
+        return;
+      }
+      if (host.kind === "app" && host.workbench && host.workbench.open) {
+        void openWorkbenchDsh();
+        return;
+      }
+      setDshActionError("\u76EE\u6807\u8BBE\u5907\u672A\u5B89\u88C5 DSH");
     };
     React2.useEffect(() => {
       const bridge = typeof window !== "undefined" ? window.tetherApp : void 0;
@@ -185841,28 +186286,46 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       });
     }, [deviceId]);
     const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true && currentState.code === "descriptor_missing";
-    const message = currentState.status === "error" && dshRelevant && dsh ? dshWebActive ? "DSH Web \u5DF2\u5C31\u7EEA" : dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : dsh.running ? dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u5B89\u88C5/\u4FEE\u590D Tether \u63D2\u4EF6\u2026" : dshSurfaceMissing ? "DSH \u5DF2\u5728\u8FD0\u884C\uFF0C\u4F46 Tether \u63D2\u4EF6\u672A\u52A0\u8F7D\u6216 surface \u63CF\u8FF0\u7B26\u7F3A\u5931" : currentState.message : "DSH \u672A\u542F\u52A8" : currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u8282\u70B9\u6682\u65F6\u79BB\u7EBF\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\uFF1B\u6062\u590D\u540E\u4F1A\u7EE7\u7EED\u8F7D\u5165\u5DE5\u4F5C\u533A\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
+    const message = currentState.status === "error" && dshRelevant && dsh ? dshWebActive ? "DSH \u5DF2\u5C31\u7EEA" : dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : dsh.running ? dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u4FEE\u590D\u5DE5\u4F5C\u533A\u2026" : dshSurfaceMissing ? "DSH \u5DE5\u4F5C\u533A\u7EC4\u4EF6\u672A\u5C31\u7EEA" : currentState.message : "DSH \u672A\u542F\u52A8" : currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5 DSH\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DSH \u4E2D" : currentState.status === "offline" ? "\u8BBE\u5907\u79BB\u7EBF" : currentState.status === "no-device" ? "\u8BF7\u9009\u62E9\u8BBE\u5907" : currentState.status === "error" ? currentState.message : "";
     const dshRunning = !!(dsh && dsh.running) || dshWebActive;
-    const dshStarting = dshActionBusy || !!(dsh && dsh.installing) || dshWebBusy === "start" || dshWebBusy === "install" || !!(dshWeb && dshWeb.installing) || dshRunning && ["loading", "document-loading"].includes(currentState.status);
-    const dshStartingLabel = dshBusy === "dsh_install" || dsh && dsh.installing ? "\u6B63\u5728\u5B89\u88C5 DSH\u2026" : dshBusy === "dsh_restart" ? "\u6B63\u5728\u91CD\u542F DSH\u2026" : dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u51C6\u5907\u5DE5\u4F5C\u533A\u2026" : dshRunning ? "\u6B63\u5728\u8F7D\u5165\u5DE5\u4F5C\u533A\u2026" : dsh && dsh.installed === false ? "\u6B63\u5728\u5B89\u88C5 DSH\u2026" : "\u6B63\u5728\u542F\u52A8 DSH\u2026";
+    const dshStarting = dshActionBusy || !!(dsh && dsh.installing) || dshWebBusy === "open" || dshWebBusy === "start" || dshWebBusy === "install" || !!(dshWeb && dshWeb.installing) || dshPendingAutoOpenRef.current || dshRunning && ["loading", "document-loading"].includes(currentState.status);
+    const dshStartingLabel = dshBusy === "dsh_install" || dsh && dsh.installing ? "\u6B63\u5728\u5B89\u88C5\u2026" : dshBusy === "dsh_restart" ? "\u6B63\u5728\u91CD\u542F\u2026" : dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u4FEE\u590D\u2026" : dshRunning && !dshWebBusy && !(dshWeb && dshWeb.installing) ? "\u6B63\u5728\u8FDE\u63A5\u2026" : "\u6B63\u5728\u542F\u52A8\u2026";
     const dshStalled = !dshStarting && dshRunning && !dshWebActive && (currentState.status === "error" || dshSurfaceMissing);
     const dshStopped = dshWatch && !!dsh && dsh.running === false;
     const dshSurfaceError = dshRelevant || dshStopped;
-    const dshDetecting = dshWatch && !dsh && currentState.status === "error";
+    const dshDetecting = dshWatch && !dsh && !dshWeb && currentState.status === "error";
     const onNativeGuest = (guest) => {
       nativeGuestRef.current = guest;
       bindDshGuestFlowInjection(guest);
       if (!guest || guest.__tetherNativeBound) return;
       guest.__tetherNativeBound = true;
+      const boundAttempt = nativeGuestAttemptRef.current;
+      guest.addEventListener("did-start-navigation", (event) => {
+        if (guest !== nativeGuestRef.current || boundAttempt !== nativeGuestAttemptRef.current) return;
+        if (!event || !event.isMainFrame) return;
+        const st2 = surfaceStateRef.current;
+        if (!st2 || st2.deviceId !== deviceId || !st2.fromWorkbenchOpen) return;
+        armNativeGuestTimer(boundAttempt, 2e4);
+        setState((prev) => prev.deviceId === deviceId && prev.url === st2.url ? { ...prev, status: "native-document-loading", message: "" } : prev);
+      });
       guest.addEventListener("did-finish-load", async () => {
+        if (guest !== nativeGuestRef.current || boundAttempt !== nativeGuestAttemptRef.current) return;
         const state2 = surfaceStateRef.current;
-        const approvedEndpoint = state2 && (state2.localDirect ? safeLocalDshSurfaceUrl(state2.url) : state2.mesh ? safeMeshDshEndpoint(state2.url) : safeDshNativeEndpoint(state2.url));
-        const guestEndpoint = state2 && state2.localDirect ? safeLocalDshNativeUrl(guest.getURL(), state2.url) : state2 && state2.mesh ? dshWebGuestSameOrigin(state2.url, guest.getURL()) ? approvedEndpoint : "" : safeDshNativeEndpoint(guest.getURL());
-        if (!state2 || state2.deviceId !== deviceId || !state2.partition || !approvedEndpoint || !guestEndpoint || !state2.localDirect && guestEndpoint !== approvedEndpoint) return;
+        if (!state2 || state2.deviceId !== deviceId || !state2.partition || !state2.url) return;
+        if (state2.fromWorkbenchOpen) {
+          if (typeof guest.getURL !== "function" || !dshWebGuestSameOrigin(state2.url, guest.getURL())) return;
+          clearNativeGuestTimer();
+          setState((prev) => prev.deviceId === deviceId && prev.url === state2.url ? { ...prev, status: "native-document-loaded", message: "" } : prev);
+          return;
+        }
+        const approvedEndpoint = state2.localDirect ? safeLocalDshSurfaceUrl(state2.url) : state2.mesh ? safeMeshDshEndpoint(state2.url) : safeDshNativeEndpoint(state2.url);
+        const guestEndpoint = state2.localDirect ? safeLocalDshNativeUrl(guest.getURL(), state2.url) : state2.mesh ? dshWebGuestSameOrigin(state2.url, guest.getURL()) ? approvedEndpoint : "" : safeDshNativeEndpoint(guest.getURL());
+        if (!approvedEndpoint || !guestEndpoint || !state2.localDirect && guestEndpoint !== approvedEndpoint) return;
         try {
           const hasContent = await guest.executeJavaScript("document.body && (document.body.children.length > 0 || document.body.innerText.trim().length > 0)");
           if (!hasContent) throw new Error("empty");
-          setState((prev) => prev.deviceId === deviceId && prev.url === state2.url ? { ...prev, status: "native-document-loaded" } : prev);
+          clearNativeGuestTimer();
+          setState((prev) => prev.deviceId === deviceId && prev.url === state2.url ? { ...prev, status: "native-document-loaded", message: "" } : prev);
         } catch (_2) {
           setState((prev) => prev.deviceId === deviceId && prev.url === state2.url ? { ...prev, status: "native-document-error", message: "DSH \u9875\u9762\u4E3A\u7A7A\u6216\u672A\u80FD\u6302\u8F7D\uFF0C\u8BF7\u91CD\u65B0\u8FDE\u63A5\u3002" } : prev);
         }
@@ -185891,10 +186354,18 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }
       });
       guest.addEventListener("did-fail-load", (event) => {
-        if (event.isMainFrame && event.errorCode !== -3) setState((prev) => prev.deviceId === deviceId ? { ...prev, status: "native-document-error", message: "DSH \u9875\u9762\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u65B0\u8FDE\u63A5\u3002" } : prev);
+        if (guest !== nativeGuestRef.current || boundAttempt !== nativeGuestAttemptRef.current) return;
+        if (event.isMainFrame && event.errorCode !== -3) {
+          clearNativeGuestTimer();
+          setState((prev) => prev.deviceId === deviceId ? { ...prev, status: "native-document-error", message: "DSH \u9875\u9762\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002" } : prev);
+        }
       });
       guest.addEventListener("did-get-response-details", (_event, _status, _newUrl, _originalUrl, httpStatus) => {
-        if (Number(httpStatus) >= 400) setState((prev) => prev.deviceId === deviceId ? { ...prev, status: "native-document-error", message: "DSH \u670D\u52A1\u8FD4\u56DE HTTP " + Number(httpStatus) + "\uFF0C\u8BF7\u91CD\u65B0\u8FDE\u63A5\u3002" } : prev);
+        if (guest !== nativeGuestRef.current || boundAttempt !== nativeGuestAttemptRef.current) return;
+        if (Number(httpStatus) >= 400) {
+          clearNativeGuestTimer();
+          setState((prev) => prev.deviceId === deviceId ? { ...prev, status: "native-document-error", message: "DSH \u670D\u52A1\u8FD4\u56DE HTTP " + Number(httpStatus) + "\uFF0C\u8BF7\u91CD\u8BD5\u3002" } : prev);
+        }
       });
       guest.addEventListener("did-navigate-in-page", (event) => {
         if (!event || event.isMainFrame !== true || typeof event.url !== "string") return;
@@ -185908,7 +186379,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           return;
         }
         const params = new URLSearchParams(actionUrl.hash.slice(1));
-        if (state2.localDirect && tetherFsRelayHostReady() && params.get("tether_action") === "fs") {
+        if (tetherFsRelayHostReady() && params.get("tether_action") === "fs") {
           fsRelayOnFrame(guest, params);
           if (typeof guest.executeJavaScript === "function") {
             void guest.executeJavaScript(
@@ -185931,6 +186402,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             id: requestId,
             mode: "webview",
             source: null,
+            guest,
+            deviceId: state2.deviceId,
+            grantId: state2.grantId || "",
             kind: pickKind === "file" ? "file" : "folder",
             multiple: pickMultiple === "1"
           };
@@ -185954,7 +186428,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (data.type === "tether:fs-request") {
           if (event.source !== frame.contentWindow) return;
           const surface = surfaceStateRef.current;
-          if (!surface || surface.deviceId !== deviceId || !surface.localDirect || !surface.url) return;
+          if (!surface || surface.deviceId !== deviceId || !surface.url) return;
           let approved = "";
           try {
             approved = new URL(surface.url).origin;
@@ -185969,7 +186443,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               } catch (_2) {
               }
             },
-            { id: data.id, method: data.method, path: data.path, device: data.device, body: data.body }
+            { id: data.id, method: data.method, path: data.path, device: data.device, body: data.body },
+            surface.deviceId
           );
           return;
         }
@@ -185981,6 +186456,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           id,
           mode: "iframe",
           source: event.source,
+          guest: null,
+          deviceId,
+          grantId: currentState.grantId || "",
           kind: data.kind === "file" ? "file" : "folder",
           multiple: data.multiple === true
         };
@@ -185988,45 +186466,44 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       };
       window.addEventListener("message", onMessage);
       return () => window.removeEventListener("message", onMessage);
-    }, [currentState.status, currentState.deviceId, deviceId]);
+    }, [currentState.status, currentState.deviceId, currentState.grantId, deviceId]);
     const dshLoginState = currentState.loginState || "unknown";
     const dshLoginSource = currentState.loginReason || "none";
     const nativeSurfaceGuest = ["native-document-loading", "native-document-loaded", "native-document-error"].includes(currentState.status) && currentState.deviceId === deviceId && host.kind === "app" ? h3(
       "div",
       { className: "tether-native-surface", style: { ...nativeSurfaceContainerStyle(visible, layered), ...layered ? {} : { position: "relative" } } },
+      currentState.status === "native-document-loading" && currentState.fromWorkbenchOpen ? h3("div", { role: "status", "aria-live": "polite", style: { position: "absolute", inset: 0, zIndex: 2, display: "grid", placeItems: "center", background: "rgba(255,255,255,.86)", color: C2.sub, fontSize: 13 } }, "\u6B63\u5728\u8FDE\u63A5 DSH\u2026") : null,
       currentState.status === "native-document-error" ? h3(
         "div",
         { role: "alert", style: { position: "absolute", inset: 0, zIndex: 2, display: "grid", placeItems: "center", alignContent: "center", gap: 10, background: C2.bg } },
         h3("div", null, currentState.message || "DSH \u9875\u9762\u65E0\u6CD5\u8FDE\u63A5\u3002"),
-        btn("\u91CD\u65B0\u8FDE\u63A5", retryDocument, { primary: true })
+        btn("\u91CD\u8BD5", currentState.fromWorkbenchOpen ? reloadNativeGuest : retryDocument, { primary: true })
       ) : null,
       h3("webview", {
-        key: currentState.grantId,
+        key: currentState.grantId + ":" + nativeGuestAttempt,
         partition: currentState.partition,
         src: currentState.url,
         ref: onNativeGuest,
         style: { width: "100%", height: "100%", border: 0, display: "flex" }
       }),
-      h3("div", {
-        role: "status",
-        "aria-live": "polite",
-        style: {
-          position: "absolute",
-          top: 8,
-          left: 8,
-          zIndex: 3,
-          maxWidth: 460,
-          padding: "5px 8px",
-          borderRadius: 6,
-          background: "rgba(255,255,255,.86)",
-          color: C2.sub,
-          fontSize: 11,
-          lineHeight: "15px",
-          pointerEvents: "none",
-          overflow: "hidden",
-          textOverflow: "ellipsis"
-        }
-      }, surfaceIdentityText(currentState.identity, dshLoginState, dshLoginSource)),
+      currentState.fromWorkbenchOpen ? h3(
+        "div",
+        { style: { position: "absolute", top: 10, right: 10, display: "flex", gap: 6, zIndex: 3 } },
+        h3("button", {
+          type: "button",
+          className: "tether-hover",
+          onClick: reloadNativeGuest,
+          title: "\u91CD\u65B0\u52A0\u8F7D",
+          style: { height: 28, padding: "0 10px", border: 0, borderRadius: 6, background: "rgba(255,255,255,.94)", color: C2.sub, fontSize: 12, cursor: "pointer", boxShadow: "0 1px 4px rgba(16,24,40,.16)" }
+        }, "\u91CD\u65B0\u52A0\u8F7D"),
+        h3("button", {
+          type: "button",
+          className: "tether-hover",
+          onClick: closeWorkbenchDsh,
+          title: "\u5173\u95ED",
+          style: { height: 28, padding: "0 10px", border: 0, borderRadius: 6, background: "rgba(255,255,255,.94)", color: C2.sub, fontSize: 12, cursor: "pointer", boxShadow: "0 1px 4px rgba(16,24,40,.16)" }
+        }, "\u5173\u95ED")
+      ) : null,
       folderPick ? h3(TetherFolderPickDialog, {
         key: folderPick.id,
         React: React2,
@@ -186034,7 +186511,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         Glyph,
         api: api2,
         post,
-        device: deviceId,
+        device: folderPick.deviceId || deviceId,
         kind: folderPick.kind === "file" ? "file" : "folder",
         multiple: folderPick.multiple === true,
         onDone: closeFolderPick
@@ -186047,166 +186524,21 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const timer = setTimeout(() => setDshStalledReady(true), 12e3);
       return () => clearTimeout(timer);
     }, [dshStalled, deviceId]);
-    const dshWebLoginState = dshWeb && dshWeb.loginState || "unknown";
-    const dshWebLoginSource = dshWeb && dshWeb.loginReason || "none";
-    const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.endpoint || "") : "";
-    const dshWebOpenable = host.kind === "app" && !!dshWebUrl && !!(dshWeb && dshWeb.partition);
-    const dshWebLoadAttempt = dshWebLoad.attempt;
-    const isCurrentDshWebGuest = (guest, attempt2) => !!(guest && guest === dshWebRef.current && dshWebLoadAttemptRef.current === attempt2);
-    const finishDshWebLoad = (attempt2, error = "") => {
-      if (dshWebLoadAttemptRef.current !== attempt2) return;
-      clearDshWebLoadTimer();
-      setDshWebLoad({ status: error ? "error" : "loaded", attempt: attempt2, error });
-    };
-    const inspectDshWebLogin = async () => {
-      const bridge = typeof window !== "undefined" ? window.tetherApp : void 0;
-      if (!dshWeb || !dshWebUrl || !dshWeb.partition) return;
-      let result = { state: "unknown", reason: "no_account_source" };
-      if (host && host.workbench && typeof host.workbench.accountStatus === "function") {
-        try {
-          const remote = await host.workbench.accountStatus(deviceId);
-          if (remote && ["logged_in", "logged_out", "unknown"].includes(remote.state)) {
-            result = { state: remote.state, reason: remote.reason || "account_op" };
-          }
-        } catch (_2) {
-        }
+    const activeDshError = dshActionError || dshError;
+    const dshIconBadge = h3("div", {
+      style: {
+        width: 52,
+        height: 52,
+        borderRadius: 14,
+        background: C2.soft,
+        color: C2.ink,
+        display: "grid",
+        placeItems: "center",
+        boxShadow: "0 1px 3px rgba(16,24,40,.06)"
       }
-      if (result.state === "unknown" && bridge && typeof bridge.inspectSurfaceLogin === "function") {
-        try {
-          const local = await bridge.inspectSurfaceLogin({
-            partition: dshWeb.partition,
-            origin: new URL(dshWebUrl).origin,
-            identity: dshWeb.identity || {}
-          });
-          if (local && local.ok && ["logged_in", "logged_out"].includes(local.state)) {
-            result = { state: local.state, reason: "partition_cookie" };
-          }
-        } catch (_2) {
-        }
-      }
-      if (!["logged_in", "logged_out"].includes(result.state)) return;
-      if ((dshWeb.loginState || "unknown") === result.state) return;
-      const reloadAfterLogin = result.state === "logged_in";
-      setDshWeb((current) => ({ ...current || {}, loginState: result.state, loginReason: result.reason }));
-      if (reloadAfterLogin) beginDshWebLoad();
-    };
-    React2.useEffect(() => {
-      if (!dshWebOpen || !dshWebUrl || !dshWeb || !dshWeb.partition) return void 0;
-      void inspectDshWebLogin();
-      const timer = setInterval(() => void inspectDshWebLogin(), 5e3);
-      return () => clearInterval(timer);
-    }, [dshWebOpen, dshWebUrl, dshWeb && dshWeb.partition, dshWeb && dshWeb.identity && dshWeb.identity.pid]);
-    React2.useEffect(() => {
-      const guest = dshWebRef.current;
-      if (!dshWebOpen || host.kind !== "app" || !guest || typeof guest.addEventListener !== "function") return void 0;
-      const attempt2 = dshWebLoadAttempt;
-      const onStart = (event) => {
-        if (!isCurrentDshWebGuest(guest, attempt2) || !event.isMainFrame) return;
-        clearDshWebLoadTimer();
-        dshWebLoadTimerRef.current = setTimeout(() => {
-          if (dshWebLoadAttemptRef.current !== attempt2) return;
-          setDshWebLoad({ status: "error", attempt: attempt2, error: "DSH Web \u8FDE\u63A5\u8D85\u65F6\uFF0C\u8BF7\u68C0\u67E5\u670D\u52A1\u540E\u91CD\u8BD5\u3002" });
-        }, 2e4);
-        setDshWebLoad({ status: "loading", attempt: attempt2, error: "" });
-      };
-      const onFinish = () => {
-        if (!isCurrentDshWebGuest(guest, attempt2) || typeof guest.getURL !== "function" || !dshWebGuestSameOrigin(dshWebUrl, guest.getURL())) return;
-        finishDshWebLoad(attempt2);
-      };
-      const onFail = (event) => {
-        if (!isCurrentDshWebGuest(guest, attempt2) || !event.isMainFrame || event.errorCode === -3) return;
-        finishDshWebLoad(attempt2, "DSH Web \u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u670D\u52A1\u540E\u91CD\u8BD5\u3002");
-      };
-      guest.addEventListener("did-start-navigation", onStart);
-      guest.addEventListener("did-finish-load", onFinish);
-      guest.addEventListener("did-fail-load", onFail);
-      return () => {
-        guest.removeEventListener("did-start-navigation", onStart);
-        guest.removeEventListener("did-finish-load", onFinish);
-        guest.removeEventListener("did-fail-load", onFail);
-      };
-    }, [dshWebOpen, dshWebGuestReady, dshWebLoadAttempt, dshWebUrl, host.kind]);
-    if (dshWebOpen && dshWebUrl && host.kind === "app") {
-      const dshWebLoadOverlay = dshWebLoad.status === "loading" ? h3(
-        "div",
-        { role: "status", "aria-live": "polite", style: {
-          position: "absolute",
-          inset: 0,
-          zIndex: 1,
-          display: "grid",
-          placeItems: "center",
-          background: "rgba(255,255,255,.84)",
-          color: C2.sub,
-          fontSize: 13
-        } },
-        "\u6B63\u5728\u8FDE\u63A5 DSH Web\u2026"
-      ) : dshWebLoad.status === "error" ? h3(
-        "div",
-        { style: {
-          position: "absolute",
-          inset: 0,
-          zIndex: 1,
-          display: "grid",
-          placeItems: "center",
-          alignContent: "center",
-          gap: 10,
-          padding: 24,
-          background: "rgba(255,255,255,.94)",
-          color: C2.sub,
-          textAlign: "center"
-        } },
-        h3("div", { role: "alert", style: { fontSize: 13 } }, dshWebLoad.error || "DSH Web \u6682\u65F6\u65E0\u6CD5\u8FDE\u63A5\u3002"),
-        btn("\u91CD\u8BD5", beginDshWebLoad, { primary: true })
-      ) : null;
-      return h3(
-        "div",
-        { className: "tether-native-surface", style: { ...nativeSurfaceContainerStyle(visible, layered), position: "relative", width: "100%", height: "100%", flex: "1 1 auto" } },
-        h3("webview", {
-          key: deviceId + ":" + dshWebLoadAttempt,
-          partition: dshWeb.partition,
-          ref: dshWebRefCallback.current,
-          src: dshWebUrl,
-          style: { display: "flex", flex: "1 1 auto", width: "100%", height: "100%", minWidth: 0, minHeight: 0, border: 0, background: C2.bg }
-        }),
-        dshWebLoadOverlay,
-        h3("div", {
-          role: "status",
-          "aria-live": "polite",
-          style: {
-            position: "absolute",
-            top: 10,
-            left: 10,
-            zIndex: 2,
-            maxWidth: 460,
-            padding: "5px 8px",
-            borderRadius: 6,
-            background: "rgba(255,255,255,.86)",
-            color: C2.sub,
-            fontSize: 11,
-            lineHeight: "15px",
-            pointerEvents: "none",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
-          }
-        }, surfaceIdentityText(dshWeb.identity, dshWebLoginState, dshWebLoginSource)),
-        h3(
-          "div",
-          { style: { position: "absolute", top: 10, right: 10, display: "flex", gap: 6, zIndex: 2 } },
-          h3("button", {
-            type: "button",
-            className: "tether-hover",
-            onClick: beginDshWebLoad,
-            style: { height: 28, padding: "0 10px", border: 0, borderRadius: 6, background: "rgba(255,255,255,.94)", color: C2.sub, fontSize: 12, cursor: "pointer", boxShadow: "0 1px 4px rgba(16,24,40,.16)" }
-          }, "\u91CD\u65B0\u52A0\u8F7D"),
-          h3("button", {
-            type: "button",
-            className: "tether-hover",
-            onClick: closeDshWeb,
-            style: { height: 28, padding: "0 10px", border: 0, borderRadius: 6, background: "rgba(255,255,255,.94)", color: C2.sub, fontSize: 12, cursor: "pointer", boxShadow: "0 1px 4px rgba(16,24,40,.16)" }
-          }, "\u5173\u95ED")
-        )
-      );
-    }
+    }, h3(Glyph, { name: "chat", size: 24 }));
+    const dshInstallOnly = !!(dsh && dsh.installed === false && dshInstallSupported && !(dshWeb && ["ready", "stopped", "starting"].includes(dshWeb.state)));
+    const dshCanOfferStart = isLocalTargetDevice || !!(dsh && dsh.installed !== false) || !!(dshWebEnabled && ["ready", "stopped", "starting"].includes(dshWeb.state)) || dshInstallOnly;
     return nativeSurfaceGuest || h3(
       "div",
       { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible, layered) },
@@ -186230,30 +186562,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             setState((prev) => prev.deviceId === deviceId && prev.url === currentState.url && prev.sourceKey === currentState.sourceKey ? { ...prev, status: "document-loaded" } : prev);
           },
           onError: handleDocumentFailure,
-          title: "\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A",
+          title: "DSH",
           referrerPolicy: "no-referrer",
           style: { flex: "1 1 auto", width: "100%", height: "100%", minWidth: 0, minHeight: 0, border: 0, background: C2.bg }
         }),
-        h3("div", {
-          role: "status",
-          "aria-live": "polite",
-          style: {
-            position: "absolute",
-            top: 8,
-            left: 8,
-            zIndex: 3,
-            maxWidth: 460,
-            padding: "5px 8px",
-            borderRadius: 6,
-            background: "rgba(255,255,255,.86)",
-            color: C2.sub,
-            fontSize: 11,
-            lineHeight: "15px",
-            pointerEvents: "none",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
-          }
-        }, surfaceIdentityText(currentState.identity, dshLoginState, dshLoginSource)),
         folderPick ? h3(TetherFolderPickDialog, {
           key: folderPick.id,
           React: React2,
@@ -186261,7 +186573,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           Glyph,
           api: api2,
           post,
-          device: deviceId,
+          device: folderPick.deviceId || deviceId,
           kind: folderPick.kind === "file" ? "file" : "folder",
           multiple: folderPick.multiple === true,
           onDone: closeFolderPick
@@ -186270,7 +186582,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           role: "status",
           "aria-live": "polite",
           style: { position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", padding: "6px 10px", borderRadius: 6, background: "rgba(255,255,255,.92)", color: C2.sub, fontSize: 12, boxShadow: "0 1px 4px rgba(16,24,40,.12)", pointerEvents: "none" }
-        }, "\u76EE\u6807\u5DE5\u4F5C\u533A\u9875\u9762\u6B63\u5728\u52A0\u8F7D\u2026") : null,
+        }, "\u6B63\u5728\u52A0\u8F7D\u2026") : null,
         slow && currentState.status === "document-loading" ? h3("div", {
           role: "status",
           style: { position: "absolute", bottom: 44, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "rgba(255,255,255,.95)", color: C2.sub, fontSize: 12, boxShadow: "0 1px 4px rgba(16,24,40,.14)" }
@@ -186278,95 +186590,79 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           type: "button",
           onClick: retryDocument,
           style: { border: 0, background: "transparent", color: C2.blue, fontSize: 12, cursor: "pointer", padding: 0 }
-        }, "\u91CD\u65B0\u52A0\u8F7D")) : null,
+        }, "\u91CD\u8BD5")) : null,
         styleBroken ? h3(
           "div",
           {
             role: "alert",
             style: { position: "absolute", inset: 0, zIndex: 7, display: "grid", placeItems: "center", alignContent: "center", gap: 10, padding: 24, background: C2.bg, textAlign: "center" }
           },
-          h3("div", { style: { fontSize: 14, color: C2.ink } }, "DSH \u754C\u9762\u6837\u5F0F\u4E0E Tether \u7248\u672C\u4E0D\u5339\u914D"),
-          h3(
-            "div",
-            { style: { maxWidth: 460, fontSize: 12, color: C2.sub, lineHeight: 1.6 } },
-            "\u5DF2\u81EA\u52A8\u5C1D\u8BD5\u5B89\u88C5/\u4FEE\u590D Tether \u63D2\u4EF6\u3002\u82E5\u4ECD\u65E0\u6CD5\u6062\u590D\uFF0C\u8BF7\u7B49\u5F85 Tether \u9002\u914D\u5F53\u524D DSH \u7248\u672C\u3002"
-          ),
+          dshIconBadge,
+          h3("div", { style: { fontSize: 14, color: C2.ink } }, "DSH \u6837\u5F0F\u5F02\u5E38"),
           btn("\u91CD\u8BD5", retryDocument, { primary: true })
         ) : null,
         currentState.status === "document-loaded" ? h3("button", {
           type: "button",
           onClick: retryDocument,
-          title: "\u91CD\u65B0\u52A0\u8F7D\u76EE\u6807\u5DE5\u4F5C\u533A",
-          "aria-label": "\u91CD\u65B0\u52A0\u8F7D\u76EE\u6807\u5DE5\u4F5C\u533A",
+          title: "\u91CD\u65B0\u52A0\u8F7D",
+          "aria-label": "\u91CD\u65B0\u52A0\u8F7D",
           style: { position: "absolute", right: 10, bottom: 10, width: 26, height: 26, border: 0, borderRadius: 999, background: "rgba(255,255,255,.9)", color: C2.sub, fontSize: 14, cursor: "pointer", boxShadow: "0 1px 4px rgba(16,24,40,.16)" }
         }, "\u21BB") : null
       ) : dshStarting ? h3(
         "div",
-        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
-        h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.mute } }, h3(Glyph, { name: "refresh", size: 20 })),
-        h3("div", { role: "status", "aria-live": "polite", style: { fontSize: 13, color: C2.sub } }, dshStartingLabel),
+        { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
+        dshIconBadge,
+        h3(
+          "div",
+          { role: "status", "aria-live": "polite", style: { display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: C2.sub } },
+          h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.mute } }, h3(Glyph, { name: "refresh", size: 15 })),
+          dshStartingLabel
+        ),
         dsh && dsh.installing ? h3("div", { className: "tether-num", style: { fontSize: 11.5, color: C2.mute } }, (Number(dsh.progress) || 0) + "%") : null
-      ) : dshError && currentState.status === "error" ? h3(
+      ) : dshRelevant && dshRunning && !dshWebActive && dshStalled ? h3(
         "div",
-        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
-        h3("div", { role: "status" }, dshError),
-        btn("\u91CD\u65B0\u52A0\u8F7D", () => {
-          setDshError("");
-          retryDocument();
-        }, { primary: true })
-      ) : dshRelevant && dshRunning && !dshWebOpenable ? dshStalled ? h3(
-        "div",
-        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
-        h3("div", { style: { fontSize: 14, color: C2.ink } }, "\u5DE5\u4F5C\u533A\u8FD8\u6CA1\u6709\u51C6\u5907\u597D"),
-        h3("div", { style: { maxWidth: 460, fontSize: 12, color: C2.mute, lineHeight: 1.6 } }, "DSH \u5DF2\u5728\u8FD0\u884C\uFF0C\u4F46 Tether \u5DE5\u4F5C\u533A\u7EC4\u4EF6\u6682\u65F6\u6CA1\u6709\u54CD\u5E94\u3002"),
+        { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
+        dshIconBadge,
+        h3("div", { style: { fontSize: 14, fontWeight: 600, color: C2.ink } }, "DSH \u672A\u54CD\u5E94"),
         h3(
           "div",
           { style: { display: "flex", gap: 8 } },
-          btn(dshBusy === "dsh_install_plugin" ? "\u4FEE\u590D\u4E2D\u2026" : "\u4FEE\u590D\u5DE5\u4F5C\u533A", () => {
+          btn(dshBusy === "dsh_install_plugin" ? "\u4FEE\u590D\u4E2D\u2026" : "\u4FEE\u590D", () => {
             dshAutoRepairRef.current = true;
             runDsh("dsh_install_plugin");
           }, { primary: true, disabled: !!dshBusy }),
-          btn(dshBusy === "dsh_restart" ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F DSH", () => runDsh("dsh_restart"), { disabled: !!dshBusy })
+          btn(dshBusy === "dsh_restart" ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F", () => runDsh("dsh_restart"), { disabled: !!dshBusy })
         )
+      ) : dshDetecting ? h3(
+        "div",
+        { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
+        h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.mute } }, h3(Glyph, { name: "refresh", size: 18 })),
+        h3("div", { role: "status", "aria-live": "polite", style: { fontSize: 12.5, color: C2.mute } }, "\u68C0\u6D4B\u4E2D\u2026")
       ) : h3(
         "div",
-        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
-        h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.mute } }, h3(Glyph, { name: "refresh", size: 20 })),
-        h3("div", { role: "status", "aria-live": "polite", style: { fontSize: 13, color: C2.sub } }, "\u6B63\u5728\u8F7D\u5165\u5DE5\u4F5C\u533A\u2026")
-      ) : (dshDetecting || dshRelevant && !dsh) && !dshWebOpenable ? h3(
-        "div",
-        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
-        h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.mute } }, h3(Glyph, { name: "refresh", size: 20 })),
-        h3("div", { role: "status", "aria-live": "polite", style: { fontSize: 13, color: C2.sub } }, "\u6B63\u5728\u68C0\u6D4B DSH\u2026")
-      ) : h3(
-        "div",
-        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
+        { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
+        dshIconBadge,
         dshSurfaceError ? h3(
           React2.Fragment,
           null,
-          h3("div", { style: { fontSize: 14, color: C2.ink } }, dshWebActive ? dshWeb && dshWeb.running ? "DSH Web \u5DF2\u5C31\u7EEA" : "DSH Web \u672A\u542F\u52A8" : dsh && dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : "DSH \u672A\u542F\u52A8"),
-          dsh && dsh.version ? h3("div", { className: "tether-num", style: { fontSize: 11.5, color: C2.mute } }, dsh.version) : null,
-          dshWebActive ? host.kind === "app" ? btn(dshWebOpenable ? "\u6253\u5F00\u5DE5\u4F5C\u533A" : dshWebBusy === "open" || dshWeb && dshWeb.installing ? "\u6B63\u5728\u542F\u52A8\u2026" : "\u6253\u5F00 DSH Web", () => {
-            if (dshWebOpenable) {
-              beginDshWebLoad();
-              setDshWebOpen(true);
-            } else void runDshWeb();
-          }, { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }) : btn("\u8BF7\u5728\u684C\u9762 APP \u5185\u6253\u5F00", () => {
-          }, { disabled: true }) : dshWebEnabled && ["missing", "stopped"].includes(dshWeb.state) ? h3(
+          h3(
+            "div",
+            { style: { fontSize: 15, fontWeight: 600, color: C2.ink } },
+            dshInstallOnly ? "DSH \u672A\u5B89\u88C5" : "DSH"
+          ),
+          activeDshError ? h3("div", { role: "alert", style: { maxWidth: 420, fontSize: 12, color: C2.red } }, activeDshError) : null,
+          dshCanOfferStart ? btn(activeDshError ? "\u91CD\u8BD5" : dshInstallOnly ? "\u5B89\u88C5 DSH" : "\u542F\u52A8 DSH", startUnifiedDsh, { primary: true, disabled: !!dshBusy || !!dshWebBusy }) : dshWeb && dshWeb.state === "failed" ? h3(
             React2.Fragment,
             null,
-            dshWeb.reason ? h3("div", { role: "status", style: { maxWidth: 480, fontSize: 12, color: C2.mute, lineHeight: 1.6 } }, dshWeb.reason) : null,
-            btn(dshWebBusy ? "\u6B63\u5728\u542F\u52A8\u2026" : "\u542F\u52A8 DSH Web", () => void runDshWeb(), { primary: true, disabled: !!dshWebBusy })
-          ) : dshWeb && dshWeb.state === "failed" ? h3("div", { role: "alert", style: { maxWidth: 480, fontSize: 12, color: C2.sub, lineHeight: 1.6 } }, dshWeb.reason || "DSH Web \u670D\u52A1\u4E0D\u53EF\u7528\u3002") : dsh && dsh.installed === false && !dshInstallSupported ? h3(
-            React2.Fragment,
-            null,
-            h3("div", { style: { maxWidth: 480, fontSize: 12, color: C2.sub, lineHeight: 1.6 } }, "\u5F53\u524D\u76EE\u6807\u7CFB\u7EDF\u6CA1\u6709\u5B98\u65B9 DSH \u684C\u9762\u7248\uFF0C\u53EF\u4EE5\u5B89\u88C5 DSH Web \u4F5C\u4E3A\u8FDC\u7A0B\u5DE5\u4F5C\u533A\u3002"),
-            dshWebEnabled ? btn(dshWebBusy || dshWeb && dshWeb.installing ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH Web", () => void runDshWeb(), { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }) : null
-          ) : dsh ? btn(dsh.installed === false ? "\u5B89\u88C5 DSH" : "\u542F\u52A8 DSH", () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"), { primary: true }) : null
-        ) : h3("div", null, message),
-        dshError ? h3("div", { role: "status", style: { maxWidth: 460, fontSize: 12, color: C2.mute } }, dshError) : null,
-        dshWeb && dshWeb.error ? h3("div", { role: "alert", style: { maxWidth: 460, fontSize: 12, color: C2.mute } }, dshWeb.error) : null,
-        !dshSurfaceError && currentState.status !== "loading" && currentState.status !== "local" ? btn("\u91CD\u65B0\u52A0\u8F7D", retryDocument) : null
+            h3("div", { role: "alert", style: { maxWidth: 420, fontSize: 12, color: C2.sub } }, dshWeb.reason || "DSH \u4E0D\u53EF\u7528"),
+            btn("\u91CD\u8BD5", startUnifiedDsh, { primary: true })
+          ) : null
+        ) : h3(
+          React2.Fragment,
+          null,
+          h3("div", { style: { fontSize: 13, color: C2.sub } }, message),
+          currentState.status !== "loading" && currentState.status !== "local" ? btn("\u91CD\u8BD5", retryDocument, { primary: true }) : null
+        )
       )
     );
   }
@@ -186644,7 +186940,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const projectsDeviceRef = React2.useRef("");
     projectsRef.current = projects;
     projectRef.current = project;
-    const [view, setView] = usePersisted("tether.ui.view.v1", "chat");
+    const [view, setView] = host && host.kind === "app" ? React2.useState("chat") : usePersisted("tether.ui.view.v1", "chat");
     const [agentsMounted, setAgentsMounted] = React2.useState(() => view === "agents");
     React2.useEffect(() => {
       if (view === "agents") setAgentsMounted(true);
@@ -186656,10 +186952,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, [deviceId]);
     const [terminalHeight, setTerminalHeight] = React2.useState(220);
     const [terminalKey, setTerminalKey] = React2.useState(0);
-    const [storedActivePanel, setActivePanel] = usePersisted("tether.ui.panel.v2", "workspaces");
-    const activePanel = storedActivePanel === "herdr" ? "agents" : storedActivePanel;
+    const [storedActivePanel, setActivePanel] = host && host.kind === "app" ? React2.useState("workspaces") : usePersisted("tether.ui.panel.v2", "workspaces");
+    const activePanel = host && host.kind === "app" ? storedActivePanel : storedActivePanel === "herdr" ? "agents" : storedActivePanel;
     React2.useEffect(() => {
-      if (storedActivePanel === "herdr") setActivePanel("agents");
+      if (!(host && host.kind === "app") && storedActivePanel === "herdr") setActivePanel("agents");
     }, [storedActivePanel]);
     const [sidebarCollapsed, setSidebarCollapsed] = usePersisted("tether.ui.panelCollapsed", false);
     const [sidebarWidth, setSidebarWidth] = usePersisted("tether.ui.panelWidth.v2", UI.defaultSide);
@@ -186766,6 +187062,58 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [search2, setSearch] = React2.useState("");
     const [contextMenu, setContextMenu] = React2.useState(null);
     const [deviceMenu, setDeviceMenu] = React2.useState(null);
+    const [topbarDeviceMenuOpen, setTopbarDeviceMenuOpen] = React2.useState(false);
+    const [remoteDesktopView, setRemoteDesktopView] = React2.useState(null);
+    const [remoteDesktopBusy, setRemoteDesktopBusy] = React2.useState(false);
+    const openRemoteDesktop = async (targetId) => {
+      if (!targetId || remoteDesktopBusy || !host || host.kind !== "app" || !host.workbench || !host.workbench.open) return;
+      setTopbarDeviceMenuOpen(false);
+      setDeviceMenu(null);
+      setRemoteDesktopBusy(true);
+      try {
+        const service = await host.workbench.open(targetId, "desktop");
+        if (!service || service.targetId !== targetId || service.serviceId !== "desktop" || !service.endpoint || !service.partition) {
+          throw new Error("\u4E3B\u8FDB\u7A0B\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u8FDC\u7A0B\u684C\u9762\u4F1A\u8BDD\u3002");
+        }
+        setRemoteDesktopView(service);
+      } catch (error) {
+        fail2(error);
+      } finally {
+        setRemoteDesktopBusy(false);
+      }
+    };
+    const closeRemoteDesktop = async () => {
+      const current = remoteDesktopView;
+      if (!current || !host || !host.workbench || !host.workbench.close) {
+        setRemoteDesktopView(null);
+        return;
+      }
+      try {
+        await host.workbench.close(current.targetId, "desktop", current.grantId);
+        setRemoteDesktopView(null);
+      } catch (error) {
+        fail2(error);
+      }
+    };
+    React2.useEffect(() => {
+      if (!remoteDesktopView || !host || !host.workbench || !host.workbench.view) return void 0;
+      void host.workbench.view(remoteDesktopView.targetId, "desktop", true).catch(() => {
+      });
+      return void 0;
+    }, [remoteDesktopView]);
+    React2.useEffect(() => {
+      if (!topbarDeviceMenuOpen) return void 0;
+      const close = () => setTopbarDeviceMenuOpen(false);
+      const onKey = (event) => {
+        if (event.key === "Escape") close();
+      };
+      window.addEventListener("pointerdown", close);
+      window.addEventListener("keydown", onKey);
+      return () => {
+        window.removeEventListener("pointerdown", close);
+        window.removeEventListener("keydown", onKey);
+      };
+    }, [topbarDeviceMenuOpen]);
     const [previewBusy, setPreviewBusy] = React2.useState(false);
     const [previewError, setPreviewError] = React2.useState("");
     const [editMode, setEditMode] = React2.useState(false);
@@ -190690,11 +191038,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onPointerDown: (event) => event.stopPropagation(),
           style: { position: "fixed", left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 150)), width: 178, zIndex: 120, background: C2.layer1, borderRadius: 8, boxShadow: C2.shadow, padding: 4, userSelect: "none" }
         },
-        menuItem("monitor", "\u6253\u5F00\u539F\u751F\u5DE5\u4F5C\u533A", () => {
+        menuItem("monitor", "\u6253\u5F00\u5DE5\u4F5C\u533A", () => {
           const item = deviceMenu.device;
           setDeviceMenu(null);
           openDevice(item);
         }),
+        host && host.kind === "app" && host.workbench && deviceMenu.device && deviceMenu.device.online ? menuItem("monitor", "\u8FDC\u7A0B\u684C\u9762", () => {
+          void openRemoteDesktop(deviceMenu.device.device_id);
+        }) : null,
         menuItem("pencil", "\u91CD\u547D\u540D", () => renameDevice(deviceMenu.device)),
         menuItem("refresh", "\u91CD\u542F Node", () => {
           const item = deviceMenu.device;
@@ -191042,12 +191393,82 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           h3(TetherMark, { size: 22 }),
           h3("strong", { style: { fontSize: 15 } }, "Tether")
         ),
-        device ? h3(DeviceSwitcher, {
-          devices: deviceSnapshot && deviceSnapshot.devices || [],
-          value: deviceId,
-          onChange: selectDevice,
-          onOpenNetwork: () => selectPanel("network")
-        }) : h3("span", { style: { color: C2.mute } }, deviceSnapshot ? "\u6682\u65E0\u8BBE\u5907" : stateLoading ? "\u6B63\u5728\u8BFB\u53D6\u8BBE\u5907\u72B6\u6001\u2026" : "\u8BBE\u5907\u5217\u8868\u6682\u4E0D\u53EF\u7528"),
+        device ? h3(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 4, position: "relative", WebkitAppRegion: "no-drag" } },
+          h3(DeviceSwitcher, {
+            devices: deviceSnapshot && deviceSnapshot.devices || [],
+            value: deviceId,
+            onChange: selectDevice,
+            onOpenNetwork: () => selectPanel("network")
+          }),
+          host && host.kind === "app" && host.workbench && device.online ? h3("button", {
+            type: "button",
+            title: "\u8BBE\u5907\u66F4\u591A\u64CD\u4F5C",
+            "aria-label": "\u8BBE\u5907\u66F4\u591A\u64CD\u4F5C",
+            "aria-haspopup": "menu",
+            "aria-expanded": topbarDeviceMenuOpen,
+            onPointerDown: (event) => event.stopPropagation(),
+            onClick: () => setTopbarDeviceMenuOpen((open) => !open),
+            className: "tether-hover tether-press",
+            style: {
+              width: 26,
+              height: 26,
+              display: "grid",
+              placeItems: "center",
+              border: 0,
+              borderRadius: 7,
+              background: topbarDeviceMenuOpen ? C2.active : "transparent",
+              color: C2.sub,
+              fontSize: 15,
+              cursor: "pointer"
+            }
+          }, "\u22EF") : null,
+          topbarDeviceMenuOpen && host && host.kind === "app" && host.workbench && device.online ? h3(
+            "div",
+            {
+              role: "menu",
+              onPointerDown: (event) => event.stopPropagation(),
+              style: {
+                position: "absolute",
+                top: 32,
+                left: 0,
+                minWidth: 160,
+                zIndex: 90,
+                background: C2.layer1,
+                borderRadius: 8,
+                boxShadow: C2.shadow,
+                padding: 4,
+                userSelect: "none"
+              }
+            },
+            h3("button", {
+              type: "button",
+              role: "menuitem",
+              disabled: remoteDesktopBusy,
+              onClick: () => {
+                void openRemoteDesktop(device.device_id);
+              },
+              className: "tether-hover",
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                height: 30,
+                padding: "0 8px",
+                border: 0,
+                borderRadius: 6,
+                background: "transparent",
+                color: C2.ink,
+                fontSize: 12.5,
+                textAlign: "left",
+                cursor: remoteDesktopBusy ? "default" : "pointer",
+                opacity: remoteDesktopBusy ? 0.6 : 1
+              }
+            }, h3(Glyph, { name: "monitor", size: 14 }), remoteDesktopBusy ? "\u6B63\u5728\u8FDE\u63A5\u2026" : "\u8FDC\u7A0B\u684C\u9762")
+          ) : null
+        ) : h3("span", { style: { color: C2.mute } }, deviceSnapshot ? "\u6682\u65E0\u8BBE\u5907" : stateLoading ? "\u6B63\u5728\u8BFB\u53D6\u8BBE\u5907\u72B6\u6001\u2026" : "\u8BBE\u5907\u5217\u8868\u6682\u4E0D\u53EF\u7528"),
         device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill("\u8282\u70B9\u5F85\u66F4\u65B0", C2.amber) : null,
         h3(
           "div",
@@ -191413,6 +191834,36 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
                 setSidebarCollapsed(true);
               },
               onError: fail2
+            })
+          ) : null,
+          remoteDesktopView ? h3(
+            "div",
+            { style: { position: "absolute", inset: 0, zIndex: 18, display: "flex", flexDirection: "column", background: C2.bg } },
+            h3(
+              "div",
+              { style: { display: "flex", alignItems: "center", gap: 10, height: 38, flex: "0 0 38px", padding: "0 12px", borderBottom: "1px solid " + C2.line, background: C2.panel } },
+              h3(Glyph, { name: "monitor", size: 15 }),
+              h3("strong", { style: { fontSize: 12.5 } }, "\u8FDC\u7A0B\u684C\u9762 \xB7 " + ((deviceSnapshot && deviceSnapshot.devices || []).find((d) => d.device_id === remoteDesktopView.targetId)?.name || remoteDesktopView.targetId)),
+              h3(
+                "span",
+                { role: "status", style: { marginLeft: "auto", color: C2.sub, fontSize: 11.5 } },
+                remoteDesktopView.viewOnly ? "\u53EA\u8BFB" + (remoteDesktopView.viewOnlyReason ? " \xB7 " + remoteDesktopView.viewOnlyReason : "") : remoteDesktopView.consent === "none" ? "\u5DF2\u6388\u6743" : "\u7B49\u5F85\u76EE\u6807\u786E\u8BA4",
+                Number.isFinite(remoteDesktopView.nativeSessionExpiresAt) ? " \xB7 \u81F3 " + new Date(remoteDesktopView.nativeSessionExpiresAt).toLocaleTimeString() : ""
+              ),
+              h3("button", {
+                type: "button",
+                onClick: () => {
+                  void closeRemoteDesktop();
+                },
+                className: "tether-hover",
+                style: { height: 26, padding: "0 10px", border: "1px solid " + C2.line, borderRadius: 6, background: C2.bg, color: C2.ink, fontSize: 11.5, cursor: "pointer" }
+              }, "\u65AD\u5F00\u5E76\u64A4\u9500\u6388\u6743")
+            ),
+            h3("webview", {
+              key: "remote-desktop:" + remoteDesktopView.grantId,
+              src: remoteDesktopView.endpoint,
+              partition: remoteDesktopView.partition,
+              style: { flex: "1 1 auto", width: "100%", minHeight: 0, border: 0, background: "#000" }
             })
           ) : null
         )

@@ -237,6 +237,7 @@ class NativeSurface:
         name = str(attrs.get("name") or "").lower()
         exe = str(attrs.get("exe") or "").lower()
         argv = [str(value).lower() for value in (attrs.get("cmdline") or [])]
+        normalized_argv = [value.replace("\\", "/") for value in argv]
         try:
             listening = {int(connection.laddr[1]) for connection in attrs.get("net_connections") or []}
         except (AttributeError, OSError, ValueError):
@@ -244,14 +245,19 @@ class NativeSurface:
         if port not in listening:
             return False, "port_owner_mismatch"
         joined = " ".join(argv)
+        normalized_joined = " ".join(normalized_argv)
         if layer == "node-bundled-web":
-            if profile != "web" or "@deepseek-ai/dsh/lib/bin.js" not in joined or "web" not in argv:
+            has_dsh_entry = any(
+                arg == "@deepseek-ai/dsh/lib/bin.js" or arg.endswith("/@deepseek-ai/dsh/lib/bin.js")
+                for arg in normalized_argv
+            )
+            if profile != "web" or not has_dsh_entry or "web" not in normalized_argv:
                 return False, "process_kind_mismatch"
         else:
-            expected_profile_path = str((home / "profiles" / (profile or "")).resolve()).lower()
-            is_desktop_host = ("dsh-desktop-host" in joined
-                               or ("deepseek harness" in name and "@deepseek-ai" in joined))
-            if not is_desktop_host or profile != "desktop" or expected_profile_path not in joined:
+            expected_profile_path = str((home / "profiles" / (profile or "")).resolve()).replace("\\", "/").lower()
+            is_desktop_host = ("dsh-desktop-host" in normalized_joined
+                               or ("deepseek harness" in name and "@deepseek-ai" in normalized_joined))
+            if not is_desktop_host or profile != "desktop" or expected_profile_path not in normalized_joined:
                 return False, "process_kind_mismatch"
         if pid_started_at is not None:
             try:

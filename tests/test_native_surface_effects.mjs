@@ -668,7 +668,7 @@ test('NativeSurface offers running Linux DSH Web after native descriptor failure
     linux.render()
     await flush()
     linux.render()
-    assert.equal(findButton(linux.output(), '启动 DSH Web'), null, 'the DSH Web action waits for the delayed service catalog')
+    assert.equal(findButton(linux.output(), '启动 DSH'), null, 'the unified DSH start waits for the delayed service catalog')
     assert.equal(requests.filter((path) => /dsh_(?:restart|install|install_plugin|web_start)$/.test(path)).length, 0)
 
     releaseCatalog()
@@ -676,13 +676,13 @@ test('NativeSurface offers running Linux DSH Web after native descriptor failure
     linux.render()
     await flush()
     linux.render()
-    const open = findButton(linux.output(), '启动 DSH Web')
-    assert.ok(open, 'a stopped DSH Web service is offered when native reports node_update_required')
+    const open = findButton(linux.output(), '启动 DSH')
+    assert.ok(open, 'a stopped DSH service is offered through the unified 启动 DSH button')
     await open.props.onClick()
     await flush()
     linux.render()
     const webview = walk(linux.output(), (node) => node.type === 'webview')
-    assert.ok(webview, 'the DSH Web action mounts the workbench-granted view')
+    assert.ok(webview, 'the unified DSH action mounts the workbench-granted view')
     assert.equal(webview.props.src, approvedUrl)
     assert.deepEqual(workbenchOpens, [['device-a', 'dsh']], 'the view comes from a single workbench grant')
     assert.equal(requests.filter((path) => /dsh_(?:restart|install|install_plugin|web_start)$/.test(path)).length, 0,
@@ -703,8 +703,8 @@ test('NativeSurface offers running Linux DSH Web after native descriptor failure
     windows.render()
     await flush()
     windows.render()
-    assert.equal(findButton(windows.output(), '启动 DSH Web'), null, 'Windows keeps using its native DSH surface')
-    assert.equal(findButton(windows.output(), '打开工作区'), null, 'Windows never advertises the Linux DSH Web workspace')
+    assert.equal(findButton(windows.output(), '启动 DSH Web'), null, 'Windows never offers a split DSH Web label')
+    assert.equal(findButton(windows.output(), '打开工作区'), null, 'Windows never advertises a split DSH Web workspace')
     assert.equal(walk(windows.output(), (node) => node.type === 'webview'), null,
       'Windows does not switch to the Linux DSH Web view')
     assert.equal(workbenchOpens.length, 1, 'Windows never requests a workbench grant')
@@ -785,8 +785,8 @@ test('DSH Web guest shows loading, retryable timeout, late recovery, reload, and
     renderer.render()
     await flush()
     renderer.render()
-    const startWeb = findButton(renderer.output(), '启动 DSH Web')
-    assert.ok(startWeb, 'the Linux fallback offers the DSH Web workbench')
+    const startWeb = findButton(renderer.output(), '启动 DSH')
+    assert.ok(startWeb, 'the Linux fallback offers the unified 启动 DSH button')
     await startWeb.props.onClick()
     await flush()
     renderer.render()
@@ -799,12 +799,12 @@ test('DSH Web guest shows loading, retryable timeout, late recovery, reload, and
       assert.equal(typeof listener, 'function', 'Electron guest listener attached: ' + name)
       listener(event)
     }
-    assert.equal(walk(renderer.output(), (node) => node.props && node.props.role === 'status' && node.children[0] === '正在连接 DSH Web…') !== null, true)
+    assert.equal(walk(renderer.output(), (node) => node.props && node.props.role === 'status' && node.children[0] === '正在连接 DSH…') !== null, true)
     fire('did-start-navigation', { isMainFrame: true, url: approvedUrl })
     renderer.render()
     fire('did-fail-load', { isMainFrame: true, errorCode: -3 })
     renderer.render()
-    assert.ok(walk(renderer.output(), (node) => node.props && node.props.role === 'status' && node.children[0] === '正在连接 DSH Web…'),
+    assert.ok(walk(renderer.output(), (node) => node.props && node.props.role === 'status' && node.children[0] === '正在连接 DSH…'),
       'transient aborts from redirects keep the guest in loading state')
 
     const timeout = [...timeouts.values()].at(-1)
@@ -812,7 +812,7 @@ test('DSH Web guest shows loading, retryable timeout, late recovery, reload, and
     timeout()
     renderer.render()
     assert.ok(walk(renderer.output(), (node) => node.props && node.props.role === 'alert'
-      && node.children[0] === 'DSH Web 连接超时，请检查服务后重试。'))
+      && /DSH 连接超时/.test(JSON.stringify(node.children))))
     assert.ok(findButton(renderer.output(), '重试'))
 
     fire('did-finish-load')
@@ -824,7 +824,7 @@ test('DSH Web guest shows loading, retryable timeout, late recovery, reload, and
     const staleFinish = guestListeners.get('did-finish-load')
     findButton(renderer.output(), '重新加载').props.onClick()
     renderer.render()
-    assert.ok(walk(renderer.output(), (node) => node.props && node.props.role === 'status' && node.children[0] === '正在连接 DSH Web…'))
+    assert.ok(walk(renderer.output(), (node) => node.props && node.props.role === 'status' && node.children[0] === '正在连接 DSH…'))
     webview = walk(renderer.output(), (node) => node.type === 'webview')
     assert.notEqual(webview.props.key, previousWebviewKey, 'reload creates a fresh Electron guest for a new attempt')
     webview.props.ref(guest)
@@ -832,7 +832,7 @@ test('DSH Web guest shows loading, retryable timeout, late recovery, reload, and
     assert.equal(typeof staleFinish, 'function')
     staleFinish()
     renderer.render()
-    assert.ok(walk(renderer.output(), (node) => node.props && node.props.role === 'status' && node.children[0] === '正在连接 DSH Web…'),
+    assert.ok(walk(renderer.output(), (node) => node.props && node.props.role === 'status' && node.children[0] === '正在连接 DSH…'),
       'an old guest finish cannot complete a newer reload attempt')
     await findButton(renderer.output(), '关闭').props.onClick()
     await flush()

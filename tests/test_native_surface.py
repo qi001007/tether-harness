@@ -749,3 +749,59 @@ def test_directory_flow_missing_snippet_passes_through(tmp_path, monkeypatch):
         body, dict(headers), "/plugins/??tether-dsh-client/client.js")
     assert out == body
     assert out_headers == headers
+
+
+def test_process_identity_matches_windows_backslash_argv(tmp_path, monkeypatch):
+    """Windows psutil cmdline uses backslashes; bundled Web and Desktop checks must normalize."""
+    from types import SimpleNamespace
+
+    home = tmp_path / "dsh-home"
+    (home / "profiles" / "desktop").mkdir(parents=True)
+    surface = NativeSurface(home)
+
+    class FakeProcess:
+        def __init__(self, attrs):
+            self._attrs = attrs
+
+        def as_dict(self, _fields):
+            return dict(self._attrs)
+
+    web_attrs = {
+        "name": "node.exe",
+        "exe": r"E:\Tether\components\nodejs\node.exe",
+        "cmdline": [
+            r"E:\Tether\components\nodejs\node.exe",
+            r"E:\Tether\components\dsh\node_modules\@deepseek-ai\dsh\lib\bin.js",
+            "web",
+            "--port", "51920",
+        ],
+        "create_time": 1700000000.0,
+        "net_connections": [SimpleNamespace(laddr=("127.0.0.1", 51920))],
+    }
+    monkeypatch.setattr(native_surface_module.psutil, "Process", lambda _pid: FakeProcess(web_attrs))
+    assert ORIGINAL_PROCESS_IDENTITY_MATCHES(
+        surface, 1234, 51920, layer="node-bundled-web", profile="web", home=home, pid_started_at=1700000000000.0
+    ) == (True, "ready")
+
+    bad_attrs = dict(web_attrs, cmdline=[r"C:\Windows\System32\notepad.exe"])
+    monkeypatch.setattr(native_surface_module.psutil, "Process", lambda _pid: FakeProcess(bad_attrs))
+    assert ORIGINAL_PROCESS_IDENTITY_MATCHES(
+        surface, 1234, 51920, layer="node-bundled-web", profile="web", home=home
+    ) == (False, "process_kind_mismatch")
+
+    win_profile = str((home / "profiles" / "desktop").resolve()).replace("/", "\\")
+    desktop_attrs = {
+        "name": "DeepSeek Harness.exe",
+        "exe": r"C:\Program Files\DeepSeek Harness\DeepSeek Harness.exe",
+        "cmdline": [
+            r"C:\Program Files\DeepSeek Harness\DeepSeek Harness.exe",
+            r"C:\Program Files\DeepSeek Harness\resources\dsh-desktop-host.js",
+            win_profile,
+        ],
+        "create_time": 1700000100.0,
+        "net_connections": [SimpleNamespace(laddr=("127.0.0.1", 50669))],
+    }
+    monkeypatch.setattr(native_surface_module.psutil, "Process", lambda _pid: FakeProcess(desktop_attrs))
+    assert ORIGINAL_PROCESS_IDENTITY_MATCHES(
+        surface, 5678, 50669, layer="external", profile="desktop", home=home, pid_started_at=1700000100000.0
+    ) == (True, "ready")

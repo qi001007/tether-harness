@@ -151,7 +151,7 @@ function pageProps(React, open, calls, options = {}) {
   }
 }
 
-test('native Agents keeps the shell default DSH surface: mount and visibility never auto-open Codeg', async () => {
+test('native Agents keeps hidden tabs dormant and auto-opens Codeg directly once visible', async () => {
   const previousWindow = globalThis.window
   globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
   try {
@@ -160,34 +160,24 @@ test('native Agents keeps the shell default DSH surface: mount and visibility ne
     const renderer = hookRenderer()
     const props = pageProps(renderer.React, async (targetId, serviceId) => {
       assert.equal(targetId, 'target-a')
-      assert.equal(serviceId, 'codeg', 'the manual entry is the only Codeg opener')
+      assert.equal(serviceId, 'codeg')
       return success
     }, calls)
     let tree = await renderer.render({ ...props, isActive: false })
     assert.equal(calls.open, 0, 'a hidden Agents page does not open Codeg in the background')
     assert.equal(calls.dsh, 0, 'the Agents page never opens a DSH surface itself')
     tree = await renderer.render(props)
-    assert.equal(calls.catalog, 1, 'the native catalog is still read once to arm the manual entry')
-    assert.equal(calls.open, 0, 'a ready native catalog no longer opens Codeg automatically')
+    assert.equal(calls.catalog, 1, 'the native catalog is read once')
+    assert.equal(calls.open, 1, 'a visible ready native catalog auto-opens Codeg directly without a 3-button landing page')
     assert.equal(calls.dsh, 0, 'the default mapped DSH surface stays owned by the shell openDshSurface entry')
-    assert.ok(findElement(tree, 'webview') === null && findElement(tree, 'iframe') === null,
-      'no surface pane is mounted, so the shell default DSH surface is not replaced')
-    assert.ok(findButton(tree, '打开 Codeg'), 'the manual Codeg entry remains available')
-    await renderer.render({ ...props, isActive: false, devices: [...props.devices] })
-    tree = await renderer.render(props)
-    assert.equal(calls.open, 0, 'returning to a visible Agents page still does not auto-open Codeg')
-    findButton(tree, '打开 Codeg').props.onClick()
-    tree = await renderer.render(props)
-    assert.equal(calls.open, 1, 'the manual entry opens Codeg exactly once')
-    assert.equal(calls.dsh, 0, 'opening Codeg manually does not touch the DSH surface either')
     assert.equal(findElement(tree, 'webview').props.src, 'https://codeg.example.test/workspace?tether_home=1')
-    assert.ok(findButton(tree, '打开 Codeg') === null, 'the native guest replaces the placeholder instead of leaving a second launch CTA')
+    assert.equal(findButton(tree, '打开 Codeg'), null, 'no intermediate 3-button landing page blocks Codeg')
     const guestKey = findElement(tree, 'webview').props.key
     await renderer.render({ ...props, isActive: false, devices: [...props.devices] })
     tree = await renderer.render(props)
-    assert.equal(calls.open, 1, 're-entry keeps the retained guest without the removed automatic refresh')
+    assert.equal(calls.open, 1, 're-entry keeps the retained guest without reopening Codeg')
     assert.equal(findElement(tree, 'webview').props.key, guestKey,
-      'the manually opened guest instance survives leave-and-return unchanged')
+      'the opened guest instance survives leave-and-return unchanged')
   } finally {
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow
@@ -203,9 +193,7 @@ test('native Agents does not steal an active Herdr pane and returning to Codeg d
     const renderer = hookRenderer()
     const props = pageProps(renderer.React, async () => success, calls)
     let tree = await renderer.render(props)
-    findButton(tree, '打开 Codeg').props.onClick()
-    tree = await renderer.render(props)
-    assert.equal(calls.open, 1, 'Codeg starts only from the manual entry')
+    assert.equal(calls.open, 1, 'Codeg opens directly once on first visible entry')
     const initialGuestKey = findElement(tree, 'webview').props.key
     renderer.navigateWebview(initialGuestKey,
       'https://codeg.example.test/workspace#tether_action=open_herdr&request_id=12345678-1234-1234-1234-123456789abc&agent_type=codex&cwd=C%3A%5Cproject')
@@ -220,7 +208,7 @@ test('native Agents does not steal an active Herdr pane and returning to Codeg d
 
     findButton(tree, '返回 Codeg').props.onClick()
     tree = await renderer.render(props)
-    assert.equal(calls.open, 1, 'returning to the visible Codeg pane no longer triggers an automatic refresh')
+    assert.equal(calls.open, 1, 'returning to the visible Codeg pane keeps the retained guest')
     assert.equal(findElement(tree, 'webview').props.key, initialGuestKey,
       'the retained guest is shown again without a remount')
   } finally {
@@ -229,7 +217,7 @@ test('native Agents does not steal an active Herdr pane and returning to Codeg d
   }
 })
 
-test('native Agents opens legacy Codeg only through the manual entry after its runtime readiness guard', async () => {
+test('native Agents auto-opens ready legacy Codeg after its runtime readiness guard and blocks mismatched legacy mode', async () => {
   const previousWindow = globalThis.window
   globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
   try {
@@ -258,15 +246,7 @@ test('native Agents opens legacy Codeg only through the manual entry after its r
       }
     })
     let tree = await renderer.render(props)
-    assert.deepEqual(sequence, [], 'mounting a ready legacy catalog neither probes runtime nor opens Codeg')
-    assert.equal(calls.runtime, 0)
-    assert.equal(calls.legacy, 0, 'ready legacy Codeg no longer opens automatically')
-    assert.equal(calls.open, 0)
-    const manualOpen = findButton(tree, '打开 Codeg')
-    assert.ok(manualOpen, 'legacy Codeg keeps the same manual entry')
-    manualOpen.props.onClick()
-    tree = await renderer.render(props)
-    assert.deepEqual(sequence, ['runtime-ready', 'legacy-open'], 'the manual legacy open still follows the existing runtime readiness check')
+    assert.deepEqual(sequence, ['runtime-ready', 'legacy-open'], 'visible ready legacy Codeg follows the runtime readiness check and opens directly')
     assert.equal(calls.runtime, 1)
     assert.equal(calls.legacy, 1)
     assert.equal(calls.open, 0, 'legacy uses its dedicated existing opener')
@@ -290,18 +270,15 @@ test('native Agents opens legacy Codeg only through the manual entry after its r
     assert.equal(blockedCalls.legacy, 0, 'legacy mode mismatch stays blocked')
     assert.equal(blockedCalls.runtime, 0, 'blocked legacy Codeg does not start or probe runtime')
     assert.equal(blockedCalls.open, 0, 'blocked legacy Codeg never falls through to the modern opener')
-    const blockedButton = findButton(tree, 'Codeg 状态异常')
-    assert.ok(blockedButton && blockedButton.props.disabled === true, 'the blocked legacy entry is disabled instead of opening')
-    blockedButton.props.onClick()
-    await blockedRenderer.render(blockedProps)
-    assert.equal(blockedCalls.legacy + blockedCalls.open + blockedCalls.runtime, 0,
-      'even a forced click cannot bypass the legacy guard')
+    const blockedButton = findButton(tree, '重试')
+    assert.ok(blockedButton && blockedButton.props.disabled === true, 'the blocked legacy retry button is disabled instead of opening')
+    assert.ok(findButton(tree, 'Agent 主页'), 'Agent home fallback stays available when Codeg is blocked')
   } finally {
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow
   }
 })
-test('native Agents Agent home starts Tether structured sessions when Codeg gates the agent', async () => {
+test('native Agents Agent home fallback starts Tether structured sessions when Codeg is missing', async () => {
   const previousWindow = globalThis.window
   globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
   try {
@@ -311,6 +288,7 @@ test('native Agents Agent home starts Tether structured sessions when Codeg gate
       calls.open += 1
       return { targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg' }
     }, calls, {
+      catalog: { protocol: 1, services: [{ id: 'codeg', state: 'missing' }] },
       post: async (url, body) => {
         if (url.endsWith('/agents_catalog')) { calls.catalog += 1; return { agents: [{ id: 'opencode', name: 'OpenCode', available: true, enabled: true, transports: ['terminal', 'acp'], command: 'D:\\Tether\\agents\\opencode.CMD', version: '1.18.21' }] } }
         if (url.endsWith('/acp_detect')) return { harnesses: [{ id: 'opencode', name: 'OpenCode', command: 'opencode' }] }
@@ -323,7 +301,7 @@ test('native Agents Agent home starts Tether structured sessions when Codeg gate
     })
     let tree = await renderer.render(props)
     const home = findButton(tree, 'Agent 主页')
-    assert.ok(home, 'the target workbench keeps a visible Agent home entry')
+    assert.ok(home, 'when Codeg is missing, fallback offers Agent home')
     home.props.onClick()
     tree = await renderer.render(props)
     assert.ok(findButton(tree, 'OpenCode'), 'the Agent home lists the detected OpenCode agent')
@@ -342,14 +320,16 @@ test('native Agents Agent home starts Tether structured sessions when Codeg gate
   }
 })
 
-test('native Agents Agent home opens the agent CLI terminal with the device workspace', async () => {
+test('native Agents Agent home fallback opens the agent CLI terminal with the device workspace', async () => {
   const previousWindow = globalThis.window
   globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
   try {
     const calls = { catalog: 0, open: 0, dsh: 0 }
     const renderer = hookRenderer()
-    const base = pageProps(renderer.React, async () => ({ targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg' }), calls)
-    const props = { ...base, devices: [{ device_id: 'target-a', online: true, name: 'Target A', capabilities: { workspace: 'D:\Tether\work' } }] }
+    const base = pageProps(renderer.React, async () => ({ targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg' }), calls, {
+      catalog: { protocol: 1, services: [{ id: 'codeg', state: 'missing' }] }
+    })
+    const props = { ...base, devices: [{ device_id: 'target-a', online: true, name: 'Target A', capabilities: { workspace: 'D:\\Tether\\work' } }] }
     props.post = async (url) => {
       if (url.endsWith('/agents_catalog')) return { agents: [{ id: 'opencode', name: 'OpenCode', available: true, enabled: true, transports: ['terminal', 'acp'], command: 'D:\\Tether\\agents\\opencode.CMD', version: '1.18.21' }] }
       if (url.endsWith('/acp_detect')) return { harnesses: [{ id: 'opencode', name: 'OpenCode', command: 'opencode' }] }

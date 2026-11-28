@@ -197,19 +197,19 @@ test('one icon source ships for the window, shortcut and tray', () => {
 })
 
 test('a missing DSH surface offers an explicit restart instead of a blank frame', () => {
-  assert.match(shared, /Tether 插件未加载或 surface 描述符缺失/)
+  assert.match(shared, /dshSurfaceMissing/)
   assert.match(shared, /runDsh\('dsh_restart'\)/)
-  assert.match(shared, /'重启 DSH'/)
+  assert.match(shared, /'重启'/)
   assert.match(shared, /dshRestartPidRef/)
 })
 
 test('a missing DSH plugin is repaired automatically without user file work', () => {
   assert.match(shared, /dsh_install_plugin/)
   assert.match(shared, /dshAutoRepairRef/)
-  assert.match(shared, /安装\/修复[^\n']*插件/)
-  assert.match(shared, /正在安装\/修复 Tether 插件/)
+  assert.match(shared, /'修复'/)
+  assert.match(shared, /正在修复工作区…/)
   assert.match(shared, /onSurfaceStyleBroken/)
-  assert.match(shared, /DSH 界面样式与 Tether 版本不匹配/)
+  assert.match(shared, /DSH 样式异常/)
 })
 
 test('Linux DSH web is embedded in the APP, never opened in an external window', () => {

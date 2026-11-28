@@ -98,6 +98,20 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
   // The reply goes back over the same channel the request came from — a frame's
   // postMessage, or a window message dispatched inside the webview guest.
   const [folderPick, setFolderPick] = React.useState(null)
+  React.useEffect(() => {
+    setFolderPick((current) => {
+      if (!current) return null
+      const rev = (serviceView && serviceView.openRevision) || 0
+      if (current.deviceId === device && current.openRevision === rev) return current
+      const payload = { type: 'tether:pick-folder-result', id: current.id, cancelled: true }
+      if (current.mode === 'iframe') {
+        try { if (current.source && typeof current.source.postMessage === 'function') current.source.postMessage(payload, '*') } catch (_) {}
+      } else if (current.guest && typeof current.guest.executeJavaScript === 'function') {
+        try { void current.guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {}) } catch (_) {}
+      }
+      return null
+    })
+  }, [device, serviceView && serviceView.openRevision])
   // Answer an open pick request. `value` is the chosen path, or an array of
   // paths for a multi-selection; an empty answer is a cancel, and the guest
   // treats both the same way. `paths` carries the whole answer so a file
@@ -110,19 +124,23 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
     const chosen = (Array.isArray(value) ? value : [value])
       .map((item) => typeof item === 'string' ? item.trim() : '')
       .filter(Boolean)
-    const payload = chosen.length
+    const stillCurrent = request.deviceId === device
+      && request.openRevision === ((serviceView && serviceView.openRevision) || 0)
+    const payload = (chosen.length && stillCurrent)
       ? { type: 'tether:pick-folder-result', id: request.id, path: chosen[0], paths: chosen }
       : { type: 'tether:pick-folder-result', id: request.id, cancelled: true }
     if (request.mode === 'iframe') {
       try {
-        if (request.source && typeof request.source.postMessage === 'function') {
+        const frame = runtimeFrame.current
+        if (request.source && (!frame || request.source === frame.contentWindow)
+            && typeof request.source.postMessage === 'function') {
           request.source.postMessage(payload, '*')
         }
       } catch (_) { /* the frame is gone */ }
       return
     }
-    const guest = serviceWebviewRef.current
-    if (!guest || typeof guest.executeJavaScript !== 'function') return
+    const guest = request.guest
+    if (!guest || guest !== serviceWebviewRef.current || typeof guest.executeJavaScript !== 'function') return
     // The guest cannot postMessage across the webview boundary, so the answer is
     // dispatched inside it. JSON.stringify is the only value inserted here; the
     // rest of the script is fixed.
@@ -570,7 +588,8 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
         const id = String((data && data.id) || '')
         if (/^[0-9a-f-]{36}$/i.test(id)) {
           setFolderPick({
-            id, mode: 'iframe', source: event.source || null,
+            id, mode: 'iframe', source: event.source || null, guest: null,
+            deviceId: device, openRevision: (serviceView && serviceView.openRevision) || 0,
             kind: data.kind === 'file' ? 'file' : 'folder',
             multiple: data.multiple === true
           })
@@ -966,7 +985,7 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
     const expectedOrigin = auth.origin
     // The token never enters the script text raw: JSON.stringify keeps it a
     // single quoted literal, and the regex above already narrowed the charset.
-    const storeToken = "localStorage.setItem('codeg_token'," + JSON.stringify(auth.token) + ")"
+    const storeToken = "window.__tetherEmbeddedHost=true;try{sessionStorage.setItem('tether_embedded_host','1')}catch(_){}localStorage.setItem('codeg_token'," + JSON.stringify(auth.token) + ")"
     const guestRoute = () => {
       try {
         const current = new URL(guest.getURL())
@@ -1056,7 +1075,8 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
           && /^[0-9a-f-]{36}$/i.test(requestId)
         if (validFolderPick) {
           const request = {
-            id: requestId, mode: 'webview', source: null,
+            id: requestId, mode: 'webview', source: null, guest,
+            deviceId: device, openRevision: (serviceView && serviceView.openRevision) || 0,
             kind: pickKind === 'file' ? 'file' : 'folder',
             multiple: pickMultiple === '1'
           }
@@ -1256,48 +1276,65 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
     h('form', { onSubmit: send, style: { display: 'flex', gap: 8, padding: 12, borderTop: '1px solid ' + C.line } },
       h('textarea', { value: input, onChange: (event) => setInput(event.target.value), placeholder: '输入消息', disabled: !ready || busy, style: { flex: '1 1 auto', minHeight: 46, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 8, padding: '8px 9px', background: C.bg, color: C.ink, fontSize: 12, resize: 'none' } }),
       h('button', { type: 'submit', disabled: busy || !ready || !input.trim(), style: { ...button, alignSelf: 'flex-end' } }, busy ? '处理中…' : '发送'))) : null
+  const autoOpenAttemptedRef = React.useRef('')
+  React.useEffect(() => {
+    if (!isActive || !nativeWorkbench || !device || catalogOpen || panes.length || homeOpen || session) return
+    if (serviceCatalogBusy || serviceOpening || workbenchLoginRequired || workbenchLoginBusy) return
+    if (!codegService || legacyCodegBlocked || !['ready', 'stopped'].includes(codegService.state)) return
+    const attemptKey = device + ':' + homeRetry
+    if (autoOpenAttemptedRef.current === attemptKey) return
+    autoOpenAttemptedRef.current = attemptKey
+    void openNativeCodeg()
+  }, [isActive, nativeWorkbench, device, catalogOpen, panes.length, homeOpen, session,
+    serviceCatalogBusy, serviceOpening, workbenchLoginRequired, workbenchLoginBusy,
+    codegService && codegService.state, legacyCodegBlocked, homeRetry])
+
   return h('div', {
     style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }
   },
     sessionView,
     agentHomeView,
     workspace,
-    !panes.length && !homeOpen && !session && nativeWorkbench ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', padding: 24, color: C.mute, fontSize: 12 } },
-      h('div', { style: { fontSize: 16, fontWeight: 600, color: C.ink } }, '目标设备工作台'),
-      serviceCatalogBusy ? h('div', null, '正在读取目标服务状态…')
-        : codegService ? h('div', { style: { textAlign: 'center', lineHeight: 1.6 } },
-          h('div', { style: { color: C.sub } }, '目标设备：' + (devices.find((item) => item.device_id === device)?.name || device)),
-          h('div', { style: { color: C.sub } }, '服务状态：' + (serviceStateLabel[codegService.state] || codegService.state || '未知')),
-          codegService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, codegService.reason) : null)
-          : h('div', { style: { color: homeError ? C.danger : C.sub, textAlign: 'center' } }, homeError || 'Controller 服务目录未返回 Codeg 状态。'),
-      homeError && codegService ? h('div', { role: 'alert', style: { maxWidth: 520, color: C.danger, textAlign: 'center' } }, homeError) : null,
-      h('button', { type: 'button', disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
-          || legacyCodegBlocked || (codegService && codegService.state === 'missing'),
-        onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : (codegService ? () => void openNativeCodeg() : retryAgentsHome),
-        style: { ...button, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
-          || legacyCodegBlocked || (codegService && codegService.state === 'missing') ? 0.55 : 1 } },
-      workbenchLoginBusy ? '等待登录完成…' : workbenchLoginRequired ? '通过主进程登录' : serviceOpening ? '正在打开…'
-        : codegService ? (legacyCodegBlocked ? legacyCodegLabel : codegService.state === 'ready' ? '打开 Codeg'
-          : codegService.state === 'missing' ? codegUnavailableLabel : '启动并打开 Codeg') : '重试服务目录'),
-      h('button', { type: 'button', onClick: () => setHomeOpen(true), style: { ...button, marginTop: 8 } }, 'Agent 主页'),
-      desktopService ? h('div', { style: { marginTop: 4, textAlign: 'center', lineHeight: 1.55 } },
-        h('div', { style: { color: C.sub } }, '远程桌面：' + (serviceStateLabel[desktopService.state] || desktopService.state || '未知')),
-        desktopService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, desktopService.reason) : null,
-        desktopService.agent_busy ? h('div', { style: { maxWidth: 520, color: C.sub } }, '目标 Agent 正在处理任务，连接将以只读方式打开。') : null,
-        h('button', { type: 'button', disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
-          || !['ready', 'stopped'].includes(desktopService.state),
-        onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : () => void openNativeDesktop(),
-        style: { ...button, marginTop: 8, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
-          || !['ready', 'stopped'].includes(desktopService.state) ? 0.55 : 1 } },
-        serviceOpening ? '正在授权并连接…' : desktopService.state === 'ready' ? '打开远程桌面（目标同意后连接）' : '启动并打开远程桌面')) : null) : null,
+    !panes.length && !homeOpen && !session && nativeWorkbench ? (() => {
+      const codegReadyToAutoOpen = isActive && !!codegService && !legacyCodegBlocked
+        && ['ready', 'stopped'].includes(codegService.state) && !homeError && !workbenchLoginRequired
+      const loading = serviceCatalogBusy || serviceOpening || codegReadyToAutoOpen
+      const statusText = workbenchLoginRequired ? '需要登录'
+        : homeError ? homeError
+          : legacyCodegBlocked ? legacyCodegLabel
+            : codegService && codegService.state === 'missing' ? codegUnavailableLabel
+              : codegService && codegService.reason ? codegService.reason : '多 Agent 不可用'
+      return h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, flex: '1 1 auto', padding: 24, color: C.mute, fontSize: 12.5, textAlign: 'center' } },
+        h('div', {
+          style: { width: 52, height: 52, borderRadius: 14, background: C.soft, color: C.ink,
+            display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(16,24,40,.06)' }
+        }, h(Glyph, { name: 'bot', size: 24 })),
+        loading
+          ? h('div', { role: 'status', 'aria-live': 'polite', style: { display: 'inline-flex', alignItems: 'center', gap: 8, color: C.sub } },
+            h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 15 })),
+            '正在打开多 Agent…')
+          : h(React.Fragment, null,
+            h('div', { role: 'alert', style: { maxWidth: 420, color: homeError ? C.danger : C.sub } }, statusText),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('button', {
+                type: 'button',
+                disabled: workbenchLoginBusy || legacyCodegBlocked || (codegService && codegService.state === 'missing'),
+                onClick: workbenchLoginRequired ? () => void startWorkbenchLogin()
+                  : (codegService && ['ready', 'stopped'].includes(codegService.state) ? () => void openNativeCodeg() : retryAgentsHome),
+                style: { ...button, opacity: workbenchLoginBusy || legacyCodegBlocked || (codegService && codegService.state === 'missing') ? 0.55 : 1 }
+              }, workbenchLoginBusy ? '登录中…' : workbenchLoginRequired ? '登录' : '重试'),
+              (legacyCodegBlocked || (codegService && codegService.state === 'missing') || homeError)
+                ? h('button', { type: 'button', onClick: () => setHomeOpen(true), style: homeButton }, 'Agent 主页')
+                : null)))
+    })() : null,
     !panes.length && !nativeWorkbench && homeError ? h('div', { role: 'alert', style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
       h('div', { style: { color: C.ink, textAlign: 'center' } }, homeError),
       h('button', { type: 'button', onClick: retryAgentsHome, style: button }, '重试')) : null,
     !panes.length && !nativeWorkbench && !homeError ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
       h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
-      '正在打开 Agent 主页…') : null,
+      '正在打开多 Agent…') : null,
     folderPick ? h(TetherFolderPickDialog, {
-      key: folderPick.id, React, C, Glyph, api, post, device,
+      key: folderPick.id, React, C, Glyph, api, post, device: folderPick.deviceId || device,
       kind: folderPick.kind === 'file' ? 'file' : 'folder',
       multiple: folderPick.multiple === true,
       onDone: closeFolderPick

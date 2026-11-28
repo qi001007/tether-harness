@@ -428,6 +428,16 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     return postJson(endpoint.session.fetch.bind(endpoint.session), endpoint.url, body, options)
   }
 
+  function hasLocalNodeApi() {
+    const localBase = typeof getLocalNodeApiBase === 'function' ? getLocalNodeApiBase() : ''
+    if (!localApiSession || typeof localApiSession.fetch !== 'function' || !localBase) return false
+    try {
+      const parsed = new URL(localBase)
+      return parsed.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname.toLowerCase())
+        && !parsed.username && !parsed.password && !parsed.pathname.replace(/\/$/, '')
+    } catch (_) { return false }
+  }
+
   async function localDshSurfaceDescriptor(targetId) {
     const localDeviceId = await getLocalDeviceId()
     const localBase = typeof getLocalNodeApiBase === 'function' ? getLocalNodeApiBase() : ''
@@ -445,6 +455,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
 
   async function openLocalDshSurface(targetId, serviceId, actorId, generation) {
     const key = tupleKey(actorId, targetId, serviceId)
+    const siblingKey = tupleKey(actorId, targetId, serviceId === 'dsh' ? 'dsh-native' : 'dsh')
     const descriptor = localDshSurfaceBootstrap(await localDshSurfaceDescriptor(targetId))
     if (!descriptor) throw new Error('本机 DSH surface 描述符无效。')
     const partition = stableDshPartition(actorId, targetId, generation)
@@ -454,6 +465,11 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     }
     if ((actorGenerations.get(actorId) || 0) !== generation) throw new Error('工作台账号已切换，请重新打开服务。')
     managedSessions.add(serviceSession)
+    if (active.has(siblingKey)) {
+      const sibling = active.get(siblingKey)
+      if (sibling && sibling.viewTimer) clearInterval(sibling.viewTimer)
+      active.delete(siblingKey)
+    }
     const grantId = crypto.randomBytes(20).toString('hex')
     const record = {
       actorId, targetId, serviceId, dshSurface: true, localSurface: true, generation, grantId,
@@ -467,6 +483,90 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     }
     active.set(key, record)
     return record.public
+  }
+
+  async function openLocalDsh(targetId, actorId, generation, signal) {
+    const ensureCurrent = () => {
+      if ((actorGenerations.get(actorId) || 0) !== generation || (signal && signal.aborted)) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+    }
+    const tryReadySurface = async () => {
+      try {
+        const raw = await localDshSurfaceDescriptor(targetId)
+        if (localDshSurfaceBootstrap(raw)) {
+          return await openLocalDshSurface(targetId, 'dsh', actorId, generation)
+        }
+      } catch (_) { /* not ready yet */ }
+      return null
+    }
+    // 1. Reuse whichever local DSH instance is already running and publishing a valid descriptor.
+    const alreadyReady = await tryReadySurface()
+    if (alreadyReady) return alreadyReady
+    ensureCurrent()
+
+    // 2. Neither instance is ready yet: prefer installed native Desktop DSH,
+    //    falling back to bundled DSH Web only when Desktop DSH is not installed.
+    let mode = ''
+    let dshStatus = null
+    try { dshStatus = await nodeCall(targetId, 'dsh_status', {}, { signal }) } catch (_) { dshStatus = null }
+    ensureCurrent()
+    if (dshStatus && dshStatus.running === true) {
+      mode = 'desktop'
+    } else if (dshStatus && dshStatus.installed === true) {
+      mode = 'desktop'
+      const started = await nodeCall(targetId, 'dsh_start', {}, { signal })
+      ensureCurrent()
+      if (started && started.error) throw new Error(String(started.error))
+    } else {
+      let webStatus = null
+      try { webStatus = await nodeCall(targetId, 'dsh_web_status', {}, { signal }) } catch (_) { webStatus = null }
+      ensureCurrent()
+      if (webStatus && webStatus.installed === true) {
+        mode = 'web'
+        if (webStatus.running !== true && webStatus.installing !== true) {
+          const started = await nodeCall(targetId, 'dsh_web_start', {}, { signal })
+          ensureCurrent()
+          if (started && started.error) throw new Error(String(started.error))
+        }
+      } else {
+        throw new Error((webStatus && webStatus.error) || '本机未安装 DSH，请先安装。')
+      }
+    }
+
+    // 3. Poll loopback surface descriptor until ready or fast-fail on explicit startup error.
+    const deadline = Date.now() + 25_000
+    let polls = 0
+    while (Date.now() < deadline) {
+      ensureCurrent()
+      const ready = await tryReadySurface()
+      if (ready) return ready
+      polls += 1
+      if (polls % 4 === 0) {
+        try {
+          if (mode === 'web') {
+            const st = await nodeCall(targetId, 'dsh_web_status', {}, { signal })
+            if (st && !st.installing && !st.running && st.error) throw new Error(String(st.error))
+          } else if (mode === 'desktop') {
+            const st = await nodeCall(targetId, 'dsh_status', {}, { signal })
+            if (st && st.error) throw new Error(String(st.error))
+          }
+        } catch (err) {
+          if (err && err.message && !/HTTP \d+/.test(err.message)) throw err
+        }
+      }
+      const waitMs = Math.min(500, Math.max(0, deadline - Date.now()))
+      if (waitMs <= 0) break
+      await new Promise((resolve, reject) => {
+        const onAbort = () => { clearTimeout(timer); reject(new Error('工作台账号已切换，请重新打开服务。')) }
+        const timer = setTimeout(() => {
+          if (signal) signal.removeEventListener('abort', onAbort)
+          resolve()
+        }, waitMs)
+        if (signal) signal.addEventListener('abort', onAbort, { once: true })
+      })
+    }
+    throw new Error(mode === 'web' ? '本机 DSH Web 启动超时，请重试。' : '本机 DSH 启动超时，请重试。')
   }
 
   async function openDshSurface(targetId, serviceId = 'dsh-native') {
@@ -680,11 +780,14 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       const openingController = new AbortController()
       cancelOpening = () => openingController.abort()
       try {
-    const serviceCatalog = prefetchedCatalog || await catalog(targetId, { signal: openingController.signal })
-    if (!serviceCatalog.services.some((service) => service.id === serviceId)) throw new Error('目标服务目录中没有该服务。')
-    if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
     const sourceDeviceId = await getLocalDeviceId()
     if (typeof sourceDeviceId !== 'string' || !sourceDeviceId) throw new Error('本机设备身份尚未就绪。')
+    if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
+    if (serviceId === 'dsh' && targetId === sourceDeviceId && hasLocalNodeApi()) {
+      return await openLocalDsh(targetId, actorId, generation, openingController.signal)
+    }
+    const serviceCatalog = prefetchedCatalog || await catalog(targetId, { signal: openingController.signal })
+    if (!serviceCatalog.services.some((service) => service.id === serviceId)) throw new Error('目标服务目录中没有该服务。')
     if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
     if (serviceId === 'codeg' && targetId === sourceDeviceId) {
       const localCodeg = await openLegacyCodeg(targetId, {
