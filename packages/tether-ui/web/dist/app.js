@@ -172734,11 +172734,617 @@ function createConnectionPanel(React2) {
   return { Panel: ConnectionPanel, Trigger: ConnectionTrigger, LoginScreen };
 }
 
+// src/floating-window.js
+var floatingWindowZSeed = 50;
+function createFloatingWindow(React2) {
+  const h3 = React2.createElement;
+  function FloatingWindow({
+    title,
+    subtitle,
+    onClose,
+    width: width2 = "min(760px, calc(100% - 32px))",
+    height,
+    maxHeight = "min(600px, calc(100% - 32px))",
+    topOffset = 40,
+    disabledClose = false,
+    ariaLabel,
+    headerExtra,
+    footer,
+    bodyStyle = {},
+    children
+  }) {
+    const [zIndex, setZIndex] = React2.useState(() => {
+      floatingWindowZSeed += 1;
+      return floatingWindowZSeed;
+    });
+    const [offset, setOffset] = React2.useState({ x: 0, y: 0 });
+    const [dragging, setDragging] = React2.useState(false);
+    const dragRef = React2.useRef(null);
+    const frameRef = React2.useRef(null);
+    const offsetRef = React2.useRef(offset);
+    offsetRef.current = offset;
+    const bringToFront = React2.useCallback(() => {
+      floatingWindowZSeed += 1;
+      setZIndex(floatingWindowZSeed);
+    }, []);
+    React2.useEffect(() => {
+      const onKeyDown = (event) => {
+        if (event.key !== "Escape" || disabledClose) return;
+        if (floatingWindowZSeed === zIndex && onClose) {
+          event.stopPropagation();
+          onClose();
+        }
+      };
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }, [zIndex, disabledClose, onClose]);
+    const startDrag = (event) => {
+      if (event.button !== 0) return;
+      if (event.target && typeof event.target.closest === "function" && event.target.closest('button, input, a, [role="button"], [role="combobox"]')) return;
+      event.preventDefault();
+      bringToFront();
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch (_2) {
+      }
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: offsetRef.current.x,
+        originY: offsetRef.current.y
+      };
+      setDragging(true);
+    };
+    const moveDrag = (event) => {
+      const d = dragRef.current;
+      if (!d || d.pointerId !== event.pointerId) return;
+      const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+      const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+      const box = frameRef.current && frameRef.current.getBoundingClientRect();
+      const maxX = box ? Math.max(40, (vw - box.width) / 2 + box.width * 0.45) : 360;
+      const maxY = box ? Math.max(40, (vh - topOffset - box.height) / 2 + box.height * 0.4) : 260;
+      const nx = Math.max(-maxX, Math.min(maxX, d.originX + (event.clientX - d.startX)));
+      const ny = Math.max(-maxY, Math.min(maxY, d.originY + (event.clientY - d.startY)));
+      setOffset({ x: nx, y: ny });
+    };
+    const endDrag = (event) => {
+      if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      setDragging(false);
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch (_2) {
+      }
+    };
+    const bg = "var(--dsw-alias-bg-base, #ffffff)";
+    const panel = "var(--dsw-specific-sidebar-fill, #f9fafb)";
+    const line = "var(--dsw-alias-border-l1, rgba(9, 30, 66, 0.10))";
+    const ink = "var(--dsw-alias-label-primary, #101828)";
+    const mute = "var(--dsw-alias-label-tertiary, #667085)";
+    return h3(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          inset: topOffset + "px 0 0 0",
+          zIndex,
+          pointerEvents: "none",
+          display: "grid",
+          placeItems: "center",
+          padding: 16,
+          boxSizing: "border-box"
+        }
+      },
+      h3(
+        "section",
+        {
+          ref: frameRef,
+          role: "dialog",
+          "aria-label": ariaLabel || title || "\u6D6E\u7A97",
+          onPointerDown: bringToFront,
+          style: {
+            pointerEvents: "auto",
+            width: width2,
+            ...height ? { height } : {},
+            maxHeight,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            borderRadius: "var(--tether-radius-lg, 16px)",
+            background: bg,
+            color: ink,
+            border: "1px solid var(--tether-glass-border, " + line + ")",
+            boxShadow: "var(--tether-glass-shadow, 0 20px 56px rgba(16, 24, 40, 0.22), 0 4px 12px rgba(16, 24, 40, 0.10))",
+            transform: "translate3d(" + Math.round(offset.x) + "px, " + Math.round(offset.y) + "px, 0)",
+            transition: dragging ? "none" : "box-shadow 150ms var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))"
+          }
+        },
+        h3(
+          "header",
+          {
+            onPointerDown: startDrag,
+            onPointerMove: moveDrag,
+            onPointerUp: endDrag,
+            onPointerCancel: endDrag,
+            style: {
+              height: 44,
+              padding: "0 14px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: panel,
+              borderBottom: "1px solid " + line,
+              flex: "0 0 auto",
+              cursor: dragging ? "grabbing" : "grab",
+              userSelect: "none"
+            }
+          },
+          h3("strong", { style: { fontSize: 13.5, fontWeight: "var(--tether-strong, 600)", color: ink } }, title),
+          subtitle ? h3("span", { className: "tether-num", style: { fontSize: 11.5, color: mute } }, subtitle) : null,
+          headerExtra || null,
+          onClose ? h3("button", {
+            type: "button",
+            disabled: disabledClose,
+            onClick: onClose,
+            title: "\u5173\u95ED",
+            "aria-label": "\u5173\u95ED",
+            className: "tether-hover",
+            style: {
+              marginLeft: headerExtra ? 4 : "auto",
+              width: 28,
+              height: 28,
+              border: 0,
+              borderRadius: "var(--tether-radius-sm, 6px)",
+              background: "transparent",
+              fontSize: 18,
+              lineHeight: "28px",
+              display: "grid",
+              placeItems: "center",
+              cursor: disabledClose ? "default" : "pointer",
+              color: mute,
+              opacity: disabledClose ? 0.4 : 1
+            }
+          }, "\xD7") : null
+        ),
+        h3("div", {
+          style: {
+            flex: "1 1 auto",
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            ...bodyStyle
+          }
+        }, children),
+        footer || null
+      )
+    );
+  }
+  return { FloatingWindow };
+}
+
+// src/ui-controls.js
+function createUiControls(React2) {
+  const h3 = React2.createElement;
+  function chevronSvg(open) {
+    return h3("svg", {
+      width: 12,
+      height: 12,
+      viewBox: "0 0 12 12",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 1.5,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      "aria-hidden": true,
+      style: {
+        flex: "0 0 auto",
+        transform: open ? "rotate(180deg)" : "rotate(0deg)",
+        transition: "transform var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))"
+      }
+    }, h3("path", { d: "M3 4.5L6 7.5L9 4.5" }));
+  }
+  function checkSvg() {
+    return h3("svg", {
+      width: 10,
+      height: 10,
+      viewBox: "0 0 12 12",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 2,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      "aria-hidden": true
+    }, h3("path", { d: "M2.5 6.2L5 8.7L9.5 3.6" }));
+  }
+  function StyledSelect({
+    value = "",
+    options = [],
+    onChange,
+    disabled = false,
+    placeholder = "\u8BF7\u9009\u62E9\u2026",
+    searchable,
+    ariaLabel,
+    title,
+    style = {},
+    menuMinWidth = 180
+  }) {
+    const [open, setOpen] = React2.useState(false);
+    const [query, setQuery] = React2.useState("");
+    const [activeIndex, setActiveIndex] = React2.useState(-1);
+    const rootRef = React2.useRef(null);
+    const listRef = React2.useRef(null);
+    const normalized = React2.useMemo(() => (options || []).map((item) => typeof item === "object" && item !== null ? { value: String(item.value ?? ""), label: String(item.label ?? item.value ?? ""), disabled: !!item.disabled } : { value: String(item), label: String(item), disabled: false }), [options]);
+    const current = normalized.find((item) => item.value === String(value ?? "")) || null;
+    const useSearch = typeof searchable === "boolean" ? searchable : normalized.length > 8;
+    const filtered = React2.useMemo(() => {
+      const term = query.trim().toLowerCase();
+      if (!useSearch || !term) return normalized;
+      return normalized.filter((item) => item.label.toLowerCase().includes(term) || item.value.toLowerCase().includes(term));
+    }, [normalized, query, useSearch]);
+    React2.useEffect(() => {
+      if (!open) {
+        setQuery("");
+        return void 0;
+      }
+      const selectedIdx = filtered.findIndex((item) => item.value === String(value ?? "") && !item.disabled);
+      setActiveIndex(selectedIdx >= 0 ? selectedIdx : filtered.findIndex((item) => !item.disabled));
+      const onPointerDown = (event) => {
+        if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+      };
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") {
+          setOpen(false);
+          event.stopPropagation();
+        }
+      };
+      document.addEventListener("pointerdown", onPointerDown);
+      document.addEventListener("keydown", onKeyDown, true);
+      return () => {
+        document.removeEventListener("pointerdown", onPointerDown);
+        document.removeEventListener("keydown", onKeyDown, true);
+      };
+    }, [open]);
+    const selectValue = (nextValue) => {
+      setOpen(false);
+      if (onChange && nextValue !== value) onChange(nextValue);
+    };
+    const onTriggerKeyDown = (event) => {
+      if (disabled) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (!open) {
+          setOpen(true);
+          return;
+        }
+        const pick = filtered[activeIndex];
+        if (pick && !pick.disabled) selectValue(pick.value);
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (!open) {
+          setOpen(true);
+          return;
+        }
+        if (!filtered.length) return;
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        let next = activeIndex;
+        for (let i = 0; i < filtered.length; i += 1) {
+          next = (next + step + filtered.length) % filtered.length;
+          if (!filtered[next].disabled) {
+            setActiveIndex(next);
+            break;
+          }
+        }
+      }
+    };
+    const border = "var(--dsw-alias-border-l2, rgba(9, 30, 66, 0.14))";
+    const bg = style.background || "var(--dsw-specific-input-major, var(--dsw-alias-bg-base, #ffffff))";
+    const ink = style.color || "var(--dsw-alias-label-primary, #101828)";
+    const mute = "var(--dsw-alias-label-tertiary, #667085)";
+    return h3(
+      "div",
+      {
+        ref: rootRef,
+        style: {
+          position: "relative",
+          display: "inline-flex",
+          minWidth: 0,
+          ...style.flex ? { flex: style.flex } : {},
+          ...style.width ? { width: style.width } : {}
+        }
+      },
+      h3(
+        "button",
+        {
+          type: "button",
+          role: "combobox",
+          "aria-expanded": open,
+          "aria-haspopup": "listbox",
+          "aria-label": ariaLabel || title || placeholder,
+          title: title || (current ? current.label : placeholder),
+          disabled,
+          onClick: () => {
+            if (!disabled) setOpen((prev) => !prev);
+          },
+          onKeyDown: onTriggerKeyDown,
+          className: "tether-hover",
+          style: {
+            width: "100%",
+            height: style.height || 32,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            padding: "0 10px",
+            boxSizing: "border-box",
+            border: style.border !== void 0 ? style.border : "1px solid " + border,
+            borderRadius: style.borderRadius || "var(--tether-radius-sm, 6px)",
+            background: bg,
+            color: current ? ink : mute,
+            fontSize: style.fontSize || 12,
+            cursor: disabled ? "default" : "pointer",
+            opacity: disabled ? 0.5 : 1,
+            minWidth: 0,
+            textAlign: "left",
+            outline: "none"
+          }
+        },
+        h3(
+          "span",
+          { style: { flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          current ? current.label : placeholder
+        ),
+        chevronSvg(open)
+      ),
+      open ? h3(
+        "div",
+        {
+          ref: listRef,
+          role: "listbox",
+          className: "tether-glass tether-scroll",
+          style: {
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            minWidth: "max(100%, " + menuMinWidth + "px)",
+            maxWidth: 340,
+            maxHeight: 240,
+            overflowY: "auto",
+            zIndex: 120,
+            padding: 4,
+            borderRadius: "var(--tether-radius-md, 10px)",
+            boxShadow: "var(--tether-glass-shadow, 0 12px 32px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.08))",
+            display: "grid",
+            gap: 2
+          }
+        },
+        useSearch ? h3("input", {
+          type: "text",
+          value: query,
+          autoFocus: true,
+          placeholder: "\u7B5B\u9009\u2026",
+          onChange: (event) => {
+            setQuery(event.target.value);
+            setActiveIndex(0);
+          },
+          style: {
+            height: 28,
+            marginBottom: 2,
+            padding: "0 8px",
+            boxSizing: "border-box",
+            border: "1px solid " + border,
+            borderRadius: "var(--tether-radius-sm, 6px)",
+            background: "var(--dsw-alias-bg-base, #ffffff)",
+            color: ink,
+            fontSize: 12,
+            outline: "none"
+          }
+        }) : null,
+        filtered.length ? filtered.map((item, idx) => {
+          const isSelected = item.value === String(value ?? "");
+          const isActive = idx === activeIndex;
+          return h3(
+            "button",
+            {
+              key: item.value,
+              type: "button",
+              role: "option",
+              "aria-selected": isSelected,
+              disabled: item.disabled,
+              onMouseEnter: () => setActiveIndex(idx),
+              onClick: () => {
+                if (!item.disabled) selectValue(item.value);
+              },
+              style: {
+                width: "100%",
+                minHeight: 30,
+                padding: "4px 8px",
+                border: 0,
+                borderRadius: "var(--tether-radius-sm, 6px)",
+                background: isSelected ? "var(--dsw-alias-interactive-bg-active, rgba(38, 49, 72, 0.10))" : isActive ? "var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06))" : "transparent",
+                color: item.disabled ? mute : ink,
+                fontSize: 12,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                textAlign: "left",
+                cursor: item.disabled ? "default" : "pointer",
+                opacity: item.disabled ? 0.5 : 1
+              }
+            },
+            h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.label),
+            isSelected ? h3("span", { style: { color: "var(--dsw-alias-state-business-primary, #1570ef)", display: "inline-flex", flex: "0 0 auto" } }, checkSvg()) : null
+          );
+        }) : h3("div", { style: { padding: "8px 10px", color: mute, fontSize: 12, textAlign: "center" } }, "\u65E0\u5339\u914D\u9879")
+      ) : null
+    );
+  }
+  function ToggleSwitch({ checked = false, onChange, disabled = false, label, ariaLabel }) {
+    const activeBg = "var(--dsw-alias-state-business-primary, #1570ef)";
+    const offBg = "var(--dsw-alias-interactive-bg-active, rgba(38, 49, 72, 0.18))";
+    return h3(
+      "button",
+      {
+        type: "button",
+        role: "switch",
+        "aria-checked": !!checked,
+        "aria-label": ariaLabel || label || "\u5207\u6362",
+        disabled,
+        onClick: () => {
+          if (!disabled && onChange) onChange(!checked);
+        },
+        style: {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          border: 0,
+          padding: 0,
+          background: "transparent",
+          color: "var(--dsw-alias-label-primary, #101828)",
+          fontSize: 12.5,
+          cursor: disabled ? "default" : "pointer",
+          opacity: disabled ? 0.5 : 1
+        }
+      },
+      h3(
+        "span",
+        {
+          style: {
+            position: "relative",
+            width: 34,
+            height: 20,
+            borderRadius: 999,
+            background: checked ? activeBg : offBg,
+            transition: "background-color var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+            flex: "0 0 auto"
+          }
+        },
+        h3("span", {
+          style: {
+            position: "absolute",
+            top: 2,
+            left: 2,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            background: "#ffffff",
+            boxShadow: "0 1px 2px rgba(0, 0, 0, 0.24)",
+            transform: checked ? "translateX(14px)" : "translateX(0)",
+            transition: "transform var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))"
+          }
+        })
+      ),
+      label ? h3("span", { style: { textAlign: "left" } }, label) : null
+    );
+  }
+  function StyledCheckbox({ checked = false, onChange, disabled = false, label, title }) {
+    const border = "var(--dsw-alias-border-l2, rgba(9, 30, 66, 0.2))";
+    const active = "var(--dsw-alias-state-business-primary, #1570ef)";
+    const ink = "var(--dsw-alias-label-secondary, #475467)";
+    const mute = "var(--dsw-alias-label-tertiary, #98a2b3)";
+    return h3(
+      "button",
+      {
+        type: "button",
+        role: "checkbox",
+        "aria-checked": !!checked,
+        disabled,
+        title,
+        onClick: () => {
+          if (!disabled && onChange) onChange(!checked);
+        },
+        className: "tether-hover",
+        style: {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "4px 6px",
+          border: 0,
+          borderRadius: "var(--tether-radius-sm, 6px)",
+          background: "transparent",
+          color: disabled ? mute : ink,
+          fontSize: 12,
+          cursor: disabled ? "default" : "pointer",
+          textAlign: "left",
+          minWidth: 0
+        }
+      },
+      h3("span", {
+        "aria-hidden": true,
+        style: {
+          width: 16,
+          height: 16,
+          borderRadius: "var(--tether-radius-sm, 6px)",
+          border: "1px solid " + (checked ? active : border),
+          background: checked ? active : "transparent",
+          color: "#ffffff",
+          display: "grid",
+          placeItems: "center",
+          flex: "0 0 auto",
+          transition: "background-color var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--tether-duration-fast, 150ms)"
+        }
+      }, checked ? checkSvg() : null),
+      label ? h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, label) : null
+    );
+  }
+  function SegmentedControl({ value, options = [], onChange, disabled = false, ariaLabel }) {
+    const track = "var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06))";
+    const activeBg = "var(--dsw-alias-bg-base, #ffffff)";
+    const ink = "var(--dsw-alias-label-primary, #101828)";
+    const mute = "var(--dsw-alias-label-tertiary, #667085)";
+    return h3("div", {
+      role: "radiogroup",
+      "aria-label": ariaLabel,
+      style: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 2,
+        padding: 2,
+        borderRadius: "var(--tether-radius-sm, 6px)",
+        background: track,
+        opacity: disabled ? 0.55 : 1
+      }
+    }, (options || []).map((item) => {
+      const val = String(item.value);
+      const active = val === String(value);
+      return h3("button", {
+        key: val,
+        type: "button",
+        role: "radio",
+        "aria-checked": active,
+        disabled: disabled || !!item.disabled,
+        onClick: () => {
+          if (!disabled && !item.disabled && onChange) onChange(val);
+        },
+        style: {
+          height: 26,
+          padding: "0 10px",
+          border: 0,
+          borderRadius: 4,
+          background: active ? activeBg : "transparent",
+          color: active ? ink : mute,
+          fontSize: 12,
+          fontWeight: active ? 500 : 400,
+          boxShadow: active ? "0 1px 2px rgba(16, 24, 40, 0.10)" : "none",
+          cursor: disabled || item.disabled ? "default" : "pointer",
+          transition: "background-color var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1)), color var(--tether-duration-fast, 150ms)"
+        }
+      }, item.label);
+    }));
+  }
+  return { StyledSelect, ToggleSwitch, StyledCheckbox, SegmentedControl };
+}
+
 // src/settings-panel.js
 var CROP_VIEW = 240;
 var AVATAR_OUTPUT = 256;
 function createSettingsPanel(React2) {
   const h3 = React2.createElement;
+  const { FloatingWindow } = createFloatingWindow(React2);
+  const { SegmentedControl } = createUiControls(React2);
   const ink = "var(--dsw-alias-label-primary, #101828)";
   const sub = "var(--dsw-alias-label-secondary, #475467)";
   const mute = "var(--dsw-alias-label-tertiary, #667085)";
@@ -172747,7 +173353,7 @@ function createSettingsPanel(React2) {
   const line = "var(--dsw-alias-border-secondary, #e4e7ec)";
   const blue = "var(--dsw-alias-state-business-primary, #1570ef)";
   const danger = "var(--dsw-alias-state-error-primary, #b42318)";
-  const success = "var(--dsw-alias-state-success-primary, #16a34a)";
+  const success = "var(--dsw-alias-state-success-primary, #15803d)";
   const field = { width: "100%", height: 32, boxSizing: "border-box", border: "1px solid " + line, borderRadius: 7, padding: "0 9px", background: bg, color: ink, fontSize: 12.5, font: "inherit", outline: "none" };
   const primary = { height: 30, padding: "0 12px", border: 0, borderRadius: 7, color: "var(--dsw-alias-label-primary-inverted, #ffffff)", background: "var(--dsw-alias-button-primary-fill, #101828)", cursor: "pointer", fontSize: 12, font: "inherit" };
   const secondary = { height: 30, padding: "0 12px", border: "1px solid " + line, borderRadius: 7, color: sub, background: "transparent", cursor: "pointer", fontSize: 12, font: "inherit" };
@@ -172807,7 +173413,7 @@ function createSettingsPanel(React2) {
     accountAvatar = "",
     onAvatarChange,
     onAccountNameChange,
-    initialSection = "account",
+    initialSection = "general",
     server = "",
     connection = {},
     device = {},
@@ -172820,15 +173426,19 @@ function createSettingsPanel(React2) {
     extraSections = [],
     onRefreshConnection,
     onConfigureConnection,
+    onOpenNetworkLinks,
+    onOpenRelay,
     onRestartNode,
     onLogout,
     onPasswordChanged,
     passwordChangeAvailable = true,
     accountSignedIn = true,
     uninstallAvailable = false,
-    onOpenInstalledApps
+    onOpenInstalledApps,
+    onOpenPermissions
   }) {
-    const [section, setSection] = React2.useState(initialSection);
+    const normalizeSection = (id) => id === "teams" ? "permissions" : id || "general";
+    const [section, setSection] = React2.useState(() => normalizeSection(initialSection));
     const [currentPassword, setCurrentPassword] = React2.useState("");
     const [newPassword, setNewPassword] = React2.useState("");
     const [confirmPassword, setConfirmPassword] = React2.useState("");
@@ -172860,9 +173470,16 @@ function createSettingsPanel(React2) {
         return true;
       }
     });
+    const [themeMode, setThemeMode] = React2.useState(() => {
+      try {
+        return localStorage.getItem("tether.theme") || "system";
+      } catch (_2) {
+        return "system";
+      }
+    });
     React2.useEffect(() => {
       if (!open) return;
-      setSection(initialSection);
+      setSection(normalizeSection(initialSection));
       setEditModal("");
       setMessage("");
       setCurrentPassword("");
@@ -173545,9 +174162,47 @@ function createSettingsPanel(React2) {
         )
       )
     ) : null;
+    const scopeHeader = (title, scope) => h3(
+      "div",
+      {
+        style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 4 }
+      },
+      h3("strong", { style: { fontSize: 15, color: ink, fontWeight: "var(--tether-strong, 600)" } }, title),
+      scope ? h3("span", {
+        style: { fontSize: 11, lineHeight: "20px", padding: "0 8px", borderRadius: 6, background: panel, border: "1px solid " + line, color: mute, flex: "0 0 auto" }
+      }, scope) : null
+    );
+    const generalSection = h3(
+      "div",
+      { style: { display: "grid", gap: 16, maxWidth: 540 } },
+      scopeHeader("\u5E38\u89C4\u4E0E\u5916\u89C2", "\u672C\u673A"),
+      h3(
+        "div",
+        { style: { ...cardStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 } },
+        h3("span", { style: { fontSize: 13, color: ink } }, "\u5916\u89C2\u4E3B\u9898"),
+        h3(SegmentedControl, {
+          value: themeMode,
+          ariaLabel: "\u5916\u89C2\u4E3B\u9898",
+          options: [
+            { value: "system", label: "\u8DDF\u968F\u7CFB\u7EDF" },
+            { value: "light", label: "\u6D45\u8272" },
+            { value: "dark", label: "\u6697\u8272" }
+          ],
+          onChange: (next) => {
+            setThemeMode(next);
+            try {
+              localStorage.setItem("tether.theme", next);
+            } catch (_2) {
+            }
+            if (typeof window !== "undefined") window.dispatchEvent(new Event("tether-theme-pref"));
+          }
+        })
+      )
+    );
     const connectionSection = h3(
       "div",
-      { style: { display: "grid", gap: 10 } },
+      { style: { display: "grid", gap: 12, maxWidth: 560 } },
+      scopeHeader("\u8FDE\u63A5\u4E0E\u7F51\u7EDC", "\u79C1\u7F51"),
       h3(
         "div",
         { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 } },
@@ -173573,20 +174228,35 @@ function createSettingsPanel(React2) {
         ["\u6700\u8FD1\u68C0\u6D4B", timeText(connection.checkedAt)],
         ["\u54CD\u5E94", Number.isFinite(connection.durationMs) ? connection.durationMs + " ms" : "\u2014"]
       ]),
-      typeof onConfigureConnection === "function" ? h3("button", {
-        type: "button",
-        onClick: onConfigureConnection,
-        style: { ...secondary, justifySelf: "start" }
-      }, "\u4FEE\u6539\u670D\u52A1\u5668\u8FDE\u63A5") : null
+      h3(
+        "div",
+        { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
+        typeof onConfigureConnection === "function" ? h3("button", {
+          type: "button",
+          onClick: onConfigureConnection,
+          style: secondary
+        }, "\u4FEE\u6539\u670D\u52A1\u5668\u8FDE\u63A5") : null,
+        typeof onOpenNetworkLinks === "function" ? h3("button", {
+          type: "button",
+          onClick: onOpenNetworkLinks,
+          style: { ...secondary, display: "inline-flex", alignItems: "center", gap: 6 }
+        }, Glyph ? h3(Glyph, { name: "link", size: 13 }) : null, "\u8FDE\u63A5\u7BA1\u7406") : null,
+        typeof onOpenRelay === "function" ? h3("button", {
+          type: "button",
+          onClick: onOpenRelay,
+          style: { ...secondary, display: "inline-flex", alignItems: "center", gap: 6 }
+        }, Glyph ? h3(Glyph, { name: "transfer", size: 13 }) : null, "\u81EA\u52A8\u4E2D\u8F6C") : null
+      )
     );
     const workspaceSection = h3(
       "div",
-      { style: { display: "grid", gap: 12 } },
+      { style: { display: "grid", gap: 14, maxWidth: 560 } },
+      scopeHeader("\u5DE5\u4F5C\u533A\u4E0E\u667A\u80FD\u4F53", "\u672C\u673A"),
       h3(
         "div",
         {
           title: "\u5207\u6362\u8BBE\u5907\u65F6\u4FDD\u7559\u6700\u8FD1\u4E09\u4E2A\u539F\u751F\u5DE5\u4F5C\u533A\uFF1B\u5173\u95ED\u540E\u91CA\u653E\u540E\u53F0\u9875\u9762",
-          style: { display: "flex", alignItems: "center", gap: 16, minHeight: 44 }
+          style: { ...cardStyle, display: "flex", alignItems: "center", gap: 16, minHeight: 44 }
         },
         h3(
           "div",
@@ -173806,21 +174476,59 @@ function createSettingsPanel(React2) {
         style: { color: uninstallNotice.tone === "error" ? danger : success, fontSize: 12, lineHeight: 1.5 }
       }, uninstallNotice.text) : null
     );
+    const teamSectionEntry = (Array.isArray(extraSections) ? extraSections : []).find((item) => item && item.id === "teams" && typeof item.render === "function");
+    const permissionsSection = h3(
+      "div",
+      { style: { display: "grid", gap: 16, maxWidth: 620 } },
+      scopeHeader("\u6743\u9650\u4E0E\u5171\u4EAB", "\u672C\u673A \xB7 \u8D26\u53F7"),
+      typeof onOpenPermissions === "function" ? h3(
+        "div",
+        { style: { ...cardStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 } },
+        h3("span", { style: { fontSize: 13, color: ink } }, "\u8BBE\u5907\u8DEF\u5F84\u8BFB\u5199\u7B56\u7565\u4E0E\u5BA1\u8BA1"),
+        h3("button", {
+          type: "button",
+          onClick: onOpenPermissions,
+          style: { ...secondary, display: "inline-flex", alignItems: "center", gap: 6 }
+        }, Glyph ? h3(Glyph, { name: "shield", size: 13 }) : null, "\u6253\u5F00\u6743\u9650\u9762\u677F")
+      ) : null,
+      teamSectionEntry ? teamSectionEntry.render() : null
+    );
+    const sectionScopes = {
+      general: "\u672C\u673A",
+      workspace: "\u672C\u673A",
+      connection: "\u79C1\u7F51",
+      permissions: "\u672C\u673A \xB7 \u8D26\u53F7",
+      device: "\u672C\u673A\u8BBE\u5907",
+      update: "\u5168\u7F51",
+      account: "\u8D26\u53F7",
+      about: "\u672C\u673A"
+    };
     const builtIn = [
-      { id: "account", label: "\u8D26\u53F7", render: () => accountSection },
-      { id: "connection", label: "\u8FDE\u63A5", render: () => connectionSection },
+      { id: "general", label: "\u5E38\u89C4\u4E0E\u5916\u89C2", render: () => generalSection },
+      { id: "workspace", label: "\u5DE5\u4F5C\u533A\u4E0E\u667A\u80FD\u4F53", render: () => workspaceSection },
+      { id: "connection", label: "\u8FDE\u63A5\u4E0E\u7F51\u7EDC", render: () => connectionSection },
+      { id: "permissions", label: "\u6743\u9650\u4E0E\u5171\u4EAB", render: () => permissionsSection },
+      { id: "device", label: "\u8BBE\u5907\u4E0E DSH", render: () => deviceSection },
       { id: "update", label: "\u66F4\u65B0", render: () => updateSection },
-      { id: "workspace", label: "\u5DE5\u4F5C\u533A", render: () => workspaceSection },
-      { id: "device", label: "\u672C\u673A\u8BBE\u5907", render: () => deviceSection },
-      { id: "about", label: "\u5173\u4E8E", render: () => aboutSection }
+      { id: "account", label: "\u8D26\u53F7", render: () => accountSection },
+      { id: "about", label: "\u5173\u4E8E", render: () => h3(
+        "div",
+        { style: { display: "grid", gap: 20 } },
+        aboutSection,
+        uninstallAvailable ? h3(
+          "div",
+          { style: { marginTop: 12, padding: 16, borderRadius: 10, border: "1px solid rgba(180,35,24,0.28)", background: "rgba(180,35,24,0.04)", display: "grid", gap: 10, maxWidth: 520 } },
+          h3("div", { style: { fontSize: 13, fontWeight: 600, color: danger } }, "\u5371\u9669\u533A"),
+          uninstallSection
+        ) : null
+      ) }
     ];
-    const optional = uninstallAvailable ? [{ id: "uninstall", label: "\u5378\u8F7D", render: () => uninstallSection }] : [];
-    const sections = builtIn.concat(optional).concat((Array.isArray(extraSections) ? extraSections : []).filter((item) => item && item.id && item.label && typeof item.render === "function"));
+    const sections = builtIn.concat((Array.isArray(extraSections) ? extraSections : []).filter((item) => item && item.id && item.id !== "teams" && item.label && typeof item.render === "function"));
     const current = sections.find((item) => item.id === section) || sections[0];
     const nav = h3(
       "div",
       {
-        style: { width: 150, flex: "0 0 auto", padding: "12px 8px", background: panel, borderRight: "1px solid " + line, display: "flex", flexDirection: "column", gap: 2 }
+        style: { width: 164, flex: "0 0 auto", padding: "12px 8px", background: panel, borderRight: "1px solid " + line, display: "flex", flexDirection: "column", gap: 4 }
       },
       sections.map((item) => h3("button", {
         key: item.id,
@@ -173832,7 +174540,7 @@ function createSettingsPanel(React2) {
         className: "tether-hover",
         "aria-current": current.id === item.id ? "page" : void 0,
         style: {
-          height: 30,
+          height: 32,
           padding: "0 10px",
           border: 0,
           borderRadius: 6,
@@ -173840,39 +174548,25 @@ function createSettingsPanel(React2) {
           background: current.id === item.id ? "var(--dsw-alias-interactive-bg-active, rgba(38,49,72,.10))" : "transparent",
           color: current.id === item.id ? ink : sub,
           fontSize: 12.5,
+          fontWeight: current.id === item.id ? 500 : 400,
           cursor: "pointer",
           font: "inherit"
         }
       }, item.label))
     );
     return h3(
-      "div",
-      {
-        onPointerDown: (event) => {
-          if (event.target === event.currentTarget) onClose();
-        },
-        style: { position: "absolute", inset: "40px 0 0 0", zIndex: 40, background: "rgba(16,24,40,0.35)", display: "grid", placeItems: "center", padding: 24 }
-      },
+      React2.Fragment,
+      null,
       h3(
-        "section",
+        FloatingWindow,
         {
-          role: "dialog",
-          "aria-label": "\u8BBE\u7F6E",
-          style: { width: "min(760px, 100%)", height: "min(560px, 100%)", background: bg, borderRadius: 12, overflow: "hidden", boxShadow: "var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,0.18))", display: "flex", flexDirection: "column" }
+          title: "\u8BBE\u7F6E",
+          subtitle: sectionScopes[current.id] || "",
+          onClose,
+          width: "min(820px, calc(100% - 32px))",
+          height: "min(580px, calc(100% - 32px))",
+          ariaLabel: "\u8BBE\u7F6E"
         },
-        h3(
-          "header",
-          { style: { height: 44, padding: "0 14px", display: "flex", alignItems: "center", background: panel, borderBottom: "1px solid " + line, flex: "0 0 auto" } },
-          h3("strong", { style: { fontSize: 14 } }, "\u8BBE\u7F6E"),
-          h3("button", {
-            type: "button",
-            onClick: onClose,
-            title: "\u5173\u95ED",
-            "aria-label": "\u5173\u95ED",
-            className: "tether-hover",
-            style: { marginLeft: "auto", width: 28, height: 28, border: 0, borderRadius: 6, background: "transparent", fontSize: 18, cursor: "pointer", color: mute }
-          }, "\xD7")
-        ),
         h3(
           "div",
           { style: { flex: "1 1 auto", minHeight: 0, display: "flex" } },
@@ -173886,421 +174580,6 @@ function createSettingsPanel(React2) {
     );
   }
   return { SettingsPanel };
-}
-
-// src/ui-controls.js
-function createUiControls(React2) {
-  const h3 = React2.createElement;
-  function chevronSvg(open) {
-    return h3("svg", {
-      width: 12,
-      height: 12,
-      viewBox: "0 0 12 12",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: 1.5,
-      strokeLinecap: "round",
-      strokeLinejoin: "round",
-      "aria-hidden": true,
-      style: {
-        flex: "0 0 auto",
-        transform: open ? "rotate(180deg)" : "rotate(0deg)",
-        transition: "transform var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))"
-      }
-    }, h3("path", { d: "M3 4.5L6 7.5L9 4.5" }));
-  }
-  function checkSvg() {
-    return h3("svg", {
-      width: 10,
-      height: 10,
-      viewBox: "0 0 12 12",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: 2,
-      strokeLinecap: "round",
-      strokeLinejoin: "round",
-      "aria-hidden": true
-    }, h3("path", { d: "M2.5 6.2L5 8.7L9.5 3.6" }));
-  }
-  function StyledSelect({
-    value = "",
-    options = [],
-    onChange,
-    disabled = false,
-    placeholder = "\u8BF7\u9009\u62E9\u2026",
-    searchable,
-    ariaLabel,
-    title,
-    style = {},
-    menuMinWidth = 180
-  }) {
-    const [open, setOpen] = React2.useState(false);
-    const [query, setQuery] = React2.useState("");
-    const [activeIndex, setActiveIndex] = React2.useState(-1);
-    const rootRef = React2.useRef(null);
-    const listRef = React2.useRef(null);
-    const normalized = React2.useMemo(() => (options || []).map((item) => typeof item === "object" && item !== null ? { value: String(item.value ?? ""), label: String(item.label ?? item.value ?? ""), disabled: !!item.disabled } : { value: String(item), label: String(item), disabled: false }), [options]);
-    const current = normalized.find((item) => item.value === String(value ?? "")) || null;
-    const useSearch = typeof searchable === "boolean" ? searchable : normalized.length > 8;
-    const filtered = React2.useMemo(() => {
-      const term = query.trim().toLowerCase();
-      if (!useSearch || !term) return normalized;
-      return normalized.filter((item) => item.label.toLowerCase().includes(term) || item.value.toLowerCase().includes(term));
-    }, [normalized, query, useSearch]);
-    React2.useEffect(() => {
-      if (!open) {
-        setQuery("");
-        return void 0;
-      }
-      const selectedIdx = filtered.findIndex((item) => item.value === String(value ?? "") && !item.disabled);
-      setActiveIndex(selectedIdx >= 0 ? selectedIdx : filtered.findIndex((item) => !item.disabled));
-      const onPointerDown = (event) => {
-        if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
-      };
-      const onKeyDown = (event) => {
-        if (event.key === "Escape") {
-          setOpen(false);
-          event.stopPropagation();
-        }
-      };
-      document.addEventListener("pointerdown", onPointerDown);
-      document.addEventListener("keydown", onKeyDown, true);
-      return () => {
-        document.removeEventListener("pointerdown", onPointerDown);
-        document.removeEventListener("keydown", onKeyDown, true);
-      };
-    }, [open]);
-    const selectValue = (nextValue) => {
-      setOpen(false);
-      if (onChange && nextValue !== value) onChange(nextValue);
-    };
-    const onTriggerKeyDown = (event) => {
-      if (disabled) return;
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        if (!open) {
-          setOpen(true);
-          return;
-        }
-        const pick = filtered[activeIndex];
-        if (pick && !pick.disabled) selectValue(pick.value);
-        return;
-      }
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        if (!open) {
-          setOpen(true);
-          return;
-        }
-        if (!filtered.length) return;
-        const step = event.key === "ArrowDown" ? 1 : -1;
-        let next = activeIndex;
-        for (let i = 0; i < filtered.length; i += 1) {
-          next = (next + step + filtered.length) % filtered.length;
-          if (!filtered[next].disabled) {
-            setActiveIndex(next);
-            break;
-          }
-        }
-      }
-    };
-    const border = "var(--dsw-alias-border-l2, rgba(9, 30, 66, 0.14))";
-    const bg = style.background || "var(--dsw-specific-input-major, var(--dsw-alias-bg-base, #ffffff))";
-    const ink = style.color || "var(--dsw-alias-label-primary, #101828)";
-    const mute = "var(--dsw-alias-label-tertiary, #667085)";
-    return h3(
-      "div",
-      {
-        ref: rootRef,
-        style: {
-          position: "relative",
-          display: "inline-flex",
-          minWidth: 0,
-          ...style.flex ? { flex: style.flex } : {},
-          ...style.width ? { width: style.width } : {}
-        }
-      },
-      h3(
-        "button",
-        {
-          type: "button",
-          role: "combobox",
-          "aria-expanded": open,
-          "aria-haspopup": "listbox",
-          "aria-label": ariaLabel || title || placeholder,
-          title: title || (current ? current.label : placeholder),
-          disabled,
-          onClick: () => {
-            if (!disabled) setOpen((prev) => !prev);
-          },
-          onKeyDown: onTriggerKeyDown,
-          className: "tether-hover",
-          style: {
-            width: "100%",
-            height: style.height || 32,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-            padding: "0 10px",
-            boxSizing: "border-box",
-            border: style.border !== void 0 ? style.border : "1px solid " + border,
-            borderRadius: style.borderRadius || "var(--tether-radius-sm, 6px)",
-            background: bg,
-            color: current ? ink : mute,
-            fontSize: style.fontSize || 12,
-            cursor: disabled ? "default" : "pointer",
-            opacity: disabled ? 0.5 : 1,
-            minWidth: 0,
-            textAlign: "left",
-            outline: "none"
-          }
-        },
-        h3(
-          "span",
-          { style: { flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-          current ? current.label : placeholder
-        ),
-        chevronSvg(open)
-      ),
-      open ? h3(
-        "div",
-        {
-          ref: listRef,
-          role: "listbox",
-          className: "tether-glass tether-scroll",
-          style: {
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            minWidth: "max(100%, " + menuMinWidth + "px)",
-            maxWidth: 340,
-            maxHeight: 240,
-            overflowY: "auto",
-            zIndex: 120,
-            padding: 4,
-            borderRadius: "var(--tether-radius-md, 10px)",
-            boxShadow: "var(--tether-glass-shadow, 0 12px 32px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.08))",
-            display: "grid",
-            gap: 2
-          }
-        },
-        useSearch ? h3("input", {
-          type: "text",
-          value: query,
-          autoFocus: true,
-          placeholder: "\u7B5B\u9009\u2026",
-          onChange: (event) => {
-            setQuery(event.target.value);
-            setActiveIndex(0);
-          },
-          style: {
-            height: 28,
-            marginBottom: 2,
-            padding: "0 8px",
-            boxSizing: "border-box",
-            border: "1px solid " + border,
-            borderRadius: "var(--tether-radius-sm, 6px)",
-            background: "var(--dsw-alias-bg-base, #ffffff)",
-            color: ink,
-            fontSize: 12,
-            outline: "none"
-          }
-        }) : null,
-        filtered.length ? filtered.map((item, idx) => {
-          const isSelected = item.value === String(value ?? "");
-          const isActive = idx === activeIndex;
-          return h3(
-            "button",
-            {
-              key: item.value,
-              type: "button",
-              role: "option",
-              "aria-selected": isSelected,
-              disabled: item.disabled,
-              onMouseEnter: () => setActiveIndex(idx),
-              onClick: () => {
-                if (!item.disabled) selectValue(item.value);
-              },
-              style: {
-                width: "100%",
-                minHeight: 30,
-                padding: "4px 8px",
-                border: 0,
-                borderRadius: "var(--tether-radius-sm, 6px)",
-                background: isSelected ? "var(--dsw-alias-interactive-bg-active, rgba(38, 49, 72, 0.10))" : isActive ? "var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06))" : "transparent",
-                color: item.disabled ? mute : ink,
-                fontSize: 12,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 8,
-                textAlign: "left",
-                cursor: item.disabled ? "default" : "pointer",
-                opacity: item.disabled ? 0.5 : 1
-              }
-            },
-            h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.label),
-            isSelected ? h3("span", { style: { color: "var(--dsw-alias-state-business-primary, #1570ef)", display: "inline-flex", flex: "0 0 auto" } }, checkSvg()) : null
-          );
-        }) : h3("div", { style: { padding: "8px 10px", color: mute, fontSize: 12, textAlign: "center" } }, "\u65E0\u5339\u914D\u9879")
-      ) : null
-    );
-  }
-  function ToggleSwitch({ checked = false, onChange, disabled = false, label, ariaLabel }) {
-    const activeBg = "var(--dsw-alias-state-business-primary, #1570ef)";
-    const offBg = "var(--dsw-alias-interactive-bg-active, rgba(38, 49, 72, 0.18))";
-    return h3(
-      "button",
-      {
-        type: "button",
-        role: "switch",
-        "aria-checked": !!checked,
-        "aria-label": ariaLabel || label || "\u5207\u6362",
-        disabled,
-        onClick: () => {
-          if (!disabled && onChange) onChange(!checked);
-        },
-        style: {
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          border: 0,
-          padding: 0,
-          background: "transparent",
-          color: "var(--dsw-alias-label-primary, #101828)",
-          fontSize: 12.5,
-          cursor: disabled ? "default" : "pointer",
-          opacity: disabled ? 0.5 : 1
-        }
-      },
-      h3(
-        "span",
-        {
-          style: {
-            position: "relative",
-            width: 34,
-            height: 20,
-            borderRadius: 999,
-            background: checked ? activeBg : offBg,
-            transition: "background-color var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))",
-            flex: "0 0 auto"
-          }
-        },
-        h3("span", {
-          style: {
-            position: "absolute",
-            top: 2,
-            left: 2,
-            width: 16,
-            height: 16,
-            borderRadius: "50%",
-            background: "#ffffff",
-            boxShadow: "0 1px 2px rgba(0, 0, 0, 0.24)",
-            transform: checked ? "translateX(14px)" : "translateX(0)",
-            transition: "transform var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))"
-          }
-        })
-      ),
-      label ? h3("span", { style: { textAlign: "left" } }, label) : null
-    );
-  }
-  function StyledCheckbox({ checked = false, onChange, disabled = false, label, title }) {
-    const border = "var(--dsw-alias-border-l2, rgba(9, 30, 66, 0.2))";
-    const active = "var(--dsw-alias-state-business-primary, #1570ef)";
-    const ink = "var(--dsw-alias-label-secondary, #475467)";
-    const mute = "var(--dsw-alias-label-tertiary, #98a2b3)";
-    return h3(
-      "button",
-      {
-        type: "button",
-        role: "checkbox",
-        "aria-checked": !!checked,
-        disabled,
-        title,
-        onClick: () => {
-          if (!disabled && onChange) onChange(!checked);
-        },
-        className: "tether-hover",
-        style: {
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "4px 6px",
-          border: 0,
-          borderRadius: "var(--tether-radius-sm, 6px)",
-          background: "transparent",
-          color: disabled ? mute : ink,
-          fontSize: 12,
-          cursor: disabled ? "default" : "pointer",
-          textAlign: "left",
-          minWidth: 0
-        }
-      },
-      h3("span", {
-        "aria-hidden": true,
-        style: {
-          width: 16,
-          height: 16,
-          borderRadius: "var(--tether-radius-sm, 6px)",
-          border: "1px solid " + (checked ? active : border),
-          background: checked ? active : "transparent",
-          color: "#ffffff",
-          display: "grid",
-          placeItems: "center",
-          flex: "0 0 auto",
-          transition: "background-color var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--tether-duration-fast, 150ms)"
-        }
-      }, checked ? checkSvg() : null),
-      label ? h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, label) : null
-    );
-  }
-  function SegmentedControl({ value, options = [], onChange, disabled = false, ariaLabel }) {
-    const track = "var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06))";
-    const activeBg = "var(--dsw-alias-bg-base, #ffffff)";
-    const ink = "var(--dsw-alias-label-primary, #101828)";
-    const mute = "var(--dsw-alias-label-tertiary, #667085)";
-    return h3("div", {
-      role: "radiogroup",
-      "aria-label": ariaLabel,
-      style: {
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 2,
-        padding: 2,
-        borderRadius: "var(--tether-radius-sm, 6px)",
-        background: track,
-        opacity: disabled ? 0.55 : 1
-      }
-    }, (options || []).map((item) => {
-      const val = String(item.value);
-      const active = val === String(value);
-      return h3("button", {
-        key: val,
-        type: "button",
-        role: "radio",
-        "aria-checked": active,
-        disabled: disabled || !!item.disabled,
-        onClick: () => {
-          if (!disabled && !item.disabled && onChange) onChange(val);
-        },
-        style: {
-          height: 26,
-          padding: "0 10px",
-          border: 0,
-          borderRadius: 4,
-          background: active ? activeBg : "transparent",
-          color: active ? ink : mute,
-          fontSize: 12,
-          fontWeight: active ? 500 : 400,
-          boxShadow: active ? "0 1px 2px rgba(16, 24, 40, 0.10)" : "none",
-          cursor: disabled || item.disabled ? "default" : "pointer",
-          transition: "background-color var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1)), color var(--tether-duration-fast, 150ms)"
-        }
-      }, item.label);
-    }));
-  }
-  return { StyledSelect, ToggleSwitch, StyledCheckbox, SegmentedControl };
 }
 
 // src/team-management.js
@@ -176308,6 +176587,7 @@ function createTransferPage({
   onNotice,
   onError,
   onLocalRelay,
+  onJobSummary,
   hubOnly = false
 }) {
   const h3 = React2.createElement;
@@ -176760,6 +177040,15 @@ function createTransferPage({
   const [activeSide, setActiveSide] = React2.useState("left");
   const [refreshKey, setRefreshKey] = React2.useState(0);
   const [job, setJob] = React2.useState(null);
+  React2.useEffect(() => {
+    if (typeof onJobSummary !== "function") return;
+    onJobSummary(job ? {
+      state: job.state || "",
+      percent: Number(job.percent) || 0,
+      count: Number(job.count) || 0,
+      error: job.error || ""
+    } : null);
+  }, [job, onJobSummary]);
   const [menu, setMenu] = React2.useState(null);
   const [dialog, setDialog] = React2.useState(null);
   const [dialogText, setDialogText] = React2.useState("");
@@ -183407,6 +183696,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   const Settings2 = createSettingsPanel(React2);
   const TeamManagementPage = createTeamManagementPage(React2);
   const { StyledSelect, ToggleSwitch } = createUiControls(React2);
+  const { FloatingWindow } = createFloatingWindow(React2);
   const PANEL_ID = "tether";
   const BASE = host.apiBase();
   const C2 = {
@@ -184544,6 +184834,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [zoom, setZoom] = React2.useState(1);
     const [connectMode, setConnectMode] = React2.useState(false);
     const [connectFrom, setConnectFrom] = React2.useState("");
+    const [selectedEdgeKey, setSelectedEdgeKey] = React2.useState("");
     React2.useEffect(() => {
       if (!connectMode) return void 0;
       const onKey = (event) => {
@@ -184802,23 +185093,37 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         rightName: rightItem && (rightItem.name || rightItem.device_id) || edge.to
       });
     }
+    const selectedPair = selectedEdgeKey ? edgePairs.find((pair) => pair.key === selectedEdgeKey) || null : null;
+    React2.useEffect(() => {
+      if (!selectedPair) return void 0;
+      const onKey = (event) => {
+        if (event.key === "Escape") {
+          setSelectedEdgeKey("");
+          return;
+        }
+        if (event.key === "Delete" || event.key === "Backspace") {
+          if (event.target && ["INPUT", "TEXTAREA"].includes(event.target.tagName)) return;
+          event.preventDefault();
+          if (onToggleEdge) onToggleEdge({ from: selectedPair.from.id, to: selectedPair.to.id }, false);
+          setSelectedEdgeKey("");
+        }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [selectedPair, onToggleEdge]);
     return h3(
       "div",
-      { ref: stage, style: { position: "absolute", inset: 0, overflow: "hidden", touchAction: "none" } },
-      h3(
-        "div",
-        { style: { position: "absolute", left: 14, top: 12, display: "flex", alignItems: "center", gap: 14, fontSize: 12, color: C2.mute, pointerEvents: "none" } },
-        h3("span", null, "\u7F51\u7EDC"),
-        ["windows", "linux", "mac"].map((kind) => h3(
-          "span",
-          { key: kind, style: { display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, color: C2.mute } },
-          h3("span", { style: { width: 7, height: 7, borderRadius: 4, background: DEVICE_OS_THEME[kind].color } }),
-          DEVICE_OS_THEME[kind].label
-        ))
-      ),
+      {
+        ref: stage,
+        onClick: () => {
+          if (selectedEdgeKey) setSelectedEdgeKey("");
+        },
+        style: { position: "absolute", inset: 0, overflow: "hidden", touchAction: "none" }
+      },
       h3("button", {
         type: "button",
-        onClick: () => {
+        onClick: (event) => {
+          event.stopPropagation();
           setConnectMode((value) => !value);
           setConnectFrom("");
         },
@@ -184828,12 +185133,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         style: {
           position: "absolute",
           right: 12,
-          top: 8,
+          top: 12,
           zIndex: 5,
           display: "flex",
           alignItems: "center",
           gap: 5,
-          height: 26,
+          height: 28,
           padding: "0 10px",
           border: "1px solid " + (connectMode ? C2.blue : C2.line),
           borderRadius: 999,
@@ -184849,34 +185154,35 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         edgePairs.map((pair) => {
           const points = linkPoints(screen(pair.from), screen(pair.to), pair.from.id, pair.to.id);
           if (!points) return null;
+          const edgeSelected = pair.key === selectedEdgeKey;
           return h3(
             "g",
             { key: "edge:" + pair.key },
-            h3("title", null, pair.leftName + " \u2194 " + pair.rightName + " \xB7 \u70B9\u51FB\u65AD\u5F00"),
+            h3("title", null, pair.leftName + " \u2194 " + pair.rightName + (edgeSelected ? " \xB7 \u6309 Delete \u6216\u70B9\u4E2D\u70B9\u65AD\u5F00" : " \xB7 \u70B9\u51FB\u9009\u4E2D\u8FDE\u7EBF")),
             h3("line", {
               ...points,
               stroke: "transparent",
-              strokeWidth: 16,
+              strokeWidth: 12,
               vectorEffect: "non-scaling-stroke",
               style: { cursor: "pointer", pointerEvents: "stroke" },
               onClick: (event) => {
                 event.stopPropagation();
-                if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false);
+                setSelectedEdgeKey((current) => current === pair.key ? "" : pair.key);
               }
             }),
             h3("line", {
               ...points,
-              stroke: C2.sub,
-              strokeWidth: zoom > 1 ? 1 : 1.2,
+              stroke: edgeSelected ? C2.blue : C2.sub,
+              strokeWidth: edgeSelected ? 2 : zoom > 1 ? 1 : 1.2,
               vectorEffect: "non-scaling-stroke",
               strokeDasharray: pair.online ? void 0 : "4 5",
-              opacity: pair.online ? 0.7 : 0.4,
+              opacity: edgeSelected ? 0.95 : pair.online ? 0.7 : 0.4,
               style: { pointerEvents: "none" }
             })
           );
         })
       ),
-      edgePairs.map((pair) => {
+      edgePairs.filter((pair) => pair.key === selectedEdgeKey).map((pair) => {
         const left = screen(pair.from);
         const right = screen(pair.to);
         const midX = (left.x + right.x) / 2;
@@ -184891,26 +185197,26 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onClick: (event) => {
             event.stopPropagation();
             if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false);
+            setSelectedEdgeKey("");
           },
-          className: "tether-hover",
+          className: "tether-glass tether-hover",
           style: {
             position: "absolute",
             left: midX + "%",
             top: midY + "%",
             transform: "translate(-50%, -50%)",
             zIndex: 4,
-            width: 18,
-            height: 18,
-            padding: 0,
-            display: "grid",
-            placeItems: "center",
-            border: "1px solid " + C2.line,
+            height: 24,
+            padding: "0 8px",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
             borderRadius: 999,
-            background: C2.layer1,
-            color: C2.sub,
+            color: C2.red,
+            fontSize: 11,
             cursor: "pointer"
           }
-        }, h3(Glyph, { name: "link", size: 11 }));
+        }, h3(Glyph, { name: "link", size: 11 }), "\u65AD\u5F00");
       }),
       nodes.map((node) => {
         const item = lookup.get(node.id) || { device_id: node.id, name: node.id, online: false };
@@ -184948,7 +185254,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               opacity: item.online ? 1 : 0.46,
               cursor: connectMode ? "crosshair" : "grab",
               userSelect: "none",
-              outline: connectFrom === node.id ? "2px solid " + C2.blue : "none",
+              outline: connectFrom === node.id ? "2px solid " + C2.blue : selected ? "2px solid color-mix(in srgb, " + C2.blue + " 55%, transparent)" : "none",
               outlineOffset: 2
             } : {
               position: "absolute",
@@ -184964,8 +185270,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               background: isCenter ? C2.ink : deviceOsTheme(item).soft,
               color: isCenter ? C2.onPrimary : C2.ink,
               fontSize: isCenter ? 12 : 11,
-              boxShadow: isCenter ? C2.shadow : selected ? "0 1px 3px rgba(16,24,40,0.12)" : "0 1px 2px rgba(16,24,40,0.06)",
-              transition: "background-color 160ms ease",
+              boxShadow: isCenter ? C2.shadow : selected ? "0 0 0 2px color-mix(in srgb, " + C2.blue + " 55%, transparent), 0 2px 6px rgba(16,24,40,0.12)" : "0 1px 2px rgba(16,24,40,0.06)",
+              transition: "background-color 160ms ease, box-shadow 160ms ease",
               cursor: connectMode ? "crosshair" : "grab",
               whiteSpace: "nowrap",
               opacity: item.online ? 1 : 0.55,
@@ -185171,84 +185477,70 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       onChange
     });
     return h3(
-      "div",
+      FloatingWindow,
       {
-        onPointerDown: (event) => {
-          if (event.target === event.currentTarget) onClose();
-        },
-        style: { position: "absolute", inset: 0, zIndex: 80, display: "grid", placeItems: "center", padding: 24, background: "rgba(16,24,40,.35)" }
+        title: "\u8FDE\u63A5\u7BA1\u7406",
+        subtitle: rows.length + " \u6761\u8FDE\u63A5",
+        onClose,
+        width: "min(760px, calc(100% - 32px))",
+        height: "min(540px, calc(100% - 32px))",
+        ariaLabel: "\u8FDE\u63A5\u7BA1\u7406"
       },
       h3(
-        "section",
-        {
-          role: "dialog",
-          "aria-label": "\u8FDE\u63A5\u7BA1\u7406",
-          onPointerDown: (event) => event.stopPropagation(),
-          style: { width: "min(760px, 100%)", height: "min(560px, 100%)", display: "flex", flexDirection: "column", overflow: "hidden", background: C2.bg, borderRadius: 16, boxShadow: C2.shadow }
-        },
-        h3(
-          "header",
-          { style: { display: "flex", alignItems: "center", gap: 8, padding: "0 14px", height: 44, borderBottom: "1px solid " + C2.line, flex: "0 0 auto" } },
-          h3("strong", { style: { fontSize: 14 } }, "\u8FDE\u63A5\u7BA1\u7406"),
-          h3("span", { className: "tether-num", style: { fontSize: 11, color: C2.mute } }, rows.length + " \u6761\u8FDE\u63A5"),
-          h3("button", { type: "button", onClick: onClose, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", className: "tether-hover", style: { marginLeft: "auto", width: 28, height: 28, border: 0, borderRadius: 6, background: "transparent", color: C2.mute, fontSize: 18, cursor: "pointer" } }, "\xD7")
-        ),
-        h3(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "1px solid " + C2.line, flex: "0 0 auto" } },
+        select(from, setFrom),
+        h3("span", { style: { color: C2.mute, flex: "0 0 auto" } }, "\u2194"),
+        select(to, setTo),
+        h3("button", {
+          type: "button",
+          disabled: !from || !to || from === to,
+          onClick: () => {
+            if (from && to && from !== to) onToggleEdge({ from, to }, !pairOn);
+          },
+          style: { height: 30, padding: "0 12px", border: 0, borderRadius: 6, background: C2.ink, color: C2.onPrimary, fontSize: 12, cursor: from && to && from !== to ? "pointer" : "default", opacity: from && to && from !== to ? 1 : 0.45 }
+        }, pairOn ? "\u65AD\u5F00" : "\u8FDE\u63A5")
+      ),
+      h3(
+        "div",
+        { style: { padding: "8px 14px 0", flex: "0 0 auto" } },
+        h3("input", {
+          value: search2,
+          onChange: (event) => setSearch(event.target.value),
+          placeholder: "\u641C\u7D22\u8FDE\u63A5",
+          "aria-label": "\u641C\u7D22\u8FDE\u63A5",
+          spellCheck: false,
+          style: { width: "100%", height: 28, boxSizing: "border-box", border: "1px solid " + C2.line, borderRadius: 6, padding: "0 8px", background: C2.soft, color: C2.ink, fontSize: 12, font: "inherit", outline: "none" }
+        })
+      ),
+      h3(
+        "div",
+        { style: { display: "grid", gridTemplateColumns: "1fr 1fr 64px 56px", gap: 8, padding: "10px 14px 6px", color: C2.mute, fontSize: 10.5, flex: "0 0 auto" } },
+        h3("span", null, "\u8BBE\u5907 A"),
+        h3("span", null, "\u8BBE\u5907 B"),
+        h3("span", null, "\u72B6\u6001"),
+        h3("span", null, "")
+      ),
+      h3(
+        "div",
+        { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "0 14px 14px" } },
+        rows.map(({ edge, left, right }) => h3(
           "div",
-          { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "1px solid " + C2.line, flex: "0 0 auto" } },
-          select(from, setFrom),
-          h3("span", { style: { color: C2.mute, flex: "0 0 auto" } }, "\u2194"),
-          select(to, setTo),
+          {
+            key: networkEdgeKey(edge.from, edge.to),
+            style: { display: "grid", gridTemplateColumns: "1fr 1fr 64px 56px", gap: 8, alignItems: "center", minHeight: 36, borderTop: "1px solid " + C2.line }
+          },
+          h3("span", { title: left.device_id, style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12 } }, dot(left.online), h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, left.name || left.device_id)),
+          h3("span", { title: right.device_id, style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12 } }, dot(right.online), h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, right.name || right.device_id)),
+          h3("span", { style: { fontSize: 10.5, color: left.online && right.online ? C2.green : C2.mute } }, left.online && right.online ? "\u5728\u7EBF" : "\u79BB\u7EBF"),
           h3("button", {
             type: "button",
-            disabled: !from || !to || from === to,
-            onClick: () => {
-              if (from && to && from !== to) onToggleEdge({ from, to }, !pairOn);
-            },
-            style: { height: 30, padding: "0 12px", border: 0, borderRadius: 6, background: C2.ink, color: C2.onPrimary, fontSize: 12, cursor: from && to && from !== to ? "pointer" : "default", opacity: from && to && from !== to ? 1 : 0.45 }
-          }, pairOn ? "\u65AD\u5F00" : "\u8FDE\u63A5")
-        ),
-        h3(
-          "div",
-          { style: { padding: "8px 14px 0", flex: "0 0 auto" } },
-          h3("input", {
-            value: search2,
-            onChange: (event) => setSearch(event.target.value),
-            placeholder: "\u641C\u7D22\u8FDE\u63A5",
-            "aria-label": "\u641C\u7D22\u8FDE\u63A5",
-            spellCheck: false,
-            style: { width: "100%", height: 28, boxSizing: "border-box", border: "1px solid " + C2.line, borderRadius: 6, padding: "0 8px", background: C2.soft, color: C2.ink, fontSize: 12, font: "inherit", outline: "none" }
-          })
-        ),
-        h3(
-          "div",
-          { style: { display: "grid", gridTemplateColumns: "1fr 1fr 64px 56px", gap: 8, padding: "10px 14px 6px", color: C2.mute, fontSize: 10.5, flex: "0 0 auto" } },
-          h3("span", null, "\u8BBE\u5907 A"),
-          h3("span", null, "\u8BBE\u5907 B"),
-          h3("span", null, "\u72B6\u6001"),
-          h3("span", null, "")
-        ),
-        h3(
-          "div",
-          { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "0 14px 14px" } },
-          rows.map(({ edge, left, right }) => h3(
-            "div",
-            {
-              key: networkEdgeKey(edge.from, edge.to),
-              style: { display: "grid", gridTemplateColumns: "1fr 1fr 64px 56px", gap: 8, alignItems: "center", minHeight: 36, borderTop: "1px solid " + C2.line }
-            },
-            h3("span", { title: left.device_id, style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12 } }, dot(left.online), h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, left.name || left.device_id)),
-            h3("span", { title: right.device_id, style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12 } }, dot(right.online), h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, right.name || right.device_id)),
-            h3("span", { style: { fontSize: 10.5, color: left.online && right.online ? C2.green : C2.mute } }, left.online && right.online ? "\u5728\u7EBF" : "\u79BB\u7EBF"),
-            h3("button", {
-              type: "button",
-              onClick: () => onToggleEdge({ from: edge.from, to: edge.to }, false),
-              className: "tether-hover",
-              style: { height: 26, border: 0, borderRadius: 5, background: "transparent", color: C2.red, fontSize: 11, cursor: "pointer" }
-            }, "\u65AD\u5F00")
-          )),
-          !rows.length ? h3("div", { style: { padding: 24, color: C2.mute, fontSize: 12, textAlign: "center" } }, edges.length ? "\u6CA1\u6709\u5339\u914D\u7684\u8FDE\u63A5" : "\u5C1A\u672A\u5EFA\u7ACB\u8FDE\u63A5") : null
-        )
+            onClick: () => onToggleEdge({ from: edge.from, to: edge.to }, false),
+            className: "tether-hover",
+            style: { height: 26, border: 0, borderRadius: 5, background: "transparent", color: C2.red, fontSize: 11, cursor: "pointer" }
+          }, "\u65AD\u5F00")
+        )),
+        !rows.length ? h3("div", { style: { padding: 24, color: C2.mute, fontSize: 12, textAlign: "center" } }, edges.length ? "\u6CA1\u6709\u5339\u914D\u7684\u8FDE\u63A5" : "\u5C1A\u672A\u5EFA\u7ACB\u8FDE\u63A5") : null
       )
     );
   }
@@ -185287,46 +185579,17 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }
     };
     return h3(
-      "div",
+      FloatingWindow,
       {
-        style: {
-          position: "absolute",
-          inset: 0,
-          zIndex: 85,
-          padding: 20,
-          display: "grid",
-          placeItems: "center",
-          background: "rgba(16,24,40,.35)"
-        },
-        onPointerDown: (event) => {
-          if (!saving && event.target === event.currentTarget) onClose();
-        }
+        title: "\u81EA\u52A8\u4E2D\u8F6C",
+        onClose,
+        disabledClose: saving,
+        width: "min(420px, calc(100% - 32px))",
+        ariaLabel: "\u81EA\u52A8\u4E2D\u8F6C"
       },
       h3(
-        "section",
-        { role: "dialog", "aria-modal": true, "aria-label": "\u81EA\u52A8\u4E2D\u8F6C", style: {
-          width: "min(420px, 100%)",
-          display: "grid",
-          gap: 16,
-          padding: 16,
-          borderRadius: 16,
-          background: C2.bg,
-          boxShadow: C2.shadow
-        } },
-        h3(
-          "header",
-          { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-          h3("strong", { style: { fontSize: 14 } }, "\u81EA\u52A8\u4E2D\u8F6C"),
-          h3("button", {
-            type: "button",
-            disabled: saving,
-            onClick: onClose,
-            title: "\u5173\u95ED",
-            "aria-label": "\u5173\u95ED",
-            className: "tether-hover",
-            style: { width: 28, height: 28, border: 0, borderRadius: 6, background: "transparent", color: C2.mute, fontSize: 18, cursor: saving ? "default" : "pointer", display: "grid", placeItems: "center" }
-          }, "\xD7")
-        ),
+        "div",
+        { style: { display: "grid", gap: 16, padding: 16 } },
         h3(
           "div",
           { style: { display: "grid", gap: 6 } },
@@ -187438,6 +187701,32 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     React2.useEffect(() => {
       if (view === "agents") setAgentsMounted(true);
     }, [view]);
+    const [transferMounted, setTransferMounted] = React2.useState(() => view === "transfer");
+    React2.useEffect(() => {
+      if (view === "transfer") setTransferMounted(true);
+    }, [view]);
+    const [transferSummary, setTransferSummary] = React2.useState(null);
+    React2.useEffect(() => {
+      if (typeof document === "undefined" || !document.body) return void 0;
+      const applyTheme = () => {
+        let pref = "system";
+        try {
+          pref = window.localStorage.getItem("tether.theme") || "system";
+        } catch (_2) {
+        }
+        const dark = pref === "dark" || pref === "system" && typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (dark) document.body.setAttribute("data-ds-dark-theme", "");
+        else document.body.removeAttribute("data-ds-dark-theme");
+      };
+      applyTheme();
+      const media = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+      window.addEventListener("tether-theme-pref", applyTheme);
+      if (media && media.addEventListener) media.addEventListener("change", applyTheme);
+      return () => {
+        window.removeEventListener("tether-theme-pref", applyTheme);
+        if (media && media.removeEventListener) media.removeEventListener("change", applyTheme);
+      };
+    }, []);
     const [terminalOpen, setTerminalOpen] = React2.useState(false);
     const [terminalCwd, setTerminalCwd] = React2.useState("");
     React2.useEffect(() => {
@@ -191535,7 +191824,6 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         event.preventDefault();
         event.stopPropagation();
         hideHoverTip();
-        selectDevice(item.device_id);
         setDeviceMenu({ x: event.clientX, y: event.clientY, device: item });
       };
       const menuItem = (icon, label, onClick) => h3("button", {
@@ -191547,8 +191835,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: "fixed", left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 150)), width: 178, zIndex: 120, background: C2.layer1, borderRadius: 8, boxShadow: C2.shadow, padding: 4, userSelect: "none" }
+          className: "tether-glass",
+          style: { position: "fixed", left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 170)), width: 178, zIndex: 120, borderRadius: 10, padding: 4, userSelect: "none" }
         },
+        menuItem("apps", "\u8282\u70B9\u8BE6\u60C5", () => {
+          const item = deviceMenu.device;
+          setDeviceMenu(null);
+          setNetworkDetailId(item.device_id);
+        }),
         menuItem("monitor", "\u6253\u5F00\u5DE5\u4F5C\u533A", () => {
           const item = deviceMenu.device;
           setDeviceMenu(null);
@@ -191622,42 +191916,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           h3("div", { style: { fontSize: 18, fontWeight: "var(--tether-strong, 600)" } }, "\u4E92\u8054"),
           pill(online.length + " / " + devices.length + " \u5728\u7EBF", online.length ? C2.green : C2.mute),
           pill(edges.length + " \u6761\u8FDE\u63A5", C2.mute),
-          userId ? h3(
-            "div",
-            { role: "group", "aria-label": "\u8BBE\u5907\u8303\u56F4", style: { display: "flex", alignItems: "center", gap: 3, padding: 2, borderRadius: 7, background: C2.soft } },
-            [["all", "\u5168\u90E8", allDevices.length], ["own", "\u6211\u7684", ownDevices.length], ["shared", "\u5171\u4EAB\u7ED9\u6211", sharedDevices.length]].map(([key, label, count]) => h3("button", {
-              key,
-              type: "button",
-              onClick: () => {
-                setNetworkOwnershipFilter(key);
-                setNetworkPage(1);
-                setNetworkDetailId("");
-              },
-              "aria-pressed": networkOwnershipFilter === key,
-              style: {
-                height: 24,
-                padding: "0 8px",
-                border: 0,
-                borderRadius: 5,
-                background: networkOwnershipFilter === key ? C2.layer1 : "transparent",
-                color: networkOwnershipFilter === key ? C2.ink : C2.mute,
-                fontSize: 10.5,
-                cursor: "pointer"
-              }
-            }, label + " " + count))
-          ) : null,
           h3(
             "span",
             { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 } },
-            relayNetworks.length ? btn("\u81EA\u52A8\u4E2D\u8F6C", () => setRelayDialog({})) : null,
-            h3("button", {
-              type: "button",
-              title: "\u8FDE\u63A5\u7BA1\u7406",
-              "aria-label": "\u8FDE\u63A5\u7BA1\u7406",
-              onClick: () => setShowNetworkLinks(true),
-              className: "tether-hover",
-              style: { height: 28, padding: "0 10px", display: "flex", alignItems: "center", gap: 5, border: "1px solid " + C2.line, borderRadius: 7, background: C2.layer1, color: C2.sub, fontSize: 11.5, cursor: "pointer" }
-            }, h3(Glyph, { name: "link", size: 13 }), "\u8FDE\u63A5\u7BA1\u7406"),
             h3(
               "button",
               { title: "\u5237\u65B0", "aria-label": "\u5237\u65B0", onClick: refreshNetwork, className: "tether-hover", style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C2.mute, cursor: "pointer" } },
@@ -192309,20 +192570,51 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             )
           ) : null,
           h3(SurfaceDeck, { devices: deviceSnapshot && deviceSnapshot.devices || [], deviceId, localDeviceId: appLocalDevice, visible: view === "chat", authReady: workbenchAuthReady, localOnly: !state && !!appLocalDevice }),
-          view === "files" ? renderExplorer() : view === "network" ? renderNetwork() : view === "transfer" ? h3(createTransferPage, {
-            React: React2,
-            Glyph,
-            api: api2,
-            post,
-            C: C2,
-            devices: deviceSnapshot && deviceSnapshot.devices || [],
-            localDevice: appLocalDevice,
-            userId: state?.user?.user_id,
-            hubOnly: host && host.kind === "app" && !EXPLICIT_AUTHORITY,
-            onLocalRelay: canManageRelay ? openTransferRelay : void 0,
-            onNotice: setNotice,
-            onError: fail2
-          }) : null,
+          view === "files" ? renderExplorer() : view === "network" ? renderNetwork() : null,
+          transferMounted || view === "transfer" ? h3(
+            "div",
+            { style: { flex: "1 1 auto", minWidth: 0, minHeight: 0, display: view === "transfer" ? "flex" : "none" } },
+            h3(createTransferPage, {
+              React: React2,
+              Glyph,
+              api: api2,
+              post,
+              C: C2,
+              devices: deviceSnapshot && deviceSnapshot.devices || [],
+              localDevice: appLocalDevice,
+              userId: state?.user?.user_id,
+              hubOnly: host && host.kind === "app" && !EXPLICIT_AUTHORITY,
+              onLocalRelay: canManageRelay ? openTransferRelay : void 0,
+              onJobSummary: setTransferSummary,
+              onNotice: setNotice,
+              onError: fail2
+            })
+          ) : null,
+          transferSummary && transferSummary.state === "running" && view !== "transfer" ? h3(
+            "button",
+            {
+              type: "button",
+              onClick: () => selectPanel("transfer"),
+              className: "tether-glass tether-hover tether-num",
+              style: {
+                position: "absolute",
+                left: 16,
+                bottom: 14,
+                zIndex: 82,
+                height: 32,
+                padding: "0 12px",
+                borderRadius: 999,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 12,
+                color: C2.ink,
+                cursor: "pointer"
+              }
+            },
+            h3("span", { className: "tether-spin", style: { display: "inline-flex", color: C2.blue } }, h3(Glyph, { name: "transfer", size: 14 })),
+            "\u4F20\u8F93\u4E2D " + Math.round(transferSummary.percent || 0) + "%"
+          ) : null,
           agentsMounted || view === "agents" ? h3(
             "div",
             { style: { flex: "1 1 auto", minWidth: 0, minHeight: 0, display: view === "agents" ? "flex" : "none" } },
@@ -192547,6 +192839,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         onDshStart: () => runLocalDsh("dsh_start"),
         onDshInstall: () => runLocalDsh("dsh_install"),
         onRefreshConnection: probeConfiguredHub,
+        onOpenNetworkLinks: () => setShowNetworkLinks(true),
+        onOpenRelay: canManageRelay && relayNetworks.length ? () => setRelayDialog({}) : void 0,
         onConfigureConnection: host.kind === "dsh" || EXPLICIT_AUTHORITY ? () => {
           let saved = {};
           try {
@@ -192649,114 +192943,91 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         )
       ) : null,
       showSettings ? h3(
-        "div",
+        FloatingWindow,
         {
-          onPointerDown: (event) => {
-            if (event.target === event.currentTarget) setShowSettings(false);
-          },
-          style: { position: "absolute", top: 40, left: 0, right: 0, bottom: 0, background: "rgba(16,24,40,0.35)", display: "flex", justifyContent: "flex-end", zIndex: 20 }
+          title: "\u6587\u4EF6\u6743\u9650",
+          subtitle: device ? device.name : "",
+          onClose: () => setShowSettings(false),
+          width: "min(" + permissionsWidth + "px, calc(100% - 32px))",
+          height: "min(580px, calc(100% - 32px))",
+          ariaLabel: "\u6587\u4EF6\u6743\u9650"
         },
         h3(
           "div",
-          { className: "tether-drawer", style: { position: "relative", width: "min(" + permissionsWidth + "px, calc(100vw - 32px))", height: "100%", background: C2.bg, borderLeft: 0, display: "flex", flexDirection: "column", boxShadow: C2.shadow } },
-          h3("div", {
-            title: "\u62D6\u52A8\u8C03\u6574\u5BBD\u5EA6",
-            role: "separator",
-            "aria-orientation": "vertical",
-            tabIndex: 0,
-            onPointerDown: startPermissionsResize,
-            onMouseDown: startPermissionsResize,
-            onKeyDown: (event) => {
-              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-              event.preventDefault();
-              const delta = event.key === "ArrowLeft" ? 32 : -32;
-              setPermissionsWidth((current) => Math.max(480, Math.min(window.innerWidth - 48, current + delta)));
-            },
-            style: { position: "absolute", top: 0, bottom: 0, left: -3, width: 9, cursor: "col-resize", zIndex: 3 }
-          }),
+          { className: "tether-drawer-body", style: { overflow: "hidden", flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } },
           h3(
             "div",
-            { style: { padding: "12px 16px", borderBottom: 0, background: C2.panel, display: "flex", alignItems: "center" } },
-            h3("strong", null, "\u6587\u4EF6\u6743\u9650"),
-            device ? h3("span", { style: { marginLeft: 8, fontSize: 12, color: C2.mute } }, device.name) : null
-          ),
-          h3(
-            "div",
-            { className: "tether-drawer-body", style: { overflow: "hidden", flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } },
+            { style: { flex: "0 0 auto", maxHeight: "58%", overflowY: "auto" } },
             h3(
               "div",
-              { style: { flex: "0 0 auto", maxHeight: "58%", overflowY: "auto" } },
-              h3(
-                "div",
-                { style: { display: "grid", gap: 6, marginBottom: 4 } },
-                [
-                  ["default", "\u9ED8\u8BA4\uFF08\u7CFB\u7EDF\u76D8\u53EA\u8BFB + \u5176\u4ED6\u76D8\u8BFB\u5199\uFF09", "Windows \u7CFB\u7EDF\u76D8\u4EC5\u9879\u76EE\u53EF\u5199\u3001\u5176\u4ED6\u76D8\u53EF\u8BFB\u5199\uFF1BLinux \u4EC5\u9879\u76EE\u53EF\u5199"],
-                  ["full", "\u5168\u76D8\u8BFB\u5199", "\u7CFB\u7EDF\u4E0E\u51ED\u636E\u76EE\u5F55\u4ECD\u62D2\u7EDD"],
-                  ["locked", "\u9501\u5B9A\uFF08\u5168\u90E8\u53EA\u8BFB\uFF09", "\u62D2\u7EDD\u6240\u6709\u5199\u5165\u4E0E\u5220\u9664"],
-                  ["custom", "\u81EA\u5B9A\u4E49\uFF08\u4EC5\u53EF\u5199\u6839\u76EE\u5F55\uFF09", "\u5168\u76D8\u53EF\u8BFB\uFF1B\u53EA\u5199\u9879\u76EE\u6839\u4E0E\u4E0B\u5217\u76EE\u5F55"]
-                ].map(([value, title, desc]) => {
-                  const selected2 = mode === value || value === "custom" && mode === "readonly";
-                  return h3(
-                    "label",
-                    { key: value, title: desc, style: { border: 0, borderRadius: 8, padding: "8px 10px", cursor: "pointer", background: selected2 ? C2.soft : C2.panel } },
-                    h3("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, h3("input", { type: "radio", checked: selected2, onChange: () => setMode(value) }), h3("strong", { style: { fontSize: 13 } }, title))
-                  );
-                })
-              ),
-              h3(
-                "div",
-                { title: "DSH \u5DE5\u4F5C\u533A\u4E0E\u8282\u70B9\u5DE5\u4F5C\u76EE\u5F55\u59CB\u7EC8\u53EF\u5199", style: { display: "flex", alignItems: "center", height: 28, marginTop: 14, fontSize: 13, lineHeight: "20px", fontWeight: "var(--tether-body, 400)", color: C2.mute } },
-                h3("span", null, "\u53EF\u5199\u6839\u76EE\u5F55"),
-                h3("button", { title: "\u6DFB\u52A0\u53EF\u5199\u6839\u76EE\u5F55", "aria-label": "\u6DFB\u52A0\u53EF\u5199\u6839\u76EE\u5F55", onClick: addRoot, className: "tether-hover", style: { marginLeft: "auto", width: 26, height: 26, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C2.mute, cursor: "pointer" } }, h3(Glyph, { name: "plus", size: 15 }))
-              ),
-              h3(
-                "div",
-                { style: { borderRadius: 6, overflow: "hidden", background: C2.panel } },
-                rootList().length ? rootList().map((root, index) => h3(
-                  "div",
-                  {
-                    key: index + ":" + root,
-                    title: root,
-                    style: { display: "flex", alignItems: "center", gap: 6, height: 30, padding: "0 8px", fontSize: 11.5, color: C2.sub }
-                  },
-                  h3("span", { style: { flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "Consolas, monospace" } }, root),
-                  h3("button", { title: "\u7F16\u8F91", "aria-label": "\u7F16\u8F91", onClick: () => editRoot(index), className: "tether-hover", style: { width: 24, height: 24, display: "grid", placeItems: "center", border: 0, borderRadius: 5, background: "transparent", color: C2.mute, cursor: "pointer" } }, h3(Glyph, { name: "pencil", size: 14 })),
-                  h3("button", { title: "\u5220\u9664", "aria-label": "\u5220\u9664", onClick: () => removeRoot(index), className: "tether-hover", style: { width: 24, height: 24, display: "grid", placeItems: "center", border: 0, borderRadius: 5, background: "transparent", color: C2.mute, cursor: "pointer" } }, h3(Glyph, { name: "trash", size: 14 }))
-                )) : h3("div", { style: { padding: "8px", fontSize: 11.5, color: C2.mute } }, "\u672A\u6DFB\u52A0\u989D\u5916\u76EE\u5F55")
-              ),
-              h3(
-                "div",
-                { style: { display: "flex", gap: 8, marginTop: 10, alignItems: "center" } },
-                h3("button", { onClick: savePolicy, disabled: busy || !device || !device.online, className: "tether-press tether-hover", title: policy ? "\u66F4\u65B0\u4E8E " + (policy.updated_by || "default") : "", style: { height: 28, padding: "0 10px", borderRadius: 6, border: 0, background: C2.primary, color: C2.onPrimary, fontSize: 12, cursor: busy || !device || !device.online ? "not-allowed" : "pointer", opacity: busy || !device || !device.online ? 0.5 : 1, display: "flex", alignItems: "center", gap: 6 } }, h3(Glyph, { name: "save", size: 14 }), "\u4FDD\u5B58\u6743\u9650")
-              )
+              { style: { display: "grid", gap: 6, marginBottom: 4 } },
+              [
+                ["default", "\u9ED8\u8BA4\uFF08\u7CFB\u7EDF\u76D8\u53EA\u8BFB + \u5176\u4ED6\u76D8\u8BFB\u5199\uFF09", "Windows \u7CFB\u7EDF\u76D8\u4EC5\u9879\u76EE\u53EF\u5199\u3001\u5176\u4ED6\u76D8\u53EF\u8BFB\u5199\uFF1BLinux \u4EC5\u9879\u76EE\u53EF\u5199"],
+                ["full", "\u5168\u76D8\u8BFB\u5199", "\u7CFB\u7EDF\u4E0E\u51ED\u636E\u76EE\u5F55\u4ECD\u62D2\u7EDD"],
+                ["locked", "\u9501\u5B9A\uFF08\u5168\u90E8\u53EA\u8BFB\uFF09", "\u62D2\u7EDD\u6240\u6709\u5199\u5165\u4E0E\u5220\u9664"],
+                ["custom", "\u81EA\u5B9A\u4E49\uFF08\u4EC5\u53EF\u5199\u6839\u76EE\u5F55\uFF09", "\u5168\u76D8\u53EF\u8BFB\uFF1B\u53EA\u5199\u9879\u76EE\u6839\u4E0E\u4E0B\u5217\u76EE\u5F55"]
+              ].map(([value, title, desc]) => {
+                const selected2 = mode === value || value === "custom" && mode === "readonly";
+                return h3(
+                  "label",
+                  { key: value, title: desc, style: { border: 0, borderRadius: 8, padding: "8px 10px", cursor: "pointer", background: selected2 ? C2.soft : C2.panel } },
+                  h3("div", { style: { display: "flex", alignItems: "center", gap: 6 } }, h3("input", { type: "radio", checked: selected2, onChange: () => setMode(value) }), h3("strong", { style: { fontSize: 13 } }, title))
+                );
+              })
             ),
             h3(
               "div",
-              { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } },
-              h3("div", { title: "Tether \u6587\u4EF6\u670D\u52A1\u64CD\u4F5C\uFF0C\u4E0D\u542B DSH Agent \u547D\u4EE4\uFF1B\u5199\u5165\u542B intent/result", style: { fontSize: 12.5, lineHeight: "20px", fontWeight: "var(--tether-body, 400)", color: C2.mute, margin: "12px 0 6px", flex: "0 0 auto" } }, "\u5BA1\u8BA1 \xB7 " + (auditCount || 0) + " / " + (auditRetained || 1e5)),
+              { title: "DSH \u5DE5\u4F5C\u533A\u4E0E\u8282\u70B9\u5DE5\u4F5C\u76EE\u5F55\u59CB\u7EC8\u53EF\u5199", style: { display: "flex", alignItems: "center", height: 28, marginTop: 14, fontSize: 13, lineHeight: "20px", fontWeight: "var(--tether-body, 400)", color: C2.mute } },
+              h3("span", null, "\u53EF\u5199\u6839\u76EE\u5F55"),
+              h3("button", { title: "\u6DFB\u52A0\u53EF\u5199\u6839\u76EE\u5F55", "aria-label": "\u6DFB\u52A0\u53EF\u5199\u6839\u76EE\u5F55", onClick: addRoot, className: "tether-hover", style: { marginLeft: "auto", width: 26, height: 26, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C2.mute, cursor: "pointer" } }, h3(Glyph, { name: "plus", size: 15 }))
+            ),
+            h3(
+              "div",
+              { style: { borderRadius: 6, overflow: "hidden", background: C2.panel } },
+              rootList().length ? rootList().map((root, index) => h3(
+                "div",
+                {
+                  key: index + ":" + root,
+                  title: root,
+                  style: { display: "flex", alignItems: "center", gap: 6, height: 30, padding: "0 8px", fontSize: 11.5, color: C2.sub }
+                },
+                h3("span", { style: { flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "Consolas, monospace" } }, root),
+                h3("button", { title: "\u7F16\u8F91", "aria-label": "\u7F16\u8F91", onClick: () => editRoot(index), className: "tether-hover", style: { width: 24, height: 24, display: "grid", placeItems: "center", border: 0, borderRadius: 5, background: "transparent", color: C2.mute, cursor: "pointer" } }, h3(Glyph, { name: "pencil", size: 14 })),
+                h3("button", { title: "\u5220\u9664", "aria-label": "\u5220\u9664", onClick: () => removeRoot(index), className: "tether-hover", style: { width: 24, height: 24, display: "grid", placeItems: "center", border: 0, borderRadius: 5, background: "transparent", color: C2.mute, cursor: "pointer" } }, h3(Glyph, { name: "trash", size: 14 }))
+              )) : h3("div", { style: { padding: "8px", fontSize: 11.5, color: C2.mute } }, "\u672A\u6DFB\u52A0\u989D\u5916\u76EE\u5F55")
+            ),
+            h3(
+              "div",
+              { style: { display: "flex", gap: 8, marginTop: 10, alignItems: "center" } },
+              h3("button", { onClick: savePolicy, disabled: busy || !device || !device.online, className: "tether-press tether-hover", title: policy ? "\u66F4\u65B0\u4E8E " + (policy.updated_by || "default") : "", style: { height: 28, padding: "0 10px", borderRadius: 6, border: 0, background: C2.primary, color: C2.onPrimary, fontSize: 12, cursor: busy || !device || !device.online ? "not-allowed" : "pointer", opacity: busy || !device || !device.online ? 0.5 : 1, display: "flex", alignItems: "center", gap: 6 } }, h3(Glyph, { name: "save", size: 14 }), "\u4FDD\u5B58\u6743\u9650")
+            )
+          ),
+          h3(
+            "div",
+            { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } },
+            h3("div", { title: "Tether \u6587\u4EF6\u670D\u52A1\u64CD\u4F5C\uFF0C\u4E0D\u542B DSH Agent \u547D\u4EE4\uFF1B\u5199\u5165\u542B intent/result", style: { fontSize: 12.5, lineHeight: "20px", fontWeight: "var(--tether-body, 400)", color: C2.mute, margin: "12px 0 6px", flex: "0 0 auto" } }, "\u5BA1\u8BA1 \xB7 " + (auditCount || 0) + " / " + (auditRetained || 1e5)),
+            h3(
+              "div",
+              { style: { border: 0, borderRadius: 6, overflow: "hidden", background: C2.panel, flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } },
+              h3("div", { className: "tether-audit-head" }, h3("span", null, "\u64CD\u4F5C"), h3("span", null, "\u8DEF\u5F84"), h3("span", null, "\u7ED3\u679C")),
               h3(
                 "div",
-                { style: { border: 0, borderRadius: 6, overflow: "hidden", background: C2.panel, flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } },
-                h3("div", { className: "tether-audit-head" }, h3("span", null, "\u64CD\u4F5C"), h3("span", null, "\u8DEF\u5F84"), h3("span", null, "\u7ED3\u679C")),
-                h3(
+                { style: { flex: "1 1 auto", minHeight: 0, overflow: "auto" } },
+                audit.map((a, i) => h3(
                   "div",
-                  { style: { flex: "1 1 auto", minHeight: 0, overflow: "auto" } },
-                  audit.map((a, i) => h3(
-                    "div",
-                    { key: i, className: "tether-audit-row", style: { background: i % 2 ? C2.bg : "transparent", color: a.result === "denied" ? C2.red : C2.sub } },
-                    h3("span", null, a.op),
-                    h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: a.path }, a.path),
-                    h3("span", null, a.phase === "intent" ? a.result === "denied" ? "denied" : "intent" : a.result)
-                  )),
-                  !audit.length ? h3("div", { style: { padding: 10, fontSize: 11, color: C2.mute } }, auditLoading ? "\u6B63\u5728\u8BFB\u53D6\u5BA1\u8BA1\u2026" : "\u6682\u65E0\u5BA1\u8BA1") : null
-                )
-              ),
-              audit.length < auditCount ? h3(
-                "div",
-                { style: { textAlign: "center", paddingTop: 8, flex: "0 0 auto" } },
-                h3("button", { onClick: loadMoreAudit, disabled: auditLoading, className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "5px 12px", background: C2.soft, color: C2.ink, fontSize: 12, cursor: auditLoading ? "default" : "pointer", opacity: auditLoading ? 0.6 : 1 } }, auditLoading ? "\u52A0\u8F7D\u4E2D\u2026" : "\u52A0\u8F7D\u66F4\u591A")
-              ) : null
-            )
+                  { key: i, className: "tether-audit-row", style: { background: i % 2 ? C2.bg : "transparent", color: a.result === "denied" ? C2.red : C2.sub } },
+                  h3("span", null, a.op),
+                  h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: a.path }, a.path),
+                  h3("span", null, a.phase === "intent" ? a.result === "denied" ? "denied" : "intent" : a.result)
+                )),
+                !audit.length ? h3("div", { style: { padding: 10, fontSize: 11, color: C2.mute } }, auditLoading ? "\u6B63\u5728\u8BFB\u53D6\u5BA1\u8BA1\u2026" : "\u6682\u65E0\u5BA1\u8BA1") : null
+              )
+            ),
+            audit.length < auditCount ? h3(
+              "div",
+              { style: { textAlign: "center", paddingTop: 8, flex: "0 0 auto" } },
+              h3("button", { onClick: loadMoreAudit, disabled: auditLoading, className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "5px 12px", background: C2.soft, color: C2.ink, fontSize: 12, cursor: auditLoading ? "default" : "pointer", opacity: auditLoading ? 0.6 : 1 } }, auditLoading ? "\u52A0\u8F7D\u4E2D\u2026" : "\u52A0\u8F7D\u66F4\u591A")
+            ) : null
           )
         )
       ) : null,

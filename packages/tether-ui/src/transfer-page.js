@@ -138,7 +138,7 @@ async function directErrorResponse(response, operation, signal) {
 }
 
 export function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', userId,
-  onNotice, onError, onLocalRelay, hubOnly = false }) {
+  onNotice, onError, onLocalRelay, onJobSummary, hubOnly = false }) {
   const h = React.createElement
   const { StyledSelect } = createUiControls(React)
   const field = {
@@ -475,6 +475,15 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   const [activeSide, setActiveSide] = React.useState('left')
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [job, setJob] = React.useState(null)
+  React.useEffect(() => {
+    if (typeof onJobSummary !== 'function') return
+    onJobSummary(job ? {
+      state: job.state || '',
+      percent: Number(job.percent) || 0,
+      count: Number(job.count) || 0,
+      error: job.error || ''
+    } : null)
+  }, [job, onJobSummary])
   const [menu, setMenu] = React.useState(null)
   const [dialog, setDialog] = React.useState(null)
   const [dialogText, setDialogText] = React.useState('')

@@ -8,6 +8,7 @@ import { createTransferPage } from './transfer-page.js'
 import { createTerminalDock } from './terminal-dock.js'
 import { createAgentsPage } from './agents-page.js'
 import { createUiControls } from './ui-controls.js'
+import { createFloatingWindow } from './floating-window.js'
 import { TetherFolderPickDialog } from './tether-folder-pick-dialog.js'
 import { createGlyph } from './tether-glyph.js'
 import { invalidateDirectory, peekDirectory, rememberDirectory } from './file-cache.js'
@@ -1247,6 +1248,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
     const Settings = createSettingsPanel(React)
     const TeamManagementPage = createTeamManagementPage(React)
     const { StyledSelect, ToggleSwitch } = createUiControls(React)
+    const { FloatingWindow } = createFloatingWindow(React)
     const PANEL_ID = 'tether'
     const BASE = host.apiBase()
 
@@ -2212,6 +2214,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [zoom, setZoom] = React.useState(1)
       const [connectMode, setConnectMode] = React.useState(false)
       const [connectFrom, setConnectFrom] = React.useState('')
+      const [selectedEdgeKey, setSelectedEdgeKey] = React.useState('')
       React.useEffect(() => {
         if (!connectMode) return undefined
         const onKey = (event) => {
@@ -2431,20 +2434,34 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           rightName: (rightItem && (rightItem.name || rightItem.device_id)) || edge.to
         })
       }
-      return h('div', { ref: stage, style: { position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' } },
-        h('div', { style: { position: 'absolute', left: 14, top: 12, display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: C.mute, pointerEvents: 'none' } },
-          h('span', null, '网络'),
-          ['windows', 'linux', 'mac'].map((kind) => h('span', { key: kind, style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: C.mute } },
-            h('span', { style: { width: 7, height: 7, borderRadius: 4, background: DEVICE_OS_THEME[kind].color } }),
-            DEVICE_OS_THEME[kind].label))),
+      const selectedPair = selectedEdgeKey ? edgePairs.find((pair) => pair.key === selectedEdgeKey) || null : null
+      React.useEffect(() => {
+        if (!selectedPair) return undefined
+        const onKey = (event) => {
+          if (event.key === 'Escape') { setSelectedEdgeKey(''); return }
+          if (event.key === 'Delete' || event.key === 'Backspace') {
+            if (event.target && ['INPUT', 'TEXTAREA'].includes(event.target.tagName)) return
+            event.preventDefault()
+            if (onToggleEdge) onToggleEdge({ from: selectedPair.from.id, to: selectedPair.to.id }, false)
+            setSelectedEdgeKey('')
+          }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [selectedPair, onToggleEdge])
+      return h('div', {
+        ref: stage,
+        onClick: () => { if (selectedEdgeKey) setSelectedEdgeKey('') },
+        style: { position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' }
+      },
         h('button', {
-          type: 'button', onClick: () => { setConnectMode((value) => !value); setConnectFrom('') },
+          type: 'button', onClick: (event) => { event.stopPropagation(); setConnectMode((value) => !value); setConnectFrom('') },
           title: connectMode ? '取消连接模式' : '连接两台设备',
           'aria-label': connectMode ? '取消连接模式' : '连接两台设备',
           className: 'tether-hover',
           style: {
-            position: 'absolute', right: 12, top: 8, zIndex: 5, display: 'flex', alignItems: 'center', gap: 5,
-            height: 26, padding: '0 10px', border: '1px solid ' + (connectMode ? C.blue : C.line),
+            position: 'absolute', right: 12, top: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 5,
+            height: 28, padding: '0 10px', border: '1px solid ' + (connectMode ? C.blue : C.line),
             borderRadius: 999, background: connectMode ? C.soft : C.layer1,
             color: connectMode ? C.blue : C.sub, fontSize: 11.5, cursor: 'pointer'
           }
@@ -2453,24 +2470,25 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           edgePairs.map((pair) => {
             const points = linkPoints(screen(pair.from), screen(pair.to), pair.from.id, pair.to.id)
             if (!points) return null
+            const edgeSelected = pair.key === selectedEdgeKey
             return h('g', { key: 'edge:' + pair.key },
-              h('title', null, pair.leftName + ' ↔ ' + pair.rightName + ' · 点击断开'),
+              h('title', null, pair.leftName + ' ↔ ' + pair.rightName + (edgeSelected ? ' · 按 Delete 或点中点断开' : ' · 点击选中连线')),
               h('line', {
-                ...points, stroke: 'transparent', strokeWidth: 16, vectorEffect: 'non-scaling-stroke',
+                ...points, stroke: 'transparent', strokeWidth: 12, vectorEffect: 'non-scaling-stroke',
                 style: { cursor: 'pointer', pointerEvents: 'stroke' },
                 onClick: (event) => {
                   event.stopPropagation()
-                  if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false)
+                  setSelectedEdgeKey((current) => current === pair.key ? '' : pair.key)
                 }
               }),
               h('line', {
-                ...points, stroke: C.sub, strokeWidth: zoom > 1 ? 1 : 1.2, vectorEffect: 'non-scaling-stroke',
-                strokeDasharray: pair.online ? undefined : '4 5', opacity: pair.online ? 0.7 : 0.4,
+                ...points, stroke: edgeSelected ? C.blue : C.sub, strokeWidth: edgeSelected ? 2 : (zoom > 1 ? 1 : 1.2), vectorEffect: 'non-scaling-stroke',
+                strokeDasharray: pair.online ? undefined : '4 5', opacity: edgeSelected ? 0.95 : (pair.online ? 0.7 : 0.4),
                 style: { pointerEvents: 'none' }
               }))
           })
         ),
-        edgePairs.map((pair) => {
+        edgePairs.filter((pair) => pair.key === selectedEdgeKey).map((pair) => {
           const left = screen(pair.from)
           const right = screen(pair.to)
           const midX = (left.x + right.x) / 2
@@ -2484,15 +2502,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onClick: (event) => {
               event.stopPropagation()
               if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false)
+              setSelectedEdgeKey('')
             },
-            className: 'tether-hover',
+            className: 'tether-glass tether-hover',
             style: {
               position: 'absolute', left: midX + '%', top: midY + '%',
-              transform: 'translate(-50%, -50%)', zIndex: 4, width: 18, height: 18, padding: 0,
-              display: 'grid', placeItems: 'center', border: '1px solid ' + C.line, borderRadius: 999,
-              background: C.layer1, color: C.sub, cursor: 'pointer'
+              transform: 'translate(-50%, -50%)', zIndex: 4, height: 24, padding: '0 8px',
+              display: 'inline-flex', alignItems: 'center', gap: 4, borderRadius: 999,
+              color: C.red, fontSize: 11, cursor: 'pointer'
             }
-          }, h(Glyph, { name: 'link', size: 11 }))
+          }, h(Glyph, { name: 'link', size: 11 }), '断开')
         }),
         nodes.map((node) => {
           const item = lookup.get(node.id) || { device_id: node.id, name: node.id, online: false }
@@ -2513,15 +2532,15 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               zIndex: isCenter ? 3 : 2, width: isCenter ? 22 : 16, height: isCenter ? 22 : 16,
               borderRadius: '50%', cornerShape: 'round', border: 0, padding: 0, background: 'transparent',
               opacity: item.online ? 1 : 0.46, cursor: connectMode ? 'crosshair' : 'grab', userSelect: 'none',
-              outline: connectFrom === node.id ? '2px solid ' + C.blue : 'none', outlineOffset: 2
+              outline: connectFrom === node.id ? '2px solid ' + C.blue : (selected ? '2px solid color-mix(in srgb, ' + C.blue + ' 55%, transparent)' : 'none'), outlineOffset: 2
             } : {
               position: 'absolute', left: pos.x + '%', top: pos.y + '%', transform: 'translate(-50%, -50%)',
               zIndex: isCenter ? 3 : 2, display: 'flex', alignItems: 'center', gap: 6,
               padding: isCenter ? '8px 12px' : '6px 9px', borderRadius: 999,
               background: isCenter ? C.ink : deviceOsTheme(item).soft,
               color: isCenter ? C.onPrimary : C.ink,
-              fontSize: isCenter ? 12 : 11, boxShadow: isCenter ? C.shadow : (selected ? '0 1px 3px rgba(16,24,40,0.12)' : '0 1px 2px rgba(16,24,40,0.06)'),
-              transition: 'background-color 160ms ease',
+              fontSize: isCenter ? 12 : 11, boxShadow: isCenter ? C.shadow : (selected ? '0 0 0 2px color-mix(in srgb, ' + C.blue + ' 55%, transparent), 0 2px 6px rgba(16,24,40,0.12)' : '0 1px 2px rgba(16,24,40,0.06)'),
+              transition: 'background-color 160ms ease, box-shadow 160ms ease',
               cursor: connectMode ? 'crosshair' : 'grab', whiteSpace: 'nowrap', opacity: item.online ? 1 : 0.55, userSelect: 'none',
               outline: connectFrom === node.id ? '2px solid ' + C.blue : 'none', outlineOffset: 2
             }
@@ -2659,47 +2678,43 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         })),
         onChange
       })
-      return h('div', {
-        onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() },
-        style: { position: 'absolute', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.35)' }
+      return h(FloatingWindow, {
+        title: '连接管理',
+        subtitle: rows.length + ' 条连接',
+        onClose,
+        width: 'min(760px, calc(100% - 32px))',
+        height: 'min(540px, calc(100% - 32px))',
+        ariaLabel: '连接管理'
       },
-        h('section', {
-          role: 'dialog', 'aria-label': '连接管理', onPointerDown: (event) => event.stopPropagation(),
-          style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg, borderRadius: 16, boxShadow: C.shadow }
-        },
-          h('header', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', height: 44, borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
-            h('strong', { style: { fontSize: 14 } }, '连接管理'),
-            h('span', { className: 'tether-num', style: { fontSize: 11, color: C.mute } }, rows.length + ' 条连接'),
-            h('button', { type: 'button', onClick: onClose, title: '关闭', 'aria-label': '关闭', className: 'tether-hover', style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: C.mute, fontSize: 18, cursor: 'pointer' } }, '×')),
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
-            select(from, setFrom),
-            h('span', { style: { color: C.mute, flex: '0 0 auto' } }, '↔'),
-            select(to, setTo),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+          select(from, setFrom),
+          h('span', { style: { color: C.mute, flex: '0 0 auto' } }, '↔'),
+          select(to, setTo),
+          h('button', {
+            type: 'button', disabled: !from || !to || from === to,
+            onClick: () => { if (from && to && from !== to) onToggleEdge({ from, to }, !pairOn) },
+            style: { height: 30, padding: '0 12px', border: 0, borderRadius: 6, background: C.ink, color: C.onPrimary, fontSize: 12, cursor: from && to && from !== to ? 'pointer' : 'default', opacity: from && to && from !== to ? 1 : 0.45 }
+          }, pairOn ? '断开' : '连接')),
+        h('div', { style: { padding: '8px 14px 0', flex: '0 0 auto' } },
+          h('input', {
+            value: search, onChange: (event) => setSearch(event.target.value), placeholder: '搜索连接', 'aria-label': '搜索连接', spellCheck: false,
+            style: { width: '100%', height: 28, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: '0 8px', background: C.soft, color: C.ink, fontSize: 12, font: 'inherit', outline: 'none' }
+          })),
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 64px 56px', gap: 8, padding: '10px 14px 6px', color: C.mute, fontSize: 10.5, flex: '0 0 auto' } },
+          h('span', null, '设备 A'), h('span', null, '设备 B'), h('span', null, '状态'), h('span', null, '')),
+        h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 14px 14px' } },
+          rows.map(({ edge, left, right }) => h('div', {
+            key: networkEdgeKey(edge.from, edge.to),
+            style: { display: 'grid', gridTemplateColumns: '1fr 1fr 64px 56px', gap: 8, alignItems: 'center', minHeight: 36, borderTop: '1px solid ' + C.line }
+          },
+            h('span', { title: left.device_id, style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12 } }, dot(left.online), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, left.name || left.device_id)),
+            h('span', { title: right.device_id, style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12 } }, dot(right.online), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, right.name || right.device_id)),
+            h('span', { style: { fontSize: 10.5, color: left.online && right.online ? C.green : C.mute } }, left.online && right.online ? '在线' : '离线'),
             h('button', {
-              type: 'button', disabled: !from || !to || from === to,
-              onClick: () => { if (from && to && from !== to) onToggleEdge({ from, to }, !pairOn) },
-              style: { height: 30, padding: '0 12px', border: 0, borderRadius: 6, background: C.ink, color: C.onPrimary, fontSize: 12, cursor: from && to && from !== to ? 'pointer' : 'default', opacity: from && to && from !== to ? 1 : 0.45 }
-            }, pairOn ? '断开' : '连接')),
-          h('div', { style: { padding: '8px 14px 0', flex: '0 0 auto' } },
-            h('input', {
-              value: search, onChange: (event) => setSearch(event.target.value), placeholder: '搜索连接', 'aria-label': '搜索连接', spellCheck: false,
-              style: { width: '100%', height: 28, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: '0 8px', background: C.soft, color: C.ink, fontSize: 12, font: 'inherit', outline: 'none' }
-            })),
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 64px 56px', gap: 8, padding: '10px 14px 6px', color: C.mute, fontSize: 10.5, flex: '0 0 auto' } },
-            h('span', null, '设备 A'), h('span', null, '设备 B'), h('span', null, '状态'), h('span', null, '')),
-          h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 14px 14px' } },
-            rows.map(({ edge, left, right }) => h('div', {
-              key: networkEdgeKey(edge.from, edge.to),
-              style: { display: 'grid', gridTemplateColumns: '1fr 1fr 64px 56px', gap: 8, alignItems: 'center', minHeight: 36, borderTop: '1px solid ' + C.line }
-            },
-              h('span', { title: left.device_id, style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12 } }, dot(left.online), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, left.name || left.device_id)),
-              h('span', { title: right.device_id, style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12 } }, dot(right.online), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, right.name || right.device_id)),
-              h('span', { style: { fontSize: 10.5, color: left.online && right.online ? C.green : C.mute } }, left.online && right.online ? '在线' : '离线'),
-              h('button', {
-                type: 'button', onClick: () => onToggleEdge({ from: edge.from, to: edge.to }, false), className: 'tether-hover',
-                style: { height: 26, border: 0, borderRadius: 5, background: 'transparent', color: C.red, fontSize: 11, cursor: 'pointer' }
-              }, '断开'))),
-            !rows.length ? h('div', { style: { padding: 24, color: C.mute, fontSize: 12, textAlign: 'center' } }, edges.length ? '没有匹配的连接' : '尚未建立连接') : null)))
+              type: 'button', onClick: () => onToggleEdge({ from: edge.from, to: edge.to }, false), className: 'tether-hover',
+              style: { height: 26, border: 0, borderRadius: 5, background: 'transparent', color: C.red, fontSize: 11, cursor: 'pointer' }
+            }, '断开'))),
+          !rows.length ? h('div', { style: { padding: 24, color: C.mute, fontSize: 12, textAlign: 'center' } }, edges.length ? '没有匹配的连接' : '尚未建立连接') : null))
     }
 
     function SftpRelayDialog({ networks, initialPair, manage, onClose }) {
@@ -2730,17 +2745,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setSaving(false)
         }
       }
-      return h('div', { style: { position: 'absolute', inset: 0, zIndex: 85, padding: 20, display: 'grid',
-        placeItems: 'center', background: 'rgba(16,24,40,.35)' },
-        onPointerDown: event => { if (!saving && event.target === event.currentTarget) onClose() } },
-        h('section', { role: 'dialog', 'aria-modal': true, 'aria-label': '自动中转', style: {
-          width: 'min(420px, 100%)', display: 'grid', gap: 16, padding: 16, borderRadius: 16, background: C.bg, boxShadow: C.shadow } },
-          h('header', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-            h('strong', { style: { fontSize: 14 } }, '自动中转'),
-            h('button', {
-              type: 'button', disabled: saving, onClick: onClose, title: '关闭', 'aria-label': '关闭', className: 'tether-hover',
-              style: { width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: C.mute, fontSize: 18, cursor: saving ? 'default' : 'pointer', display: 'grid', placeItems: 'center' }
-            }, '×')),
+      return h(FloatingWindow, {
+        title: '自动中转',
+        onClose,
+        disabledClose: saving,
+        width: 'min(420px, calc(100% - 32px))',
+        ariaLabel: '自动中转'
+      },
+        h('div', { style: { display: 'grid', gap: 16, padding: 16 } },
           h('div', { style: { display: 'grid', gap: 6 } },
             h('span', { style: { fontSize: 12, color: C.sub } }, '私网'),
             h(StyledSelect, {
@@ -4600,6 +4612,27 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         : usePersisted('tether.ui.view.v1', 'chat')
       const [agentsMounted, setAgentsMounted] = React.useState(() => view === 'agents')
       React.useEffect(() => { if (view === 'agents') setAgentsMounted(true) }, [view])
+      const [transferMounted, setTransferMounted] = React.useState(() => view === 'transfer')
+      React.useEffect(() => { if (view === 'transfer') setTransferMounted(true) }, [view])
+      const [transferSummary, setTransferSummary] = React.useState(null)
+      React.useEffect(() => {
+        if (typeof document === 'undefined' || !document.body) return undefined
+        const applyTheme = () => {
+          let pref = 'system'
+          try { pref = window.localStorage.getItem('tether.theme') || 'system' } catch (_) { /* ignore */ }
+          const dark = pref === 'dark' || (pref === 'system' && typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) document.body.setAttribute('data-ds-dark-theme', '')
+          else document.body.removeAttribute('data-ds-dark-theme')
+        }
+        applyTheme()
+        const media = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null
+        window.addEventListener('tether-theme-pref', applyTheme)
+        if (media && media.addEventListener) media.addEventListener('change', applyTheme)
+        return () => {
+          window.removeEventListener('tether-theme-pref', applyTheme)
+          if (media && media.removeEventListener) media.removeEventListener('change', applyTheme)
+        }
+      }, [])
       const [terminalOpen, setTerminalOpen] = React.useState(false)
       const [terminalCwd, setTerminalCwd] = React.useState('')
       React.useEffect(() => { setTerminalCwd('') }, [deviceId])
@@ -8015,7 +8048,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           event.preventDefault()
           event.stopPropagation()
           hideHoverTip()
-          selectDevice(item.device_id)
           setDeviceMenu({ x: event.clientX, y: event.clientY, device: item })
         }
         const menuItem = (icon, label, onClick) => h('button', {
@@ -8024,8 +8056,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }, h(Glyph, { name: icon, size: 15 }), h('span', null, label))
         const deviceContext = deviceMenu ? h('div', {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 150)), width: 178, zIndex: 120, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+          className: 'tether-glass',
+          style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 170)), width: 178, zIndex: 120, borderRadius: 10, padding: 4, userSelect: 'none' }
         },
+          menuItem('apps', '节点详情', () => { const item = deviceMenu.device; setDeviceMenu(null); setNetworkDetailId(item.device_id) }),
           menuItem('monitor', '打开工作区', () => { const item = deviceMenu.device; setDeviceMenu(null); openDevice(item) }),
           host && host.kind === 'app' && host.workbench && deviceMenu.device && deviceMenu.device.online
             ? menuItem('monitor', '远程桌面', () => { void openRemoteDesktop(deviceMenu.device.device_id) })
@@ -8071,20 +8105,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('div', { style: { fontSize: 18, fontWeight: 'var(--tether-strong, 600)' } }, '互联'),
             pill(online.length + ' / ' + devices.length + ' 在线', online.length ? C.green : C.mute),
             pill(edges.length + ' 条连接', C.mute),
-            userId ? h('div', { role: 'group', 'aria-label': '设备范围', style: { display: 'flex', alignItems: 'center', gap: 3, padding: 2, borderRadius: 7, background: C.soft } },
-              [['all', '全部', allDevices.length], ['own', '我的', ownDevices.length], ['shared', '共享给我', sharedDevices.length]].map(([key, label, count]) => h('button', {
-                key, type: 'button', onClick: () => { setNetworkOwnershipFilter(key); setNetworkPage(1); setNetworkDetailId('') },
-                'aria-pressed': networkOwnershipFilter === key,
-                style: { height: 24, padding: '0 8px', border: 0, borderRadius: 5, background: networkOwnershipFilter === key ? C.layer1 : 'transparent',
-                  color: networkOwnershipFilter === key ? C.ink : C.mute, fontSize: 10.5, cursor: 'pointer' }
-              }, label + ' ' + count))) : null,
             h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 } },
-              relayNetworks.length ? btn('自动中转', () => setRelayDialog({})) : null,
-              h('button', {
-                type: 'button', title: '连接管理', 'aria-label': '连接管理', onClick: () => setShowNetworkLinks(true),
-                className: 'tether-hover',
-                style: { height: 28, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 5, border: '1px solid ' + C.line, borderRadius: 7, background: C.layer1, color: C.sub, fontSize: 11.5, cursor: 'pointer' }
-              }, h(Glyph, { name: 'link', size: 13 }), '连接管理'),
               h('button', { title: '刷新', 'aria-label': '刷新', onClick: refreshNetwork, className: 'tether-hover', style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' } },
                 networkRefreshing ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })))),
           userId && sharedDevices.length ? h('div', { style: { padding: '0 18px 8px', color: C.mute, fontSize: 10.5 } }, '共享设备的可见性和在线状态来自 Hub；团队网络映射尚未接入，显示设备不代表当前网络可达。') : null,
@@ -8439,18 +8460,31 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                   style: { height: 34, border: 0, borderRadius: 7, background: C.primary, color: C.onPrimary, fontSize: 12, cursor: identityBindBusy ? 'default' : 'pointer', opacity: identityBindBusy ? 0.6 : 1 } },
                 identityBindBusy ? '正在处理…' : identityBindMode === 'bind' ? '绑定并继续' : '创建新账号并继续') : null)) : null,
             h(SurfaceDeck, { devices: (deviceSnapshot && deviceSnapshot.devices) || [], deviceId, localDeviceId: appLocalDevice, visible: view === 'chat', authReady: workbenchAuthReady, localOnly: !state && !!appLocalDevice }),
-            view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()
-              : view === 'transfer' ? h(createTransferPage, {
+            view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork() : null,
+            (transferMounted || view === 'transfer') ? h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, display: view === 'transfer' ? 'flex' : 'none' } },
+              h(createTransferPage, {
                 React, Glyph, api, post, C,
                 devices: (deviceSnapshot && deviceSnapshot.devices) || [],
                 localDevice: appLocalDevice,
                 userId: state?.user?.user_id,
                 hubOnly: host && host.kind === 'app' && !EXPLICIT_AUTHORITY,
                 onLocalRelay: canManageRelay ? openTransferRelay : undefined,
+                onJobSummary: setTransferSummary,
                 onNotice: setNotice,
                 onError: fail
-              })
-                : null,
+              })) : null,
+            transferSummary && transferSummary.state === 'running' && view !== 'transfer' ? h('button', {
+              type: 'button',
+              onClick: () => selectPanel('transfer'),
+              className: 'tether-glass tether-hover tether-num',
+              style: {
+                position: 'absolute', left: 16, bottom: 14, zIndex: 82, height: 32, padding: '0 12px',
+                borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 8,
+                fontSize: 12, color: C.ink, cursor: 'pointer'
+              }
+            },
+              h('span', { className: 'tether-spin', style: { display: 'inline-flex', color: C.blue } }, h(Glyph, { name: 'transfer', size: 14 })),
+              '传输中 ' + Math.round(transferSummary.percent || 0) + '%') : null,
             (agentsMounted || view === 'agents') ? h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, display: view === 'agents' ? 'flex' : 'none' } },
               h(createAgentsPage, {
                 key: ACTIVE_BASE_GENERATION + '|' + String((state && state.user && (state.user.id || state.user.email)) || accountName || hubEmail || ''),
@@ -8640,6 +8674,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           onDshStart: () => runLocalDsh('dsh_start'),
           onDshInstall: () => runLocalDsh('dsh_install'),
           onRefreshConnection: probeConfiguredHub,
+          onOpenNetworkLinks: () => setShowNetworkLinks(true),
+          onOpenRelay: canManageRelay && relayNetworks.length ? () => setRelayDialog({}) : undefined,
           onConfigureConnection: (host.kind === 'dsh' || EXPLICIT_AUTHORITY) ? () => {
             let saved = {}
             try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore malformed config */ }
@@ -8706,26 +8742,15 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             })()
           )
         ) : null,
-        showSettings ? h('div', {
-          onPointerDown: (event) => { if (event.target === event.currentTarget) setShowSettings(false) },
-          style: { position: 'absolute', top: 40, left: 0, right: 0, bottom: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 20 }
+        showSettings ? h(FloatingWindow, {
+          title: '文件权限',
+          subtitle: device ? device.name : '',
+          onClose: () => setShowSettings(false),
+          width: 'min(' + permissionsWidth + 'px, calc(100% - 32px))',
+          height: 'min(580px, calc(100% - 32px))',
+          ariaLabel: '文件权限'
         },
-          h('div', { className: 'tether-drawer', style: { position: 'relative', width: 'min(' + permissionsWidth + 'px, calc(100vw - 32px))', height: '100%', background: C.bg, borderLeft: 0, display: 'flex', flexDirection: 'column', boxShadow: C.shadow } },
-            h('div', {
-              title: '拖动调整宽度', role: 'separator', 'aria-orientation': 'vertical', tabIndex: 0,
-              onPointerDown: startPermissionsResize, onMouseDown: startPermissionsResize,
-              onKeyDown: (event) => {
-                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-                event.preventDefault()
-                const delta = event.key === 'ArrowLeft' ? 32 : -32
-                setPermissionsWidth((current) => Math.max(480, Math.min(window.innerWidth - 48, current + delta)))
-              },
-              style: { position: 'absolute', top: 0, bottom: 0, left: -3, width: 9, cursor: 'col-resize', zIndex: 3 }
-            }),
-            h('div', { style: { padding: '12px 16px', borderBottom: 0, background: C.panel, display: 'flex', alignItems: 'center' } },
-              h('strong', null, '文件权限'), device ? h('span', { style: { marginLeft: 8, fontSize: 12, color: C.mute } }, device.name) : null
-            ),
-            h('div', { className: 'tether-drawer-body', style: { overflow: 'hidden', flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
+          h('div', { className: 'tether-drawer-body', style: { overflow: 'hidden', flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
               h('div', { style: { flex: '0 0 auto', maxHeight: '58%', overflowY: 'auto' } },
               h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
                 [['default', '默认（系统盘只读 + 其他盘读写）', 'Windows 系统盘仅项目可写、其他盘可读写；Linux 仅项目可写'],
@@ -8770,7 +8795,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 h('button', { onClick: loadMoreAudit, disabled: auditLoading, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 12px', background: C.soft, color: C.ink, fontSize: 12, cursor: auditLoading ? 'default' : 'pointer', opacity: auditLoading ? 0.6 : 1 } }, auditLoading ? '加载中…' : '加载更多')) : null
               )
             )
-          )
         ) : null,
         ask ? h('div', { style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 30 } },
           h('div', { style: { width: 380, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },

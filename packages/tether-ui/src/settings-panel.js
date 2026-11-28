@@ -1,8 +1,13 @@
+import { createFloatingWindow } from './floating-window.js'
+import { createUiControls } from './ui-controls.js'
+
 const CROP_VIEW = 240
 const AVATAR_OUTPUT = 256
 
 export function createSettingsPanel(React) {
   const h = React.createElement
+  const { FloatingWindow } = createFloatingWindow(React)
+  const { SegmentedControl } = createUiControls(React)
   const ink = 'var(--dsw-alias-label-primary, #101828)'
   const sub = 'var(--dsw-alias-label-secondary, #475467)'
   const mute = 'var(--dsw-alias-label-tertiary, #667085)'
@@ -11,7 +16,7 @@ export function createSettingsPanel(React) {
   const line = 'var(--dsw-alias-border-secondary, #e4e7ec)'
   const blue = 'var(--dsw-alias-state-business-primary, #1570ef)'
   const danger = 'var(--dsw-alias-state-error-primary, #b42318)'
-  const success = 'var(--dsw-alias-state-success-primary, #16a34a)'
+  const success = 'var(--dsw-alias-state-success-primary, #15803d)'
   const field = { width: '100%', height: 32, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 7, padding: '0 9px', background: bg, color: ink, fontSize: 12.5, font: 'inherit', outline: 'none' }
   const primary = { height: 30, padding: '0 12px', border: 0, borderRadius: 7, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12, font: 'inherit' }
   const secondary = { height: 30, padding: '0 12px', border: '1px solid ' + line, borderRadius: 7, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12, font: 'inherit' }
@@ -40,12 +45,14 @@ export function createSettingsPanel(React) {
   }))
 
   function SettingsPanel({ open, onClose, Glyph, accountEmail = '', accountRole = '', accountName = '',
-    accountAvatar = '', onAvatarChange, onAccountNameChange, initialSection = 'account',
+    accountAvatar = '', onAvatarChange, onAccountNameChange, initialSection = 'general',
     server = '', connection = {}, device = {}, versions = {}, update = null, dsh = null, dshBusy = '',
     onDshStart, onDshInstall, extraSections = [],
-    onRefreshConnection, onConfigureConnection, onRestartNode, onLogout, onPasswordChanged, passwordChangeAvailable = true,
-    accountSignedIn = true, uninstallAvailable = false, onOpenInstalledApps }) {
-    const [section, setSection] = React.useState(initialSection)
+    onRefreshConnection, onConfigureConnection, onOpenNetworkLinks, onOpenRelay,
+    onRestartNode, onLogout, onPasswordChanged, passwordChangeAvailable = true,
+    accountSignedIn = true, uninstallAvailable = false, onOpenInstalledApps, onOpenPermissions }) {
+    const normalizeSection = (id) => (id === 'teams' ? 'permissions' : (id || 'general'))
+    const [section, setSection] = React.useState(() => normalizeSection(initialSection))
     const [currentPassword, setCurrentPassword] = React.useState('')
     const [newPassword, setNewPassword] = React.useState('')
     const [confirmPassword, setConfirmPassword] = React.useState('')
@@ -73,9 +80,12 @@ export function createSettingsPanel(React) {
     const [keepSurfaces, setKeepSurfaces] = React.useState(() => {
       try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
     })
+    const [themeMode, setThemeMode] = React.useState(() => {
+      try { return localStorage.getItem('tether.theme') || 'system' } catch (_) { return 'system' }
+    })
     React.useEffect(() => {
       if (!open) return
-      setSection(initialSection)
+      setSection(normalizeSection(initialSection))
       setEditModal('')
       setMessage('')
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
@@ -509,7 +519,33 @@ export function createSettingsPanel(React) {
               style: { ...primary, height: 28, padding: '0 12px', opacity: busy === 'password' ? 0.5 : 1, cursor: busy === 'password' ? 'default' : 'pointer' }
             }, busy === 'password' ? '更新中…' : '更新密码')))))
       : null
-    const connectionSection = h('div', { style: { display: 'grid', gap: 10 } },
+    const scopeHeader = (title, scope) => h('div', {
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }
+    },
+      h('strong', { style: { fontSize: 15, color: ink, fontWeight: 'var(--tether-strong, 600)' } }, title),
+      scope ? h('span', {
+        style: { fontSize: 11, lineHeight: '20px', padding: '0 8px', borderRadius: 6, background: panel, border: '1px solid ' + line, color: mute, flex: '0 0 auto' }
+      }, scope) : null)
+    const generalSection = h('div', { style: { display: 'grid', gap: 16, maxWidth: 540 } },
+      scopeHeader('常规与外观', '本机'),
+      h('div', { style: { ...cardStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 } },
+        h('span', { style: { fontSize: 13, color: ink } }, '外观主题'),
+        h(SegmentedControl, {
+          value: themeMode,
+          ariaLabel: '外观主题',
+          options: [
+            { value: 'system', label: '跟随系统' },
+            { value: 'light', label: '浅色' },
+            { value: 'dark', label: '暗色' }
+          ],
+          onChange: (next) => {
+            setThemeMode(next)
+            try { localStorage.setItem('tether.theme', next) } catch (_) { /* storage unavailable */ }
+            if (typeof window !== 'undefined') window.dispatchEvent(new Event('tether-theme-pref'))
+          }
+        })))
+    const connectionSection = h('div', { style: { display: 'grid', gap: 12, maxWidth: 560 } },
+      scopeHeader('连接与网络', '私网'),
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 24 } },
         h('span', { style: { flex: '1 1 auto', fontSize: 12, color: mute } }, '服务器'),
         h('button', {
@@ -524,13 +560,21 @@ export function createSettingsPanel(React) {
         ['最近检测', timeText(connection.checkedAt)],
         ['响应', Number.isFinite(connection.durationMs) ? connection.durationMs + ' ms' : '—']
       ]),
-      typeof onConfigureConnection === 'function' ? h('button', {
-        type: 'button', onClick: onConfigureConnection, style: { ...secondary, justifySelf: 'start' }
-      }, '修改服务器连接') : null)
-    const workspaceSection = h('div', { style: { display: 'grid', gap: 12 } },
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
+        typeof onConfigureConnection === 'function' ? h('button', {
+          type: 'button', onClick: onConfigureConnection, style: secondary
+        }, '修改服务器连接') : null,
+        typeof onOpenNetworkLinks === 'function' ? h('button', {
+          type: 'button', onClick: onOpenNetworkLinks, style: { ...secondary, display: 'inline-flex', alignItems: 'center', gap: 6 }
+        }, Glyph ? h(Glyph, { name: 'link', size: 13 }) : null, '连接管理') : null,
+        typeof onOpenRelay === 'function' ? h('button', {
+          type: 'button', onClick: onOpenRelay, style: { ...secondary, display: 'inline-flex', alignItems: 'center', gap: 6 }
+        }, Glyph ? h(Glyph, { name: 'transfer', size: 13 }) : null, '自动中转') : null))
+    const workspaceSection = h('div', { style: { display: 'grid', gap: 14, maxWidth: 560 } },
+      scopeHeader('工作区与智能体', '本机'),
       h('div', {
         title: '切换设备时保留最近三个原生工作区；关闭后释放后台页面',
-        style: { display: 'flex', alignItems: 'center', gap: 16, minHeight: 44 }
+        style: { ...cardStyle, display: 'flex', alignItems: 'center', gap: 16, minHeight: 44 }
       },
         h('div', { style: { flex: '1 1 auto', minWidth: 0 } },
           h('div', { style: { fontSize: 13, color: ink } }, '保留最近设备工作区'),
@@ -674,44 +718,63 @@ export function createSettingsPanel(React) {
         role: uninstallNotice.tone === 'error' ? 'alert' : 'status',
         style: { color: uninstallNotice.tone === 'error' ? danger : success, fontSize: 12, lineHeight: 1.5 }
       }, uninstallNotice.text) : null)
+    const teamSectionEntry = (Array.isArray(extraSections) ? extraSections : []).find((item) => item && item.id === 'teams' && typeof item.render === 'function')
+    const permissionsSection = h('div', { style: { display: 'grid', gap: 16, maxWidth: 620 } },
+      scopeHeader('权限与共享', '本机 · 账号'),
+      typeof onOpenPermissions === 'function' ? h('div', { style: { ...cardStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 } },
+        h('span', { style: { fontSize: 13, color: ink } }, '设备路径读写策略与审计'),
+        h('button', {
+          type: 'button', onClick: onOpenPermissions, style: { ...secondary, display: 'inline-flex', alignItems: 'center', gap: 6 }
+        }, Glyph ? h(Glyph, { name: 'shield', size: 13 }) : null, '打开权限面板')) : null,
+      teamSectionEntry ? teamSectionEntry.render() : null)
+    const sectionScopes = {
+      general: '本机',
+      workspace: '本机',
+      connection: '私网',
+      permissions: '本机 · 账号',
+      device: '本机设备',
+      update: '全网',
+      account: '账号',
+      about: '本机'
+    }
     const builtIn = [
-      { id: 'account', label: '账号', render: () => accountSection },
-      { id: 'connection', label: '连接', render: () => connectionSection },
+      { id: 'general', label: '常规与外观', render: () => generalSection },
+      { id: 'workspace', label: '工作区与智能体', render: () => workspaceSection },
+      { id: 'connection', label: '连接与网络', render: () => connectionSection },
+      { id: 'permissions', label: '权限与共享', render: () => permissionsSection },
+      { id: 'device', label: '设备与 DSH', render: () => deviceSection },
       { id: 'update', label: '更新', render: () => updateSection },
-      { id: 'workspace', label: '工作区', render: () => workspaceSection },
-      { id: 'device', label: '本机设备', render: () => deviceSection },
-      { id: 'about', label: '关于', render: () => aboutSection }
+      { id: 'account', label: '账号', render: () => accountSection },
+      { id: 'about', label: '关于', render: () => h('div', { style: { display: 'grid', gap: 20 } },
+        aboutSection,
+        uninstallAvailable ? h('div', { style: { marginTop: 12, padding: 16, borderRadius: 10, border: '1px solid rgba(180,35,24,0.28)', background: 'rgba(180,35,24,0.04)', display: 'grid', gap: 10, maxWidth: 520 } },
+          h('div', { style: { fontSize: 13, fontWeight: 600, color: danger } }, '危险区'),
+          uninstallSection) : null) }
     ]
-    const optional = uninstallAvailable ? [{ id: 'uninstall', label: '卸载', render: () => uninstallSection }] : []
-    const sections = builtIn.concat(optional).concat((Array.isArray(extraSections) ? extraSections : [])
-      .filter((item) => item && item.id && item.label && typeof item.render === 'function'))
+    const sections = builtIn.concat((Array.isArray(extraSections) ? extraSections : [])
+      .filter((item) => item && item.id && item.id !== 'teams' && item.label && typeof item.render === 'function'))
     const current = sections.find((item) => item.id === section) || sections[0]
     const nav = h('div', {
-      style: { width: 150, flex: '0 0 auto', padding: '12px 8px', background: panel, borderRight: '1px solid ' + line, display: 'flex', flexDirection: 'column', gap: 2 }
+      style: { width: 164, flex: '0 0 auto', padding: '12px 8px', background: panel, borderRight: '1px solid ' + line, display: 'flex', flexDirection: 'column', gap: 4 }
     },
       sections.map((item) => h('button', {
         key: item.id, type: 'button', onClick: () => { setMessage(''); setSection(item.id) },
         className: 'tether-hover', 'aria-current': current.id === item.id ? 'page' : undefined,
         style: {
-          height: 30, padding: '0 10px', border: 0, borderRadius: 6, textAlign: 'left',
+          height: 32, padding: '0 10px', border: 0, borderRadius: 6, textAlign: 'left',
           background: current.id === item.id ? 'var(--dsw-alias-interactive-bg-active, rgba(38,49,72,.10))' : 'transparent',
-          color: current.id === item.id ? ink : sub, fontSize: 12.5, cursor: 'pointer', font: 'inherit'
+          color: current.id === item.id ? ink : sub, fontSize: 12.5, fontWeight: current.id === item.id ? 500 : 400, cursor: 'pointer', font: 'inherit'
         }
       }, item.label)))
-    return h('div', {
-      onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() },
-      style: { position: 'absolute', inset: '40px 0 0 0', zIndex: 40, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', padding: 24 }
-    },
-      h('section', {
-        role: 'dialog', 'aria-label': '设置',
-        style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', background: bg, borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,0.18))', display: 'flex', flexDirection: 'column' }
+    return h(React.Fragment, null,
+      h(FloatingWindow, {
+        title: '设置',
+        subtitle: sectionScopes[current.id] || '',
+        onClose,
+        width: 'min(820px, calc(100% - 32px))',
+        height: 'min(580px, calc(100% - 32px))',
+        ariaLabel: '设置'
       },
-        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', background: panel, borderBottom: '1px solid ' + line, flex: '0 0 auto' } },
-          h('strong', { style: { fontSize: 14 } }, '设置'),
-          h('button', {
-            type: 'button', onClick: onClose, title: '关闭', 'aria-label': '关闭', className: 'tether-hover',
-            style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute }
-          }, '×')),
         h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex' } },
           nav,
           h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minWidth: 0, overflowY: 'auto', padding: '20px 24px' } }, current.render()))),
