@@ -8,10 +8,6 @@ const source = readFileSync(
   ),
   "utf8"
 )
-const welcomeHeroSource = readFileSync(
-  resolve(process.cwd(), "src/components/chat/welcome-hero.tsx"),
-  "utf8"
-)
 const chatInputSource = readFileSync(
   resolve(process.cwd(), "src/components/chat/chat-input.tsx"),
   "utf8"
@@ -205,9 +201,10 @@ describe("ConversationDetailPanel new conversation layout", () => {
     expect(source).toContain("<OverlayHostHiddenProvider hidden={!visible}>")
   })
 
-  it("does not render a decorative welcome backdrop", () => {
-    expect(welcomeHeroSource).not.toContain("export function WelcomeBackdrop")
-    expect(welcomeHeroSource).not.toContain("bg-gradient-to-r")
+  it("does not render legacy welcome hero or marketing backdrop", () => {
+    expect(source).not.toContain("<WelcomeHero")
+    expect(source).not.toContain("<QuickActions")
+    expect(source).not.toContain("<WelcomeTip")
   })
 
   it("uses the shared attached folder branch picker treatment for all chat inputs", () => {
@@ -227,7 +224,7 @@ describe("ConversationDetailPanel new conversation layout", () => {
     // The picker row is the last thing inside the composer wrapper; the
     // server-file dialog that follows it sits outside, so it anchors the slice.
     const pickerEnd = messageInputSource.indexOf(
-      "{!attach.showNativePaperclip && (",
+      "{!attach.showNativePaperclip && !attach.tetherPicker && (",
       pickerStart
     )
     expect(pickerStart).toBeGreaterThan(-1)

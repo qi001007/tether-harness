@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,702650,t=>{"use strict";var c=t.i(586682);async function e(){await (0,c.invoke)("plugin:process|restart")}t.s(["relaunch",0,e])}]);

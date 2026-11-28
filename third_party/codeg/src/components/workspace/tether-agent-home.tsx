@@ -4,12 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Activity,
   Bot,
+  Bug,
   CheckCircle2,
   ChevronDown,
   CircleSlash,
   Code2,
   FolderOpen,
+  GitFork,
   KeyRound,
+  ListChecks,
   MessageSquare,
   Package,
   Plug,
@@ -101,8 +104,17 @@ export function TetherAgentPage() {
   }, [activeFolder, allFolders, requestedProjectId])
 
   const handleOpenStructured = useCallback(
-    (agentType: AgentType) => {
+    (agentType: AgentType, launchPreset = "") => {
       if (!selectedProject) return
+      try {
+        if (launchPreset) {
+          window.sessionStorage.setItem("tether:launch_preset", launchPreset)
+        } else {
+          window.sessionStorage.removeItem("tether:launch_preset")
+        }
+      } catch {
+        // sessionStorage unavailable
+      }
       openNewConversationTab(selectedProject.id, selectedProject.path, {
         forceAgent: agentType,
         ...(requestedTargetGroup ? { targetGroup: requestedTargetGroup } : {}),
@@ -163,6 +175,30 @@ export function TetherAgentPageTitle() {
   return <WorkbenchPageTitle title={t("agents")} backLabel="返回当前会话" />
 }
 
+const LAUNCH_MODES = [
+  { id: "default", label: "常规", icon: MessageSquare, preset: "" },
+  {
+    id: "plan",
+    label: "方案规划",
+    icon: ListChecks,
+    preset: "先梳理现状、权衡方案与变更清单，确认计划后再修改代码：\n\n",
+  },
+  {
+    id: "debug",
+    label: "系统排错",
+    icon: Bug,
+    preset: "先通过日志、复现路径与证据定位真实根因，再提出最小化修复：\n\n",
+  },
+  {
+    id: "subagent",
+    label: "并行子代理",
+    icon: GitFork,
+    preset: "梳理独立子任务并合理拆分并行验证后再汇总结果：\n\n",
+  },
+] as const
+
+type LaunchModeId = (typeof LAUNCH_MODES)[number]["id"]
+
 type EnvRow = { key: string; value: string }
 
 function needsOpenCodeUpgrade(agent: AcpAgentInfo | null) {
@@ -208,12 +244,13 @@ export function TetherAgentHome({
   initialAgentType?: AgentType
   requestedAgentType?: AgentType
   selectedProject: FolderDetail | null
-  onOpenStructured: (agentType: AgentType) => void
+  onOpenStructured: (agentType: AgentType, launchPreset?: string) => void
   onOpenTerminal: (agent: AcpAgentInfo) => void
   onOpenHerdr: (agent: AcpAgentInfo) => void
 }) {
   const { agents, refresh } = useAcpAgents()
   const list = useMemo(() => agents.filter((agent) => agent.enabled), [agents])
+  const [launchMode, setLaunchMode] = useState<LaunchModeId>("default")
   const [selectedType, setSelectedType] = useState<AgentType | null>(
     initialAgentType ?? null
   )
@@ -440,13 +477,16 @@ export function TetherAgentHome({
               </div>
 
               {/* Action bar */}
-              <div className="rounded-xl border border-border/60 bg-card/50 p-3.5">
+              <div className="space-y-2.5 rounded-xl border border-border/60 bg-card/50 p-3.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     size="sm"
                     disabled={!selectedProject || !structuredReady}
-                    onClick={() => onOpenStructured(selected.agent_type)}
+                    onClick={() => {
+                      const activeMode = LAUNCH_MODES.find((m) => m.id === launchMode)
+                      onOpenStructured(selected.agent_type, activeMode?.preset ?? "")
+                    }}
                   >
                     <MessageSquare aria-hidden className="size-4" />
                     结构化
@@ -486,6 +526,35 @@ export function TetherAgentHome({
                       <span className="truncate">{selectedProject.name}</span>
                     </span>
                   ) : null}
+                </div>
+
+                <div
+                  role="radiogroup"
+                  aria-label="启动模式"
+                  className="inline-flex flex-wrap items-center gap-1 rounded-lg bg-muted/60 p-0.5"
+                >
+                  {LAUNCH_MODES.map((item) => {
+                    const ModeIcon = item.icon
+                    const active = launchMode === item.id
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setLaunchMode(item.id)}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
+                          active
+                            ? "bg-background font-medium text-foreground shadow-2xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <ModeIcon aria-hidden className="size-3.5" />
+                        <span>{item.label}</span>
+                      </button>
+                    )
+                  })}
                 </div>
 
                 {!selectedProject ? (

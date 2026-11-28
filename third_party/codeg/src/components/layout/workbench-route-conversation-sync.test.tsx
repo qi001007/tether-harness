@@ -82,7 +82,7 @@ describe("WorkbenchRouteConversationSync", () => {
     await waitFor(() =>
       expect(useTabStore.getState().rawTabs).toHaveLength(0)
     )
-    expect(screen.getByTestId("route")).toHaveTextContent("conversations")
+    await waitFor(() => expect(screen.getByTestId("route")).toHaveTextContent("agents"))
   })
 
   it("does not redirect when the tab snapshot fails", async () => {

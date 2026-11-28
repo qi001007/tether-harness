@@ -1,7 +1,6 @@
 "use client"
 
 import {
-  LayoutGrid,
   Monitor,
   Moon,
   MoveHorizontal,
@@ -26,7 +25,6 @@ import { Switch } from "@/components/ui/switch"
 import {
   useThemeColor,
   useZoomLevel,
-  useWelcomeQuickActions,
   useChatAnimationsSetting,
   useChatContentWidth,
 } from "@/hooks/use-appearance"
@@ -66,8 +64,6 @@ export function AppearanceSettings() {
   const { theme, resolvedTheme, setTheme } = useTheme()
   const { themeColor, setThemeColor } = useThemeColor()
   const { zoomLevel, setZoomLevel } = useZoomLevel()
-  const { showWelcomeQuickActions, setShowWelcomeQuickActions } =
-    useWelcomeQuickActions()
   const { chatAnimations, setChatAnimations } = useChatAnimationsSetting()
   const { chatContentWidth, setChatContentWidth } = useChatContentWidth()
   const [screenWidth] = useState(readScreenWidth)
@@ -247,30 +243,6 @@ export function AppearanceSettings() {
 
         {/* ===== Workspace background ===== */}
         <WorkspaceBackgroundSection />
-
-        {/* ===== New conversation — mode selection area ===== */}
-        <section className="rounded-xl border bg-card p-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <LayoutGrid className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">
-              {t("welcomePanel.sectionTitle")}
-            </h2>
-          </div>
-
-          <p className="text-xs text-muted-foreground leading-5">
-            {t("welcomePanel.sectionDescription")}
-          </p>
-
-          <label className="flex items-center gap-2">
-            <Switch
-              checked={showWelcomeQuickActions}
-              onCheckedChange={setShowWelcomeQuickActions}
-            />
-            <span className="text-xs text-muted-foreground">
-              {t("welcomePanel.showQuickActions")}
-            </span>
-          </label>
-        </section>
 
         {/* ===== Chat animations ===== */}
         <section className="rounded-xl border bg-card p-4 space-y-4">

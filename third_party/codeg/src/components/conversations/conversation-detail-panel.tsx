@@ -14,7 +14,6 @@ import {
   FileImage,
   FileText,
   Info,
-  Link2,
   Loader2,
   Plus,
   RefreshCw,
@@ -46,6 +45,7 @@ import {
 } from "@/stores/tab-store"
 import { computeRects, leafIds } from "@/lib/tab-group-layout"
 import { useTaskContext } from "@/contexts/task-context"
+import { useWorkbenchRoute } from "@/contexts/workbench-route-context"
 import { cn, copyTextToClipboard, randomUUID } from "@/lib/utils"
 import { buildAskPrompt, buildQuotedMarkdown } from "@/lib/message-quote"
 import {
@@ -55,8 +55,6 @@ import {
   type AskSelectionParkedDetail,
 } from "@/lib/ask-selection-handoff"
 import { useConnectionLifecycle } from "@/hooks/use-connection-lifecycle"
-import { useDshBridge } from "@/hooks/use-dsh-bridge"
-import { isDshExternalSession } from "@/lib/dsh-bridge"
 import { useMessageQueue, type QueuedMessage } from "@/hooks/use-message-queue"
 import { MessageListView } from "@/components/message/message-list-view"
 import {
@@ -74,8 +72,6 @@ import { useFeedbackEnabled } from "@/hooks/use-feedback-enabled"
 import { useSessionFeedback } from "@/hooks/use-session-feedback"
 import { AgentSelector } from "@/components/chat/agent-selector"
 import { ChatInput } from "@/components/chat/chat-input"
-import { WelcomeHero, WelcomeTip } from "@/components/chat/welcome-hero"
-import { QuickActions } from "@/components/chat/quick-actions"
 import type { ComposerInjectContent } from "@/components/chat/message-input"
 import { TileScrollContainer } from "@/components/conversations/tile-scroll-container"
 import { stableTabViewOrder } from "@/lib/tab-view-order"
@@ -338,6 +334,7 @@ const ConversationTabView = memo(function ConversationTabView({
     setSyncState,
   } = useConversationRuntimeActions()
   const acpActions = useAcpActions()
+  const { openAgentsHome } = useWorkbenchRoute()
 
   // Stable runtime session key — set once at mount, never changes.
   // For new conversations this is a virtual (negative) ID; for existing
@@ -598,26 +595,6 @@ const ConversationTabView = memo(function ConversationTabView({
   // orphaned, agent loses prior context.
   const externalId =
     runtimeExternalId ?? detail?.summary.external_id ?? undefined
-  // A DSH session: deepseek's parser read the harness' own session log, so the
-  // external id is `session-…` (see `isDshExternalSession`). Those sessions are
-  // driven by a resident DSH daemon that holds the write handle, so an ACP
-  // connection cannot open them at all — this tab talks to the harness through
-  // the Tether host's direct bridge instead, and never auto-connects (a failed
-  // `session/load` would otherwise fall back to `session/new` and rebind the row
-  // to an empty session, orphaning the history this tab exists to show).
-  const dshBridgeSessionId =
-    hasPersistedConversation && isDshExternalSession(selectedAgent, externalId)
-      ? (externalId as string)
-      : null
-  const refreshDshBridge = useCallback(() => {
-    if (!isVisible || !isActive) return
-    refetchDetail(effectiveConversationId)
-  }, [refetchDetail, effectiveConversationId, isActive, isVisible])
-  const dshBridge = useDshBridge({
-    sessionId: dshBridgeSessionId,
-    active: isActive && hasPersistedConversation,
-    onRefresh: refreshDshBridge,
-  })
   // For persisted conversations opened from the sidebar, wait until the
   // session's external_id has been resolved before auto-connecting.
   // Otherwise the auto-connect effect fires with sessionId=undefined and
@@ -708,11 +685,7 @@ const ConversationTabView = memo(function ConversationTabView({
   } = useConnectionLifecycle({
     contextKey: tabId,
     agentType: selectedAgent,
-    // A DSH session is never connected over ACP: the resident harness holds the
-    // session's write handle, and a refused `session/load` would be answered
-    // with a `session/new` fallback that rebinds this row to an empty session.
-    // The tab reads the log directly and writes through the Tether bridge.
-    isActive: isActive && canAutoConnect && dshBridgeSessionId === null,
+    isActive: isActive && canAutoConnect,
     workingDir: workingDirForConnection,
     sessionId:
       dbConversationId != null && selectedAgent !== "cline"
@@ -1152,32 +1125,6 @@ const ConversationTabView = memo(function ConversationTabView({
       // is live and the prompt is delivered inline — never parked in the queue.
       const sendOwnTab = ownTab
 
-      // DSH sessions: the prompt goes out over the Tether direct bridge, not
-      // ACP — there is no connection here to send it on. The composer is a
-      // fire-and-forget surface (it clears itself on submit), so a refused send
-      // hands the text straight back to it instead of dropping what the user
-      // typed; the new turns arrive through the bridge's detail refresh.
-      if (dshBridgeSessionId) {
-        const text = draft.displayText.trim()
-        if (!text) return
-        if (draft.blocks.some((block) => block.type !== "text")) {
-          notify({
-            level: "info",
-            key: `dsh-bridge-attachments:${tabId}`,
-            title: tMessageList("dshBridgeTextOnly"),
-          })
-        }
-        // Same courtesy as the ACP path: a successful send pins a preview tab.
-        if (sendOwnTab && !sendOwnTab.isPinned) pinTab(tabId)
-        setSendSignal((prev) => prev + 1)
-        void dshBridge.send(text).then((result) => {
-          if (!result.ok && mountedRef.current) {
-            setComposerInject({ text: draft.displayText, mode: "replace" })
-          }
-        })
-        return
-      }
-
       if (!hasPersistedConversation && !canAutoConnect) {
         setAgentConnectError(tWelcome("enableAgentFirstPlaceholder"))
         return
@@ -1415,8 +1362,6 @@ const ConversationTabView = memo(function ConversationTabView({
       bindConversationTab,
       canAutoConnect,
       connectionReady,
-      dshBridge,
-      dshBridgeSessionId,
       effectiveConversationId,
       folderId,
       hasPersistedConversation,
@@ -1820,9 +1765,17 @@ const ConversationTabView = memo(function ConversationTabView({
   const showDraftHeader = !hasPersistedConversation && !hasSentMessage
   const isWelcomeMode = showDraftHeader
 
-  const handleQuickAction = useCallback((payload: ComposerInjectContent) => {
-    setComposerInject(payload)
-  }, [])
+  useEffect(() => {
+    if (!showDraftHeader || !isActive) return
+    try {
+      const preset = window.sessionStorage.getItem("tether:launch_preset")
+      if (!preset) return
+      window.sessionStorage.removeItem("tether:launch_preset")
+      setComposerInject({ text: preset, mode: "replace" })
+    } catch {
+      // sessionStorage unavailable
+    }
+  }, [showDraftHeader, isActive])
 
   const handleComposerInjectConsumed = useCallback(() => {
     setComposerInject(null)
@@ -2053,34 +2006,6 @@ const ConversationTabView = memo(function ConversationTabView({
       </div>
     ) : null
 
-  // The DSH direct bridge's own status line, docked where the composer sits.
-  // It replaces the ACP load-error banner for these conversations: the harness
-  // owning the session is the normal state here, not a failure to apologise
-  // for — the transcript stays readable and the composer stays usable, with
-  // every prompt going out through the Tether host.
-  const dshBridgeBanner = dshBridgeSessionId ? (
-    <div
-      role="status"
-      className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-xs text-sky-700 dark:text-sky-300"
-    >
-      <Link2 aria-hidden="true" className="h-4 w-4 shrink-0" />
-      <span className="min-w-40 flex-1">
-        {dshBridge.sending
-          ? tMessageList("dshBridgeSending")
-          : tMessageList("dshBridgeBanner")}
-      </span>
-      {dshBridge.error && (
-        <span
-          className="shrink-0 text-destructive"
-          title={dshBridge.error}
-          data-dsh-bridge-error={dshBridge.error}
-        >
-          {tMessageList("dshBridgeFailed", { error: dshBridge.error })}
-        </span>
-      )}
-    </div>
-  ) : null
-
   // Goal pause/clear is a live, owner-only action, so decide availability once
   // here (where the connection is owned) rather than in the deep goal card.
   // `null` when the session isn't live or the user is a viewer → the card hides
@@ -2200,10 +2125,7 @@ const ConversationTabView = memo(function ConversationTabView({
   // bubble offers "quote" exactly when that composer is on screen (see
   // `hideInput` below). Without a composer the inject would never be consumed
   // and the action would silently do nothing.
-  // A DSH session keeps its composer even if an ACP load error was recorded for
-  // it: its prompts never needed that connection.
-  const composerAvailable =
-    !isWelcomeMode && (!acpLoadError || dshBridgeSessionId !== null)
+  const composerAvailable = !isWelcomeMode && !acpLoadError
 
   // Arrow-key history source: read lazily when the user actually steps into
   // history, so streaming tokens neither recompute it nor re-render the panel.
@@ -2388,11 +2310,7 @@ const ConversationTabView = memo(function ConversationTabView({
           />
         </>
       }
-      // A bridged DSH session has no ACP connection by design, but its
-      // composer is fully usable — reporting the connection's absence as
-      // "unavailable" is exactly the lie this tab exists to avoid. `connected`
-      // is the state the composer reads as "you can send".
-      status={dshBridgeSessionId ? "connected" : connStatus}
+      status={connStatus}
       promptCapabilities={conn.promptCapabilities}
       defaultPath={workingDirForConnection}
       agentName={getAgentLabel(selectedAgent)}
@@ -2439,13 +2357,10 @@ const ConversationTabView = memo(function ConversationTabView({
       promptSuggestion={connIsForOtherAgent ? null : conn.promptSuggestion}
       attachmentTabId={tabId}
       draftStorageKey={draftStorageKey}
-      hideInput={
-        isWelcomeMode ||
-        (Boolean(acpLoadError) && dshBridgeSessionId === null)
-      }
+      hideInput={isWelcomeMode || Boolean(acpLoadError)}
       injectContent={composerInject}
       onInjectConsumed={handleComposerInjectConsumed}
-      composerBanner={dshBridgeSessionId ? dshBridgeBanner : acpLoadErrorBanner}
+      composerBanner={acpLoadErrorBanner}
       feedbackList={
         feedback.showList ? (
           <FeedbackNotesDisplay
@@ -2509,42 +2424,38 @@ const ConversationTabView = memo(function ConversationTabView({
         >
           <div className="flex min-h-full flex-col">
             <div className="flex-1" />
-            <div className="mx-auto flex w-full chat-content-w shrink-0 flex-col gap-6 px-4 py-4">
-              {ownTab?.forceAgentSelection ? null : (
-                <>
-                  <WelcomeHero />
-                  <QuickActions
-                    onSelect={handleQuickAction}
-                    agentType={selectedAgent}
-                  />
-                </>
-              )}
+            <div className="mx-auto flex w-full chat-content-w shrink-0 flex-col gap-4 px-4 py-4">
               <div className="flex justify-center">
                 {ownTab?.forceAgentSelection ? (
-                  <span className="text-xs text-muted-foreground">
-                    {folder?.name ? `${folder.name} · ` : ""}
-                    {getAgentLabel(selectedAgent)}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openAgentsHome(
+                        folder ? { projectId: folder.id } : undefined
+                      )
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <span>{folder?.name ? `${folder.name} · ` : ""}</span>
+                    <span className="font-medium text-foreground">
+                      {getAgentLabel(selectedAgent)}
+                    </span>
+                  </button>
                 ) : (
                   <AgentSelector
-                  // The selector spans the row it is given (it has to measure
-                  // how much room it has), so the centring lives inside it now
-                  // — the `justify-center` above only centres a full-width box.
-                  align="center"
-                  defaultAgentType={selectedAgent}
-                  onSelect={handleAgentSelect}
-                  onFallback={handleAgentFallback}
-                  onAgentsLoaded={(agents) => {
-                    setAgentsLoaded(true)
-                    setUsableAgentCount(
-                      agents.filter((agent) => agent.enabled && agent.available)
-                        .length
-                    )
-                  }}
-                  onOpenAgentsSettings={handleOpenAgentsSettings}
-                  // Drafts remain switchable while connecting; saved
-                  // conversations retain the agent they were created with.
-                  disabled={dbConversationId != null}
+                    align="center"
+                    defaultAgentType={selectedAgent}
+                    onSelect={handleAgentSelect}
+                    onFallback={handleAgentFallback}
+                    onAgentsLoaded={(agents) => {
+                      setAgentsLoaded(true)
+                      setUsableAgentCount(
+                        agents.filter((agent) => agent.enabled && agent.available)
+                          .length
+                      )
+                    }}
+                    onOpenAgentsSettings={handleOpenAgentsSettings}
+                    disabled={dbConversationId != null}
                   />
                 )}
               </div>
@@ -2605,11 +2516,6 @@ const ConversationTabView = memo(function ConversationTabView({
               />
             </div>
             <div className="flex-1" />
-            {ownTab?.forceAgentSelection ? null : (
-              <div className="mx-auto w-full chat-content-w shrink-0 px-4 pb-6">
-                <WelcomeTip />
-              </div>
-            )}
           </div>
         </ScrollArea>
       ) : showDraftHeader ? (

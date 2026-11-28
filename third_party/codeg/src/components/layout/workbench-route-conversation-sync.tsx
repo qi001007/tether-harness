@@ -12,7 +12,6 @@ export function WorkbenchRouteConversationSync() {
   const { consumeRemoteActivation } = useTabActions()
   const { routeId, openAgentsHome, openConversations } = useWorkbenchRoute()
   const prevRef = useRef(activeTabId)
-  const initialSnapshotCheckedRef = useRef(false)
   // Hydrating the first active tab is not a user choosing to leave an
   // explicitly requested initial route such as Tether's Agent home.
   const hadInitialActiveTabRef = useRef(activeTabId !== null)
@@ -26,16 +25,14 @@ export function WorkbenchRouteConversationSync() {
       : false
 
     if (
-      !initialSnapshotCheckedRef.current &&
       tabsHydrated &&
-      hasLoadedTabsSnapshot()
+      hasLoadedTabsSnapshot() &&
+      routeId === "conversations" &&
+      rawTabs.length === 0
     ) {
-      initialSnapshotCheckedRef.current = true
-      if (routeId === "conversations" && rawTabs.length === 0) {
-        if (!activeTabChanged) consumeRemoteActivation()
-        openAgentsHome()
-        return
-      }
+      if (!activeTabChanged) consumeRemoteActivation()
+      openAgentsHome()
+      return
     }
 
     if (!activeTabChanged) return

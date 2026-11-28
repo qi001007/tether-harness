@@ -43791,40 +43791,6 @@ function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, de
           })
         }
       }
-      // A prompt typed into the embedded Codeg page. The frame has no node
-      // token, so it is relayed here over the same-origin proxy: server.mjs
-      // whitelists /dsh/live/ for the local device and injects the Bearer.
-      if (data && data.type === 'tether:dsh-prompt') {
-        const reply = (payload) => {
-          try { if (event.source && typeof event.source.postMessage === 'function') event.source.postMessage(payload, origin) } catch (_) { /* the frame is gone */ }
-        }
-        const id = typeof data.id === 'string' ? data.id.slice(0, 200) : ''
-        const sessionId = typeof data.sessionId === 'string' ? data.sessionId : ''
-        const text = typeof data.text === 'string' ? data.text : ''
-        let error = ''
-        if (!id) error = 'invalid id'
-        // The embedded page cannot know which Tether device serves it, so an
-        // omitted `device` means "this one": the frame was loaded through this
-        // app's own pane, and the relay below only ever targets localDevice.
-        else if (!localDevice || (data.device && data.device !== localDevice)) error = 'device_not_local'
-        else if (!/^[A-Za-z0-9._-]{1,200}$/.test(sessionId)) error = 'invalid session id'
-        else if (!text.trim() || text.length > 200000) error = 'invalid text'
-        if (error) { reply({ type: 'tether:dsh-prompt-result', id, ok: false, status: 0, error }); return }
-        fetch('/api/devices/' + encodeURIComponent(localDevice) + '/dsh/live/sessions/' + encodeURIComponent(sessionId) + '/prompt', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, mode: 'queue' })
-        }).then(async (response) => {
-          let body = null
-          try { body = await response.json() } catch (_) { /* empty body */ }
-          const failed = !response.ok || (body && body.accepted === false)
-          reply({ type: 'tether:dsh-prompt-result', id, ok: !failed, status: response.status,
-            error: failed ? String((body && (body.error || (body.detail && body.detail.error))) || ('HTTP ' + response.status)) : null })
-        }).catch((failure) => {
-          reply({ type: 'tether:dsh-prompt-result', id, ok: false, status: Number(failure && failure.status) || 0,
-            error: String((failure && failure.message) || failure || 'prompt failed') })
-        })
-      }
     }
     window.addEventListener('message', onMessage)
     return () => {

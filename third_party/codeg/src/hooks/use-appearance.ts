@@ -32,13 +32,6 @@ export function useZoomLevel() {
   return { zoomLevel, setZoomLevel }
 }
 
-/** 语义化包装：新会话欢迎页「模式选择区域」显示开关 */
-export function useWelcomeQuickActions() {
-  const { showWelcomeQuickActions, setShowWelcomeQuickActions } =
-    useAppearance()
-  return { showWelcomeQuickActions, setShowWelcomeQuickActions }
-}
-
 /** 聊天区域动画开关（设置页用）。 */
 export function useChatAnimationsSetting() {
   const { chatAnimations, setChatAnimations } = useAppearance()

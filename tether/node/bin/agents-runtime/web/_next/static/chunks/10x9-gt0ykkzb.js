@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,113399,e=>{"use strict";var t=e.i(271645),u=e.i(618566);e.s(["default",0,function(){let e=(0,u.useRouter)();return(0,t.useEffect)(()=>{e.replace("/settings/agents")},[e]),null}])}]);

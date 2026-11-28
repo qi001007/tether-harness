@@ -1,1 +1,0 @@
-(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,141327,i=>{"use strict";var p,e,s=i.i(305674);async function n(){return(0,s.invoke)("plugin:app|version")}i.i(133300),(p=e||(e={})).Nsis="nsis",p.Msi="msi",p.Deb="deb",p.Rpm="rpm",p.AppImage="appimage",p.App="app",i.s(["getVersion",0,n])}]);

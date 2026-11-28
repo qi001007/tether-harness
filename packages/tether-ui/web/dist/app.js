@@ -181005,54 +181005,6 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
           });
         }
       }
-      if (data && data.type === "tether:dsh-prompt") {
-        const reply2 = (payload) => {
-          try {
-            if (event.source && typeof event.source.postMessage === "function") event.source.postMessage(payload, origin);
-          } catch (_2) {
-          }
-        };
-        const id = typeof data.id === "string" ? data.id.slice(0, 200) : "";
-        const sessionId = typeof data.sessionId === "string" ? data.sessionId : "";
-        const text2 = typeof data.text === "string" ? data.text : "";
-        let error = "";
-        if (!id) error = "invalid id";
-        else if (!localDevice || data.device && data.device !== localDevice) error = "device_not_local";
-        else if (!/^[A-Za-z0-9._-]{1,200}$/.test(sessionId)) error = "invalid session id";
-        else if (!text2.trim() || text2.length > 2e5) error = "invalid text";
-        if (error) {
-          reply2({ type: "tether:dsh-prompt-result", id, ok: false, status: 0, error });
-          return;
-        }
-        fetch("/api/devices/" + encodeURIComponent(localDevice) + "/dsh/live/sessions/" + encodeURIComponent(sessionId) + "/prompt", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: text2, mode: "queue" })
-        }).then(async (response) => {
-          let body = null;
-          try {
-            body = await response.json();
-          } catch (_2) {
-          }
-          const failed = !response.ok || body && body.accepted === false;
-          reply2({
-            type: "tether:dsh-prompt-result",
-            id,
-            ok: !failed,
-            status: response.status,
-            error: failed ? String(body && (body.error || body.detail && body.detail.error) || "HTTP " + response.status) : null
-          });
-        }).catch((failure2) => {
-          reply2({
-            type: "tether:dsh-prompt-result",
-            id,
-            ok: false,
-            status: Number(failure2 && failure2.status) || 0,
-            error: String(failure2 && failure2.message || failure2 || "prompt failed")
-          });
-        });
-      }
     };
     window.addEventListener("message", onMessage);
     return () => {
