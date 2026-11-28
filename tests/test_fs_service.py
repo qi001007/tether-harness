@@ -1459,3 +1459,87 @@ def test_delete_moves_to_trash(env) -> None:
     assert not target.exists()
     assert Path(result["trash"]).exists()
     assert Path(result["trash"]).parent.name == ".tether-trash"
+
+
+def test_xlsx_preview_and_atomic_workbook_saveback(env) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    svc: FsService = env["svc"]
+    folder = env["root"] / "sheets"
+    folder.mkdir()
+    target = folder / "budget.xlsx"
+    wb = openpyxl.Workbook()
+    ws1 = wb.active
+    ws1.title = "Summary"
+    ws1.append(["Item", "Amount"])
+    ws1.append(["Server", 120])
+    ws1.append(["Total", "=SUM(B2:B2)"])
+    ws2 = wb.create_sheet("Notes")
+    ws2.append(["Code", "Memo"])
+    ws2.append(["00123", "keep leading zero"])
+    wb.save(target)
+    wb.close()
+
+    preview = svc.dispatch("preview", {"path": str(target)})
+    assert preview["kind"] == "text"
+    assert preview["editable"] is True
+    assert "Summary" in [s["name"] for s in preview["workbook"]["sheets"]]
+    assert preview["workbook"]["sheets"][0]["rows"][2] == ["Total", "=SUM(B2:B2)"]
+    assert preview["workbook"]["sheets"][1]["rows"][1] == ["00123", "keep leading zero"]
+    assert "Server\t120" in preview["text"]
+
+    next_wb = {
+        "sheets": [
+            {
+                "name": "Summary",
+                "rows": [
+                    ["Item", "Amount"],
+                    ["Server", "120"],
+                    ["Storage", "80.5"],
+                    ["Total", "=SUM(B2:B3)"],
+                ],
+            },
+            {
+                "name": "Extra",
+                "rows": [["Key", "Val"], ["00123", "ok"]],
+            },
+        ]
+    }
+    saved = svc.dispatch("write", {
+        "path": str(target),
+        "workbook": next_wb,
+        "expected_version": preview["version"],
+    })
+    assert saved["version"] != preview["version"]
+
+    reloaded = svc.dispatch("preview", {"path": str(target)})
+    assert [s["name"] for s in reloaded["workbook"]["sheets"]] == ["Summary", "Extra"]
+    assert reloaded["workbook"]["sheets"][0]["rows"][3] == ["Total", "=SUM(B2:B3)"]
+    wb_check = openpyxl.load_workbook(target, data_only=False)
+    try:
+        assert wb_check["Summary"]["B2"].value == 120
+        assert wb_check["Summary"]["B3"].value == 80.5
+        assert wb_check["Extra"]["A2"].value == "00123"
+    finally:
+        wb_check.close()
+
+    with pytest.raises(FsError) as caught:
+        svc.dispatch("write", {
+            "path": str(target),
+            "workbook": next_wb,
+            "expected_version": preview["version"],
+        })
+    assert caught.value.code == "conflict"
+
+
+def test_xlsm_preview_is_read_only_with_reason(env) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+    svc: FsService = env["svc"]
+    target = env["root"] / "macro.xlsm"
+    wb = openpyxl.Workbook()
+    wb.active.append(["A", "B"])
+    wb.save(target)
+    wb.close()
+
+    preview = svc.dispatch("preview", {"path": str(target)})
+    assert preview["editable"] is False
+    assert preview["workbook"]["read_only_reason"]

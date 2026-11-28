@@ -305,8 +305,41 @@ export function TargetFileExplorer({
         style: { border: 0, borderRadius: 6, padding: '4px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' }
       }, '清除搜索') : null)
   } else {
+    const activePath = selectedPath || ((selectedPaths && selectedPaths.length) ? selectedPaths[selectedPaths.length - 1] : '')
+    const handleListKeyDown = (event) => {
+      if (disabled || event.altKey || event.ctrlKey || event.metaKey) return
+      const tag = event.target && event.target.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (event.key === 'F5') {
+        if (path && onRefresh) { event.preventDefault(); onRefresh(path) }
+        return
+      }
+      if (!visible.length) return
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        const idx = visible.findIndex((item) => item.path === activePath)
+        const nextIdx = event.key === 'ArrowDown'
+          ? (idx < 0 ? 0 : Math.min(visible.length - 1, idx + 1))
+          : (idx <= 0 ? 0 : idx - 1)
+        const nextItem = visible[nextIdx]
+        if (!nextItem) return
+        if (selectionMode === 'multiple' && onSelectionChange) onSelectionChange([nextItem.path])
+        if (onSelect) onSelect(nextItem)
+        const host = event.currentTarget
+        const rows = host && host.querySelectorAll ? Array.from(host.querySelectorAll('[data-row-path]')) : []
+        const rowEl = rows.find((el) => el.getAttribute('data-row-path') === nextItem.path)
+        if (rowEl && typeof rowEl.scrollIntoView === 'function') rowEl.scrollIntoView({ block: 'nearest' })
+        return
+      }
+      if (event.key === 'Enter') {
+        const current = visible.find((item) => item.path === activePath)
+        if (current && onOpen) { event.preventDefault(); onOpen(current) }
+      }
+    }
     body = h('div', {
-      style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px', userSelect: 'none' },
+      tabIndex: 0,
+      onKeyDown: handleListKeyDown,
+      style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px', userSelect: 'none', outline: 'none' },
       onPointerDown: beginBand,
       onContextMenu: (event) => {
         const target = event.target
@@ -505,12 +538,12 @@ export function TargetFileExplorer({
       }
     }) : null,
     innerMenu ? h('div', {
-      role: 'menu', onMouseDown: (event) => event.stopPropagation(),
+      role: 'menu', className: 'tether-glass', onMouseDown: (event) => event.stopPropagation(),
       style: {
         position: 'fixed', left: Math.max(8, Math.min(innerMenu.x, window.innerWidth - 180)),
         top: Math.max(8, Math.min(innerMenu.y, window.innerHeight - 110)),
-        zIndex: 2147483000, minWidth: 150, padding: 4, background: C.bg,
-        borderRadius: 8, boxShadow: '0 8px 24px rgba(16,24,40,.18)', border: '1px solid ' + C.line
+        zIndex: 2147483000, minWidth: 150, padding: 4,
+        borderRadius: 8, boxShadow: 'var(--tether-glass-shadow, 0 8px 24px rgba(16,24,40,.18))'
       }
     }, (innerMenu.item
       ? [['复制路径', () => copyText(innerMenu.item.path)], ['刷新', () => { if (path && onRefresh) onRefresh(path) }]]

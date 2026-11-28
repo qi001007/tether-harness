@@ -175961,10 +175961,47 @@ function TargetFileExplorer({
       }, "\u6E05\u9664\u641C\u7D22") : null
     );
   } else {
+    const activePath = selectedPath || (selectedPaths && selectedPaths.length ? selectedPaths[selectedPaths.length - 1] : "");
+    const handleListKeyDown = (event) => {
+      if (disabled || event.altKey || event.ctrlKey || event.metaKey) return;
+      const tag2 = event.target && event.target.tagName;
+      if (tag2 === "INPUT" || tag2 === "TEXTAREA" || tag2 === "SELECT") return;
+      if (event.key === "F5") {
+        if (path && onRefresh) {
+          event.preventDefault();
+          onRefresh(path);
+        }
+        return;
+      }
+      if (!visible.length) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const idx = visible.findIndex((item) => item.path === activePath);
+        const nextIdx = event.key === "ArrowDown" ? idx < 0 ? 0 : Math.min(visible.length - 1, idx + 1) : idx <= 0 ? 0 : idx - 1;
+        const nextItem = visible[nextIdx];
+        if (!nextItem) return;
+        if (selectionMode === "multiple" && onSelectionChange) onSelectionChange([nextItem.path]);
+        if (onSelect) onSelect(nextItem);
+        const host = event.currentTarget;
+        const rows = host && host.querySelectorAll ? Array.from(host.querySelectorAll("[data-row-path]")) : [];
+        const rowEl = rows.find((el2) => el2.getAttribute("data-row-path") === nextItem.path);
+        if (rowEl && typeof rowEl.scrollIntoView === "function") rowEl.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      if (event.key === "Enter") {
+        const current = visible.find((item) => item.path === activePath);
+        if (current && onOpen) {
+          event.preventDefault();
+          onOpen(current);
+        }
+      }
+    };
     body = h3(
       "div",
       {
-        style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "0 8px 18px", userSelect: "none" },
+        tabIndex: 0,
+        onKeyDown: handleListKeyDown,
+        style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "0 8px 18px", userSelect: "none", outline: "none" },
         onPointerDown: beginBand,
         onContextMenu: (event) => {
           const target = event.target;
@@ -176337,6 +176374,7 @@ function TargetFileExplorer({
     }) : null,
     innerMenu ? h3("div", {
       role: "menu",
+      className: "tether-glass",
       onMouseDown: (event) => event.stopPropagation(),
       style: {
         position: "fixed",
@@ -176345,10 +176383,8 @@ function TargetFileExplorer({
         zIndex: 2147483e3,
         minWidth: 150,
         padding: 4,
-        background: C2.bg,
         borderRadius: 8,
-        boxShadow: "0 8px 24px rgba(16,24,40,.18)",
-        border: "1px solid " + C2.line
+        boxShadow: "var(--tether-glass-shadow, 0 8px 24px rgba(16,24,40,.18))"
       }
     }, (innerMenu.item ? [["\u590D\u5236\u8DEF\u5F84", () => copyText(innerMenu.item.path)], ["\u5237\u65B0", () => {
       if (path && onRefresh) onRefresh(path);
@@ -181887,6 +181923,1369 @@ function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, i
   );
 }
 
+// src/spreadsheet-editor.js
+var FORMULA_NUMBER_RE = /^-?\d+(?:\.\d+)?$/;
+var DISPLAY_NUMBER_RE = /^[-+]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?%?$/;
+function colIndexToLetter(index) {
+  let n2 = Math.floor(Number(index));
+  if (!Number.isFinite(n2) || n2 < 0) return "";
+  let out = "";
+  while (n2 >= 0) {
+    out = String.fromCharCode(65 + n2 % 26) + out;
+    n2 = Math.floor(n2 / 26) - 1;
+  }
+  return out;
+}
+function letterToColIndex(letters) {
+  const clean = String(letters || "").toUpperCase().replace(/[^A-Z]/g, "");
+  if (!clean) return -1;
+  let out = 0;
+  for (let i = 0; i < clean.length; i += 1) {
+    out = out * 26 + (clean.charCodeAt(i) - 64);
+  }
+  return out - 1;
+}
+function parseCellRef(ref) {
+  const match2 = /^(\$?)([A-Z]{1,3})(\$?)([1-9]\d*)$/i.exec(String(ref || "").trim());
+  if (!match2) return null;
+  const col = letterToColIndex(match2[2]);
+  const row = Number(match2[4]) - 1;
+  if (col < 0 || row < 0) return null;
+  return { row, col, colAbs: match2[1] === "$", rowAbs: match2[3] === "$" };
+}
+function shiftFormulaRefs(formula, dRow, dCol) {
+  const text2 = String(formula == null ? "" : formula);
+  if (!text2.startsWith("=")) return text2;
+  const parts = text2.split(/("(?:[^"]|"")*")/g);
+  for (let i = 0; i < parts.length; i += 2) {
+    parts[i] = parts[i].replace(
+      /(^|[^A-Za-z0-9_$])(\$?)([A-Z]{1,3})(\$?)([1-9]\d*)(?![A-Za-z0-9_(])/gi,
+      (_full, prefix, cAbs, colStr, rAbs, rowStr) => {
+        const colIdx = letterToColIndex(colStr);
+        const rowIdx = Number(rowStr) - 1;
+        if (colIdx < 0 || rowIdx < 0) return prefix + cAbs + colStr + rAbs + rowStr;
+        const nextCol = cAbs ? colIdx : Math.max(0, colIdx + dCol);
+        const nextRow = rAbs ? rowIdx : Math.max(0, rowIdx + dRow);
+        return prefix + cAbs + colIndexToLetter(nextCol) + rAbs + (nextRow + 1);
+      }
+    );
+  }
+  return parts.join("");
+}
+function toNumeric(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  const s15 = String(value == null ? "" : value).trim();
+  if (!s15) return null;
+  if (FORMULA_NUMBER_RE.test(s15)) return Number(s15);
+  return null;
+}
+function tokenizeFormula(expr) {
+  const tokens = [];
+  let i = 0;
+  while (i < expr.length) {
+    const ch = expr[i];
+    if (/\s/.test(ch)) {
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      let val = "";
+      i += 1;
+      while (i < expr.length) {
+        if (expr[i] === '"') {
+          if (expr[i + 1] === '"') {
+            val += '"';
+            i += 2;
+            continue;
+          }
+          i += 1;
+          break;
+        }
+        val += expr[i];
+        i += 1;
+      }
+      tokens.push({ type: "str", value: val });
+      continue;
+    }
+    if (/\d/.test(ch) || ch === "." && /\d/.test(expr[i + 1] || "")) {
+      let end = i;
+      while (end < expr.length && /[\d.]/.test(expr[end])) end += 1;
+      tokens.push({ type: "num", value: Number(expr.slice(i, end)) });
+      i = end;
+      continue;
+    }
+    const two = expr.slice(i, i + 2);
+    if (two === "<=" || two === ">=" || two === "<>" || two === "!=") {
+      tokens.push({ type: "op", value: two });
+      i += 2;
+      continue;
+    }
+    if ("+-*/=<>(),:".includes(ch)) {
+      tokens.push({ type: ch === "(" || ch === ")" || ch === "," || ch === ":" ? ch : "op", value: ch });
+      i += 1;
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(ch)) {
+      let end = i + 1;
+      while (end < expr.length && /[A-Za-z0-9_$]/.test(expr[end])) end += 1;
+      const word = expr.slice(i, end);
+      i = end;
+      tokens.push({ type: "ident", value: word });
+      continue;
+    }
+    throw new Error("#ERROR!");
+  }
+  return tokens;
+}
+function evalSpreadsheetFormula(raw, getCell, visited = /* @__PURE__ */ new Set()) {
+  if (raw == null) return "";
+  const text2 = String(raw);
+  if (!text2.startsWith("=")) return text2;
+  const expr = text2.slice(1).trim();
+  if (!expr) return "";
+  let tokens;
+  try {
+    tokens = tokenizeFormula(expr);
+  } catch (err) {
+    return err.message || "#ERROR!";
+  }
+  let pos = 0;
+  const peek = () => tokens[pos] || null;
+  const next = () => tokens[pos++] || null;
+  const evalCellAt = (row, col) => {
+    const key = row + ":" + col;
+    if (visited.has(key)) throw new Error("#CYCLE!");
+    const nextVisited = new Set(visited);
+    nextVisited.add(key);
+    const rawVal = getCell ? getCell(row, col) : "";
+    if (typeof rawVal === "string" && rawVal.startsWith("=")) {
+      const res = evalSpreadsheetFormula(rawVal, getCell, nextVisited);
+      if (typeof res === "string" && res.startsWith("#")) throw new Error(res);
+      return res;
+    }
+    return rawVal == null ? "" : rawVal;
+  };
+  const collectArgItems = () => {
+    const startRef = parseCellRef(peek() && peek().type === "ident" ? peek().value : "");
+    if (startRef && tokens[pos + 1] && tokens[pos + 1].type === ":" && tokens[pos + 2] && tokens[pos + 2].type === "ident") {
+      const endRef = parseCellRef(tokens[pos + 2].value);
+      if (endRef) {
+        pos += 3;
+        const out = [];
+        const rMin = Math.min(startRef.row, endRef.row);
+        const rMax = Math.max(startRef.row, endRef.row);
+        const cMin = Math.min(startRef.col, endRef.col);
+        const cMax = Math.max(startRef.col, endRef.col);
+        for (let r = rMin; r <= rMax; r += 1) {
+          for (let c = cMin; c <= cMax; c += 1) out.push(evalCellAt(r, c));
+        }
+        return out;
+      }
+    }
+    return [parseCmp()];
+  };
+  const parsePrimary = () => {
+    const tok = peek();
+    if (!tok) throw new Error("#ERROR!");
+    if (tok.type === "num" || tok.type === "str") {
+      next();
+      return tok.value;
+    }
+    if (tok.type === "(") {
+      next();
+      const val = parseCmp();
+      if (!peek() || peek().type !== ")") throw new Error("#ERROR!");
+      next();
+      return val;
+    }
+    if (tok.type === "ident") {
+      next();
+      const upper = tok.value.toUpperCase();
+      if (peek() && peek().type === "(") {
+        next();
+        const rawArgs = [];
+        const flatArgs = [];
+        if (peek() && peek().type !== ")") {
+          while (true) {
+            const items = collectArgItems();
+            rawArgs.push(items.length === 1 ? items[0] : items);
+            flatArgs.push(...items);
+            if (peek() && peek().type === ",") {
+              next();
+              continue;
+            }
+            break;
+          }
+        }
+        if (!peek() || peek().type !== ")") throw new Error("#ERROR!");
+        next();
+        const nums = () => flatArgs.map(toNumeric).filter((v2) => v2 !== null);
+        if (upper === "SUM") return nums().reduce((acc, v2) => acc + v2, 0);
+        if (upper === "AVERAGE" || upper === "AVG") {
+          const list2 = nums();
+          if (!list2.length) throw new Error("#DIV/0!");
+          return list2.reduce((acc, v2) => acc + v2, 0) / list2.length;
+        }
+        if (upper === "COUNT") return nums().length;
+        if (upper === "COUNTA") return flatArgs.filter((v2) => String(v2 == null ? "" : v2).trim() !== "").length;
+        if (upper === "MIN") {
+          const list2 = nums();
+          return list2.length ? Math.min(...list2) : 0;
+        }
+        if (upper === "MAX") {
+          const list2 = nums();
+          return list2.length ? Math.max(...list2) : 0;
+        }
+        if (upper === "ABS") {
+          const n2 = toNumeric(rawArgs[0]);
+          if (n2 === null) throw new Error("#ERROR!");
+          return Math.abs(n2);
+        }
+        if (upper === "ROUND") {
+          const n2 = toNumeric(rawArgs[0]);
+          const digits = rawArgs.length > 1 ? Number(toNumeric(rawArgs[1]) || 0) : 0;
+          if (n2 === null || !Number.isFinite(digits)) throw new Error("#ERROR!");
+          const factor2 = 10 ** Math.trunc(digits);
+          return Math.round(n2 * factor2) / factor2;
+        }
+        if (upper === "IF") {
+          const cond = rawArgs[0];
+          const truthy = typeof cond === "boolean" ? cond : toNumeric(cond) !== null ? toNumeric(cond) !== 0 : String(cond || "").toUpperCase() === "TRUE";
+          return truthy ? rawArgs[1] ?? "" : rawArgs[2] ?? "";
+        }
+        throw new Error("#NAME?");
+      }
+      if (upper === "TRUE") return true;
+      if (upper === "FALSE") return false;
+      const ref = parseCellRef(tok.value);
+      if (ref) return evalCellAt(ref.row, ref.col);
+      throw new Error("#NAME?");
+    }
+    throw new Error("#ERROR!");
+  };
+  const parseUnary = () => {
+    const tok = peek();
+    if (tok && tok.type === "op" && (tok.value === "-" || tok.value === "+")) {
+      next();
+      const val = parseUnary();
+      const num = val === "" ? 0 : toNumeric(val);
+      if (num === null) throw new Error("#ERROR!");
+      return tok.value === "-" ? -num : num;
+    }
+    return parsePrimary();
+  };
+  const parseMul = () => {
+    let left = parseUnary();
+    while (peek() && peek().type === "op" && (peek().value === "*" || peek().value === "/")) {
+      const op = next().value;
+      const right = parseUnary();
+      const a = left === "" ? 0 : toNumeric(left);
+      const b2 = right === "" ? 0 : toNumeric(right);
+      if (a === null || b2 === null) throw new Error("#ERROR!");
+      if (op === "/") {
+        if (b2 === 0) throw new Error("#DIV/0!");
+        left = a / b2;
+      } else {
+        left = a * b2;
+      }
+    }
+    return left;
+  };
+  const parseAdd = () => {
+    let left = parseMul();
+    while (peek() && peek().type === "op" && (peek().value === "+" || peek().value === "-")) {
+      const op = next().value;
+      const right = parseMul();
+      const a = left === "" ? 0 : toNumeric(left);
+      const b2 = right === "" ? 0 : toNumeric(right);
+      if (a === null || b2 === null) throw new Error("#ERROR!");
+      left = op === "+" ? a + b2 : a - b2;
+    }
+    return left;
+  };
+  const parseCmp = () => {
+    let left = parseAdd();
+    while (peek() && peek().type === "op" && ["=", "<", ">", "<=", ">=", "<>", "!="].includes(peek().value)) {
+      const op = next().value;
+      const right = parseAdd();
+      const aNum = toNumeric(left);
+      const bNum = toNumeric(right);
+      const cmp3 = aNum !== null && bNum !== null ? aNum - bNum : String(left ?? "").localeCompare(String(right ?? ""));
+      if (op === "=") left = cmp3 === 0;
+      else if (op === "<>" || op === "!=") left = cmp3 !== 0;
+      else if (op === "<") left = cmp3 < 0;
+      else if (op === ">") left = cmp3 > 0;
+      else if (op === "<=") left = cmp3 <= 0;
+      else if (op === ">=") left = cmp3 >= 0;
+    }
+    return left;
+  };
+  try {
+    const value = parseCmp();
+    if (pos !== tokens.length) return "#ERROR!";
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) return "#ERROR!";
+      return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(12)));
+    }
+    if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+    return String(value == null ? "" : value);
+  } catch (err) {
+    return err.message || "#ERROR!";
+  }
+}
+function parseTsvClipboard(text2) {
+  const source = String(text2 == null ? "" : text2).replace(/\r\n?/g, "\n").replace(/\n$/, "");
+  if (!source) return [[""]];
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (source[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+          continue;
+        }
+        inQuotes = false;
+        continue;
+      }
+      cell += ch;
+      continue;
+    }
+    if (ch === '"' && cell === "") {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === "	") {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+    if (ch === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+    cell += ch;
+  }
+  row.push(cell);
+  rows.push(row);
+  return rows;
+}
+function serializeTsvClipboard(rows) {
+  return (rows || []).map((row) => (row || []).map((cell) => {
+    const text2 = String(cell == null ? "" : cell);
+    return /[\t\n"]/.test(text2) ? '"' + text2.replace(/"/g, '""') + '"' : text2;
+  }).join("	")).join("\n");
+}
+function fillRangeValues(sourceRows, targetRowCount, targetColCount, direction = "down") {
+  const srcR = Math.max(1, sourceRows.length);
+  const srcC = Math.max(1, ...sourceRows.map((r) => r ? r.length : 0));
+  const out = Array.from({ length: targetRowCount }, () => new Array(targetColCount).fill(""));
+  const vertical = direction === "down" || direction === "up";
+  if (vertical) {
+    for (let c = 0; c < targetColCount; c += 1) {
+      const colSrc = Array.from({ length: srcR }, (_2, r) => String((sourceRows[r] && sourceRows[r][c % srcC]) ?? ""));
+      const nums = colSrc.map((v2) => FORMULA_NUMBER_RE.test(v2.trim()) ? Number(v2.trim()) : null);
+      let step = null;
+      if (srcR >= 2 && nums.every((v2) => v2 !== null)) {
+        const diff = nums[1] - nums[0];
+        if (nums.every((v2, idx) => idx === 0 || Math.abs(v2 - nums[idx - 1] - diff) < 1e-9)) step = diff;
+      }
+      for (let r = 0; r < targetRowCount; r += 1) {
+        if (direction === "down") {
+          if (r < srcR) out[r][c] = colSrc[r];
+          else if (step !== null) out[r][c] = String(Number((nums[srcR - 1] + step * (r - srcR + 1)).toPrecision(12)));
+          else {
+            const baseIdx = r % srcR;
+            const base = colSrc[baseIdx];
+            out[r][c] = base.startsWith("=") ? shiftFormulaRefs(base, r - baseIdx, 0) : base;
+          }
+        } else {
+          const offsetFromBottom = targetRowCount - 1 - r;
+          if (offsetFromBottom < srcR) out[r][c] = colSrc[srcR - 1 - offsetFromBottom];
+          else if (step !== null) out[r][c] = String(Number((nums[0] - step * (offsetFromBottom - srcR + 1)).toPrecision(12)));
+          else {
+            const baseIdx = (srcR - 1 - offsetFromBottom % srcR) % srcR;
+            const base = colSrc[baseIdx];
+            out[r][c] = base.startsWith("=") ? shiftFormulaRefs(base, -(offsetFromBottom - (srcR - 1 - baseIdx)), 0) : base;
+          }
+        }
+      }
+    }
+  } else {
+    for (let r = 0; r < targetRowCount; r += 1) {
+      const rowSrc = Array.from({ length: srcC }, (_2, c) => String((sourceRows[r % srcR] && sourceRows[r % srcR][c]) ?? ""));
+      const nums = rowSrc.map((v2) => FORMULA_NUMBER_RE.test(v2.trim()) ? Number(v2.trim()) : null);
+      let step = null;
+      if (srcC >= 2 && nums.every((v2) => v2 !== null)) {
+        const diff = nums[1] - nums[0];
+        if (nums.every((v2, idx) => idx === 0 || Math.abs(v2 - nums[idx - 1] - diff) < 1e-9)) step = diff;
+      }
+      for (let c = 0; c < targetColCount; c += 1) {
+        if (direction === "right") {
+          if (c < srcC) out[r][c] = rowSrc[c];
+          else if (step !== null) out[r][c] = String(Number((nums[srcC - 1] + step * (c - srcC + 1)).toPrecision(12)));
+          else {
+            const baseIdx = c % srcC;
+            const base = rowSrc[baseIdx];
+            out[r][c] = base.startsWith("=") ? shiftFormulaRefs(base, 0, c - baseIdx) : base;
+          }
+        } else {
+          const offsetFromRight = targetColCount - 1 - c;
+          if (offsetFromRight < srcC) out[r][c] = rowSrc[srcC - 1 - offsetFromRight];
+          else if (step !== null) out[r][c] = String(Number((nums[0] - step * (offsetFromRight - srcC + 1)).toPrecision(12)));
+          else {
+            const baseIdx = (srcC - 1 - offsetFromRight % srcC) % srcC;
+            const base = rowSrc[baseIdx];
+            out[r][c] = base.startsWith("=") ? shiftFormulaRefs(base, 0, -(offsetFromRight - (srcC - 1 - baseIdx))) : base;
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+function computeSelectionStats(rows, range2, resolveValue) {
+  if (!range2) return { count: 0, numericCount: 0, sum: 0, avg: 0, min: null, max: null };
+  const r0 = Math.min(range2.r0, range2.r1);
+  const r1 = Math.max(range2.r0, range2.r1);
+  const c0 = Math.min(range2.c0, range2.c1);
+  const c1 = Math.max(range2.c0, range2.c1);
+  let count = 0;
+  let numericCount = 0;
+  let sum = 0;
+  let min = null;
+  let max = null;
+  for (let r = r0; r <= r1; r += 1) {
+    for (let c = c0; c <= c1; c += 1) {
+      const disp = resolveValue ? resolveValue(r, c) : (rows[r] && rows[r][c]) ?? "";
+      const text2 = String(disp == null ? "" : disp).trim();
+      if (!text2) continue;
+      count += 1;
+      if (!text2.startsWith("#") && FORMULA_NUMBER_RE.test(text2)) {
+        const n2 = Number(text2);
+        numericCount += 1;
+        sum += n2;
+        if (min === null || n2 < min) min = n2;
+        if (max === null || n2 > max) max = n2;
+      }
+    }
+  }
+  return {
+    count,
+    numericCount,
+    sum,
+    avg: numericCount ? sum / numericCount : 0,
+    min,
+    max
+  };
+}
+function inferAutoSumPlacements(rows, sel, resolveValue) {
+  if (!sel) return [];
+  const r0 = Math.min(sel.r0, sel.r1);
+  const r1 = Math.max(sel.r0, sel.r1);
+  const c0 = Math.min(sel.c0, sel.c1);
+  const c1 = Math.max(sel.c0, sel.c1);
+  const isNum = (r, c) => {
+    const val = String((resolveValue ? resolveValue(r, c) : (rows[r] && rows[r][c]) ?? "") || "").trim();
+    return val !== "" && FORMULA_NUMBER_RE.test(val);
+  };
+  if (r0 === r1 && c0 === c1) {
+    let top = r0 - 1;
+    while (top >= 0 && isNum(top, c0)) top -= 1;
+    top += 1;
+    if (top <= r0 - 1) {
+      const col = colIndexToLetter(c0);
+      return [{ row: r0, col: c0, formula: "=SUM(" + col + (top + 1) + ":" + col + r0 + ")" }];
+    }
+    let left = c0 - 1;
+    while (left >= 0 && isNum(r0, left)) left -= 1;
+    left += 1;
+    if (left <= c0 - 1) {
+      return [{ row: r0, col: c0, formula: "=SUM(" + colIndexToLetter(left) + (r0 + 1) + ":" + colIndexToLetter(c0 - 1) + (r0 + 1) + ")" }];
+    }
+    return [{ row: r0, col: c0, formula: "=SUM()" }];
+  }
+  if (r1 > r0) {
+    const targetRow = r1 + 1;
+    const placements = [];
+    for (let c = c0; c <= c1; c += 1) {
+      const col = colIndexToLetter(c);
+      placements.push({ row: targetRow, col: c, formula: "=SUM(" + col + (r0 + 1) + ":" + col + (r1 + 1) + ")" });
+    }
+    return placements;
+  }
+  return [{
+    row: r0,
+    col: c1 + 1,
+    formula: "=SUM(" + colIndexToLetter(c0) + (r0 + 1) + ":" + colIndexToLetter(c1) + (r0 + 1) + ")"
+  }];
+}
+function normalizeSheetGrid(sheetRows, minRows = 12, minCols = 8) {
+  const rowCount = Math.max(minRows, (sheetRows || []).length);
+  const colCount = Math.max(minCols, ...(sheetRows || []).map((r) => r ? r.length : 0));
+  const grid = [];
+  for (let r = 0; r < rowCount; r += 1) {
+    const src = sheetRows && sheetRows[r] || [];
+    const row = [];
+    for (let c = 0; c < colCount; c += 1) row.push(src[c] == null ? "" : String(src[c]));
+    grid.push(row);
+  }
+  return grid;
+}
+function trimWorkbookForSave(workbook) {
+  return {
+    ...workbook,
+    sheets: (workbook.sheets || []).map((sheet) => {
+      const rows = (sheet.rows || []).map((row) => {
+        const copy = [...row];
+        while (copy.length && copy[copy.length - 1] === "") copy.pop();
+        return copy;
+      });
+      while (rows.length && !rows[rows.length - 1].length) rows.pop();
+      return { name: sheet.name, rows };
+    })
+  };
+}
+function createSpreadsheetEditor(React2) {
+  const h3 = React2.createElement;
+  return function SpreadsheetEditor({
+    colors,
+    Glyph,
+    workbook,
+    readOnly = false,
+    readOnlyReason = "",
+    dirty = false,
+    busy = false,
+    singleSheet = false,
+    onChange,
+    onSave
+  }) {
+    const C2 = colors || {};
+    const [sheetIndex, setSheetIndex] = React2.useState(0);
+    const [sel, setSel] = React2.useState({ r0: 0, c0: 0, r1: 0, c1: 0 });
+    const [editing, setEditing] = React2.useState(null);
+    const [filterText, setFilterText] = React2.useState("");
+    const [renamingSheet, setRenamingSheet] = React2.useState(null);
+    const [historyPast, setHistoryPast] = React2.useState([]);
+    const [historyFuture, setHistoryFuture] = React2.useState([]);
+    const [fillPreview, setFillPreview] = React2.useState(null);
+    const rootRef = React2.useRef(null);
+    const editInputRef = React2.useRef(null);
+    const sheets = workbook && Array.isArray(workbook.sheets) && workbook.sheets.length ? workbook.sheets : [{ name: "Sheet1", rows: [] }];
+    const safeSheetIdx = Math.min(sheetIndex, sheets.length - 1);
+    const currentSheet = sheets[safeSheetIdx];
+    const grid = React2.useMemo(() => normalizeSheetGrid(currentSheet.rows), [currentSheet]);
+    const rowCount = grid.length;
+    const colCount = grid[0] ? grid[0].length : 8;
+    const workbookRef = React2.useRef(workbook);
+    workbookRef.current = workbook;
+    const onSaveRef = React2.useRef(onSave);
+    onSaveRef.current = onSave;
+    React2.useEffect(() => {
+      setSheetIndex(0);
+      setSel({ r0: 0, c0: 0, r1: 0, c1: 0 });
+      setEditing(null);
+      setFilterText("");
+      setHistoryPast([]);
+      setHistoryFuture([]);
+    }, [workbook && workbook.sheets && workbook.sheets[0] && workbook.sheets[0].name, readOnly]);
+    const getRaw = React2.useCallback((r, c) => (grid[r] && grid[r][c]) ?? "", [grid]);
+    const evaluatedGrid = React2.useMemo(() => {
+      const cache = /* @__PURE__ */ new Map();
+      const readVal = (r, c) => {
+        if (r < 0 || c < 0 || r >= rowCount) return "";
+        const key = r + ":" + c;
+        if (cache.has(key)) return cache.get(key);
+        const raw = getRaw(r, c);
+        if (typeof raw === "string" && raw.startsWith("=")) {
+          const val = evalSpreadsheetFormula(raw, getRaw);
+          cache.set(key, val);
+          return val;
+        }
+        cache.set(key, raw);
+        return raw;
+      };
+      return readVal;
+    }, [grid, getRaw, rowCount]);
+    const commitWorkbook = React2.useCallback((nextSheets, pushHistory = true) => {
+      if (readOnly) return;
+      const current = workbookRef.current || { format: "xlsx", sheets };
+      if (pushHistory) {
+        setHistoryPast((prev) => [...prev.slice(-49), current]);
+        setHistoryFuture([]);
+      }
+      const nextWorkbook = { ...current, sheets: nextSheets };
+      if (onChange) onChange(nextWorkbook);
+    }, [readOnly, sheets, onChange]);
+    const updateCurrentGrid = React2.useCallback((mutator, pushHistory = true) => {
+      if (readOnly) return;
+      const draftGrid = grid.map((row) => [...row]);
+      mutator(draftGrid);
+      const nextSheets = sheets.map((s15, idx) => idx === safeSheetIdx ? { ...s15, rows: draftGrid } : s15);
+      commitWorkbook(nextSheets, pushHistory);
+    }, [readOnly, grid, sheets, safeSheetIdx, commitWorkbook]);
+    const undo = React2.useCallback(() => {
+      if (readOnly || !historyPast.length) return;
+      const prev = historyPast[historyPast.length - 1];
+      setHistoryPast((list2) => list2.slice(0, -1));
+      setHistoryFuture((list2) => [workbookRef.current, ...list2.slice(0, 49)]);
+      if (onChange) onChange(prev);
+    }, [readOnly, historyPast, onChange]);
+    const redo = React2.useCallback(() => {
+      if (readOnly || !historyFuture.length) return;
+      const next = historyFuture[0];
+      setHistoryFuture((list2) => list2.slice(1));
+      setHistoryPast((list2) => [...list2.slice(-49), workbookRef.current]);
+      if (onChange) onChange(next);
+    }, [readOnly, historyFuture, onChange]);
+    const normSel = React2.useMemo(() => ({
+      r0: Math.min(sel.r0, sel.r1),
+      r1: Math.max(sel.r0, sel.r1),
+      c0: Math.min(sel.c0, sel.c1),
+      c1: Math.max(sel.c0, sel.c1)
+    }), [sel]);
+    const visibleRowIndices = React2.useMemo(() => {
+      const term = filterText.trim().toLowerCase();
+      const indices = [];
+      for (let r = 0; r < rowCount; r += 1) {
+        if (!term) {
+          indices.push(r);
+          continue;
+        }
+        const matched = grid[r].some((cell, c) => String(cell || "").toLowerCase().includes(term) || String(evaluatedGrid(r, c) || "").toLowerCase().includes(term));
+        if (matched) indices.push(r);
+      }
+      return indices;
+    }, [filterText, rowCount, grid, evaluatedGrid]);
+    const stats = React2.useMemo(() => computeSelectionStats(grid, normSel, evaluatedGrid), [grid, normSel, evaluatedGrid]);
+    const activeRaw = getRaw(sel.r0, sel.c0);
+    const activeRefLabel = colIndexToLetter(sel.c0) + (sel.r0 + 1);
+    const commitEdit = React2.useCallback((moveDr = 0, moveDc = 0) => {
+      if (!editing) return;
+      const { row, col, value } = editing;
+      setEditing(null);
+      if (!readOnly && getRaw(row, col) !== value) {
+        updateCurrentGrid((draftGrid) => {
+          draftGrid[row][col] = value;
+        });
+      }
+      if (moveDr || moveDc) {
+        const nextR = Math.max(0, Math.min(rowCount - 1, row + moveDr));
+        const nextC = Math.max(0, Math.min(colCount - 1, col + moveDc));
+        setSel({ r0: nextR, c0: nextC, r1: nextR, c1: nextC });
+        if (rootRef.current) rootRef.current.focus();
+      }
+    }, [editing, readOnly, getRaw, updateCurrentGrid, rowCount, colCount]);
+    const handleAutoSum = () => {
+      if (readOnly) return;
+      const placements = inferAutoSumPlacements(grid, normSel, evaluatedGrid);
+      if (!placements.length) return;
+      updateCurrentGrid((draftGrid) => {
+        for (const item of placements) {
+          while (draftGrid.length <= item.row) draftGrid.push(new Array(colCount).fill(""));
+          for (const r of draftGrid) {
+            while (r.length <= item.col) r.push("");
+          }
+          draftGrid[item.row][item.col] = item.formula;
+        }
+      });
+      const first = placements[0];
+      setSel({ r0: first.row, c0: first.col, r1: first.row, c1: first.col });
+    };
+    const sortActiveColumn = (dir) => {
+      if (readOnly) return;
+      const col = sel.c0;
+      updateCurrentGrid((draftGrid) => {
+        let lastNonEmpty = draftGrid.length - 1;
+        while (lastNonEmpty > 0 && draftGrid[lastNonEmpty].every((v2) => v2 === "")) lastNonEmpty -= 1;
+        if (lastNonEmpty < 1) return;
+        const head = draftGrid[0];
+        const body = draftGrid.slice(1, lastNonEmpty + 1);
+        const tail2 = draftGrid.slice(lastNonEmpty + 1);
+        body.sort((a, b2) => {
+          const av = String(a[col] || "").trim();
+          const bv = String(b2[col] || "").trim();
+          if (!av && !bv) return 0;
+          if (!av) return 1;
+          if (!bv) return -1;
+          const an2 = FORMULA_NUMBER_RE.test(av) ? Number(av) : null;
+          const bn2 = FORMULA_NUMBER_RE.test(bv) ? Number(bv) : null;
+          const cmp3 = an2 !== null && bn2 !== null ? an2 - bn2 : av.localeCompare(bv, void 0, { numeric: true, sensitivity: "base" });
+          return dir === "asc" ? cmp3 : -cmp3;
+        });
+        const next = [head, ...body, ...tail2];
+        for (let i = 0; i < draftGrid.length; i += 1) draftGrid[i] = next[i];
+      });
+    };
+    const insertRow = () => {
+      if (readOnly) return;
+      updateCurrentGrid((draftGrid) => {
+        draftGrid.splice(normSel.r0, 0, new Array(colCount).fill(""));
+      });
+    };
+    const deleteRow = () => {
+      if (readOnly || rowCount <= 1) return;
+      updateCurrentGrid((draftGrid) => {
+        draftGrid.splice(normSel.r0, Math.min(normSel.r1 - normSel.r0 + 1, draftGrid.length - 1));
+      });
+      setSel({ r0: Math.max(0, normSel.r0 - 1), c0: normSel.c0, r1: Math.max(0, normSel.r0 - 1), c1: normSel.c0 });
+    };
+    const insertCol = () => {
+      if (readOnly) return;
+      updateCurrentGrid((draftGrid) => {
+        for (const r of draftGrid) r.splice(normSel.c0, 0, "");
+      });
+    };
+    const deleteCol = () => {
+      if (readOnly || colCount <= 1) return;
+      const delCount = Math.min(normSel.c1 - normSel.c0 + 1, colCount - 1);
+      updateCurrentGrid((draftGrid) => {
+        for (const r of draftGrid) r.splice(normSel.c0, delCount);
+      });
+      setSel({ r0: normSel.r0, c0: Math.max(0, normSel.c0 - 1), r1: normSel.r0, c1: Math.max(0, normSel.c0 - 1) });
+    };
+    const copySelection = async () => {
+      const slice = [];
+      for (let r = normSel.r0; r <= normSel.r1; r += 1) {
+        const row = [];
+        for (let c = normSel.c0; c <= normSel.c1; c += 1) row.push(getRaw(r, c));
+        slice.push(row);
+      }
+      const text2 = serializeTsvClipboard(slice);
+      try {
+        await navigator.clipboard.writeText(text2);
+      } catch (_2) {
+      }
+    };
+    const pasteFromText = (text2) => {
+      if (readOnly || typeof text2 !== "string") return;
+      const parsed = parseTsvClipboard(text2);
+      updateCurrentGrid((draftGrid) => {
+        for (let dr3 = 0; dr3 < parsed.length; dr3 += 1) {
+          const r = normSel.r0 + dr3;
+          while (draftGrid.length <= r) draftGrid.push(new Array(colCount).fill(""));
+          for (let dc2 = 0; dc2 < parsed[dr3].length; dc2 += 1) {
+            const c = normSel.c0 + dc2;
+            for (const row of draftGrid) {
+              while (row.length <= c) row.push("");
+            }
+            draftGrid[r][c] = parsed[dr3][dc2];
+          }
+        }
+      });
+      setSel({
+        r0: normSel.r0,
+        c0: normSel.c0,
+        r1: normSel.r0 + parsed.length - 1,
+        c1: normSel.c0 + Math.max(1, ...parsed.map((r) => r.length)) - 1
+      });
+    };
+    const startCellDrag = (startR, startC, event) => {
+      if (event.button !== 0) return;
+      if (editing && (editing.row !== startR || editing.col !== startC)) commitEdit(0, 0);
+      if (event.shiftKey) {
+        setSel((cur) => ({ r0: cur.r0, c0: cur.c0, r1: startR, c1: startC }));
+        return;
+      }
+      setSel({ r0: startR, c0: startC, r1: startR, c1: startC });
+      const move = (ev) => {
+        const target = document.elementFromPoint(ev.clientX, ev.clientY);
+        const cellEl = target && target.closest ? target.closest("[data-cell-rc]") : null;
+        if (!cellEl) return;
+        const [rStr, cStr] = String(cellEl.getAttribute("data-cell-rc") || "").split(":");
+        const r = Number(rStr);
+        const c = Number(cStr);
+        if (Number.isInteger(r) && Number.isInteger(c)) setSel((cur) => ({ ...cur, r1: r, c1: c }));
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    };
+    const startFillHandleDrag = (event) => {
+      if (readOnly || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      let currentTarget = null;
+      const move = (ev) => {
+        const target = document.elementFromPoint(ev.clientX, ev.clientY);
+        const cellEl = target && target.closest ? target.closest("[data-cell-rc]") : null;
+        if (!cellEl) return;
+        const [rStr, cStr] = String(cellEl.getAttribute("data-cell-rc") || "").split(":");
+        const r = Number(rStr);
+        const c = Number(cStr);
+        if (!Number.isInteger(r) || !Number.isInteger(c)) return;
+        if (r > normSel.r1) currentTarget = { direction: "down", r0: normSel.r0, r1: r, c0: normSel.c0, c1: normSel.c1 };
+        else if (r < normSel.r0) currentTarget = { direction: "up", r0: r, r1: normSel.r1, c0: normSel.c0, c1: normSel.c1 };
+        else if (c > normSel.c1) currentTarget = { direction: "right", r0: normSel.r0, r1: normSel.r1, c0: normSel.c0, c1: c };
+        else if (c < normSel.c0) currentTarget = { direction: "left", r0: normSel.r0, r1: normSel.r1, c0: c, c1: normSel.c1 };
+        else currentTarget = null;
+        setFillPreview(currentTarget);
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        setFillPreview(null);
+        if (!currentTarget) return;
+        const srcRows = [];
+        for (let r = normSel.r0; r <= normSel.r1; r += 1) {
+          const line = [];
+          for (let c = normSel.c0; c <= normSel.c1; c += 1) line.push(getRaw(r, c));
+          srcRows.push(line);
+        }
+        const filled = fillRangeValues(
+          srcRows,
+          currentTarget.r1 - currentTarget.r0 + 1,
+          currentTarget.c1 - currentTarget.c0 + 1,
+          currentTarget.direction
+        );
+        updateCurrentGrid((draftGrid) => {
+          for (let dr3 = 0; dr3 < filled.length; dr3 += 1) {
+            for (let dc2 = 0; dc2 < filled[dr3].length; dc2 += 1) {
+              draftGrid[currentTarget.r0 + dr3][currentTarget.c0 + dc2] = filled[dr3][dc2];
+            }
+          }
+        });
+        setSel({ r0: currentTarget.r0, c0: currentTarget.c0, r1: currentTarget.r1, c1: currentTarget.c1 });
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    };
+    const handleGridKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "s") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (editing) commitEdit(0, 0);
+        if (!readOnly && onSaveRef.current) onSaveRef.current(trimWorkbookForSave(workbookRef.current));
+        return;
+      }
+      if (editing) return;
+      const targetTag = event.target && event.target.tagName;
+      if (targetTag === "INPUT" || targetTag === "TEXTAREA") return;
+      const mod = event.ctrlKey || event.metaKey;
+      if (mod && String(event.key).toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (mod && String(event.key).toLowerCase() === "y") {
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (mod && String(event.key).toLowerCase() === "c") {
+        event.preventDefault();
+        void copySelection();
+        return;
+      }
+      if (mod && String(event.key).toLowerCase() === "v") {
+        event.preventDefault();
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          void navigator.clipboard.readText().then(pasteFromText).catch(() => {
+          });
+        }
+        return;
+      }
+      if (event.altKey && event.key === "=") {
+        event.preventDefault();
+        handleAutoSum();
+        return;
+      }
+      const drMap = { ArrowUp: -1, ArrowDown: 1 };
+      const dcMap = { ArrowLeft: -1, ArrowRight: 1 };
+      if (drMap[event.key] || dcMap[event.key]) {
+        event.preventDefault();
+        const dr3 = drMap[event.key] || 0;
+        const dc2 = dcMap[event.key] || 0;
+        if (event.shiftKey) {
+          setSel((cur) => ({
+            ...cur,
+            r1: Math.max(0, Math.min(rowCount - 1, cur.r1 + dr3)),
+            c1: Math.max(0, Math.min(colCount - 1, cur.c1 + dc2))
+          }));
+        } else {
+          const nextR = Math.max(0, Math.min(rowCount - 1, sel.r0 + dr3));
+          const nextC = Math.max(0, Math.min(colCount - 1, sel.c0 + dc2));
+          setSel({ r0: nextR, c0: nextC, r1: nextR, c1: nextC });
+        }
+        return;
+      }
+      if (event.key === "Tab") {
+        event.preventDefault();
+        const nextC = Math.max(0, Math.min(colCount - 1, sel.c0 + (event.shiftKey ? -1 : 1)));
+        setSel({ r0: sel.r0, c0: nextC, r1: sel.r0, c1: nextC });
+        return;
+      }
+      if (!readOnly && (event.key === "Delete" || event.key === "Backspace")) {
+        event.preventDefault();
+        updateCurrentGrid((draftGrid) => {
+          for (let r = normSel.r0; r <= normSel.r1; r += 1) {
+            for (let c = normSel.c0; c <= normSel.c1; c += 1) draftGrid[r][c] = "";
+          }
+        });
+        return;
+      }
+      if (!readOnly && (event.key === "F2" || event.key === "Enter")) {
+        event.preventDefault();
+        setEditing({ row: sel.r0, col: sel.c0, value: getRaw(sel.r0, sel.c0) });
+        return;
+      }
+      if (!readOnly && !mod && !event.altKey && event.key.length === 1) {
+        event.preventDefault();
+        setEditing({ row: sel.r0, col: sel.c0, value: event.key });
+      }
+    };
+    const addSheet = () => {
+      if (readOnly || singleSheet || sheets.length >= 20) return;
+      let n2 = sheets.length + 1;
+      while (sheets.some((s15) => s15.name.toLowerCase() === "sheet" + n2)) n2 += 1;
+      const next = [...sheets, { name: "Sheet" + n2, rows: [] }];
+      commitWorkbook(next);
+      setSheetIndex(next.length - 1);
+      setSel({ r0: 0, c0: 0, r1: 0, c1: 0 });
+    };
+    const deleteSheet = (idx) => {
+      if (readOnly || singleSheet || sheets.length <= 1) return;
+      const next = sheets.filter((_2, i) => i !== idx);
+      commitWorkbook(next);
+      setSheetIndex(Math.max(0, idx - 1));
+      setSel({ r0: 0, c0: 0, r1: 0, c1: 0 });
+    };
+    const commitRenameSheet = () => {
+      if (!renamingSheet) return;
+      const name = renamingSheet.value.trim().slice(0, 31);
+      const idx = renamingSheet.index;
+      setRenamingSheet(null);
+      if (!name || /[:\\/?*[\]]/.test(name)) return;
+      if (sheets.some((s15, i) => i !== idx && s15.name.toLowerCase() === name.toLowerCase())) return;
+      commitWorkbook(sheets.map((s15, i) => i === idx ? { ...s15, name } : s15));
+    };
+    const tbBtn = (label, onClick, disabled, content) => h3("button", {
+      type: "button",
+      title: label,
+      "aria-label": label,
+      disabled,
+      onClick,
+      className: "tether-hover tether-press",
+      style: {
+        height: 26,
+        minWidth: 26,
+        padding: "0 7px",
+        border: 0,
+        borderRadius: 6,
+        background: "transparent",
+        color: disabled ? C2.mute : C2.ink,
+        fontSize: 12,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.42 : 1,
+        flex: "0 0 auto"
+      }
+    }, content);
+    const accent = "var(--tether-accent, var(--dsw-alias-state-business-primary, #1570ef))";
+    const selBg = "color-mix(in srgb, " + accent + " 11%, transparent)";
+    const fillBg = "color-mix(in srgb, " + accent + " 6%, transparent)";
+    return h3(
+      "div",
+      {
+        ref: rootRef,
+        tabIndex: 0,
+        onKeyDown: handleGridKeyDown,
+        onPaste: (event) => {
+          const tag2 = event.target && event.target.tagName;
+          if (tag2 === "INPUT" || tag2 === "TEXTAREA" || readOnly) return;
+          const text2 = event.clipboardData && event.clipboardData.getData("text/plain");
+          if (text2) {
+            event.preventDefault();
+            pasteFromText(text2);
+          }
+        },
+        style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", outline: "none", background: C2.bg }
+      },
+      // Compact formula + quick-action bar
+      h3(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "6px 10px",
+            borderBottom: "1px solid " + (C2.line || "rgba(0,0,0,0.08)"),
+            background: C2.panel,
+            flex: "0 0 auto",
+            flexWrap: "wrap"
+          }
+        },
+        !readOnly ? h3(
+          React2.Fragment,
+          null,
+          tbBtn("\u64A4\u9500 (Ctrl+Z)", undo, !historyPast.length, "\u21B6"),
+          tbBtn("\u91CD\u505A (Ctrl+Y)", redo, !historyFuture.length, "\u21B7"),
+          h3("span", { style: { width: 1, height: 14, background: C2.line } }),
+          tbBtn("\u5FEB\u901F\u6C42\u548C (Alt+=)", handleAutoSum, false, h3("span", { style: { fontWeight: 600 } }, "\u03A3 \u6C42\u548C")),
+          tbBtn("\u5F53\u524D\u5217\u5347\u5E8F", () => sortActiveColumn("asc"), false, "A\u2193"),
+          tbBtn("\u5F53\u524D\u5217\u964D\u5E8F", () => sortActiveColumn("desc"), false, "Z\u2193"),
+          h3("span", { style: { width: 1, height: 14, background: C2.line } }),
+          tbBtn("\u63D2\u5165\u884C", insertRow, false, "+\u884C"),
+          tbBtn("\u5220\u9664\u884C", deleteRow, rowCount <= 1, "-\u884C"),
+          tbBtn("\u63D2\u5165\u5217", insertCol, false, "+\u5217"),
+          tbBtn("\u5220\u9664\u5217", deleteCol, colCount <= 1, "-\u5217"),
+          h3("span", { style: { width: 1, height: 14, background: C2.line } })
+        ) : null,
+        h3("span", {
+          className: "tether-num",
+          style: {
+            minWidth: 38,
+            height: 26,
+            padding: "0 7px",
+            borderRadius: 5,
+            background: C2.soft,
+            color: C2.ink,
+            fontSize: 11.5,
+            fontWeight: 600,
+            display: "grid",
+            placeItems: "center",
+            flex: "0 0 auto"
+          }
+        }, activeRefLabel),
+        h3("span", { style: { color: C2.mute, fontSize: 11.5, fontStyle: "italic", flex: "0 0 auto" } }, "fx"),
+        h3("input", {
+          value: editing && editing.row === sel.r0 && editing.col === sel.c0 ? editing.value : activeRaw,
+          readOnly,
+          "aria-label": "\u7F16\u8F91\u680F\u516C\u5F0F\u6216\u5185\u5BB9",
+          placeholder: readOnly ? "\u53EA\u8BFB\u5355\u5143\u683C" : "\u8F93\u5165\u6570\u503C\u6216\u516C\u5F0F\uFF08\u5982 =SUM(A1:A5)\uFF09",
+          onChange: (ev) => {
+            if (readOnly) return;
+            const val = ev.target.value;
+            updateCurrentGrid((draftGrid) => {
+              draftGrid[sel.r0][sel.c0] = val;
+            }, false);
+          },
+          onKeyDown: (ev) => {
+            if (ev.key === "Enter") {
+              ev.preventDefault();
+              const nextR = Math.min(rowCount - 1, sel.r0 + 1);
+              setSel({ r0: nextR, c0: sel.c0, r1: nextR, c1: sel.c0 });
+              if (rootRef.current) rootRef.current.focus();
+            } else if (ev.key === "Escape" && rootRef.current) {
+              rootRef.current.focus();
+            }
+          },
+          style: {
+            flex: "1 1 180px",
+            minWidth: 120,
+            height: 26,
+            padding: "0 8px",
+            borderRadius: 5,
+            border: "1px solid " + (C2.line || "rgba(0,0,0,0.08)"),
+            background: C2.bg,
+            color: C2.ink,
+            fontSize: 12,
+            fontFamily: "Consolas, monospace",
+            outline: "none"
+          }
+        }),
+        h3("input", {
+          value: filterText,
+          "aria-label": "\u7B5B\u9009\u884C",
+          placeholder: "\u7B5B\u9009\u2026",
+          onChange: (ev) => setFilterText(ev.target.value),
+          onKeyDown: (ev) => {
+            if (ev.key === "Escape") {
+              setFilterText("");
+              if (rootRef.current) rootRef.current.focus();
+            }
+          },
+          style: {
+            width: 124,
+            height: 26,
+            padding: "0 8px",
+            borderRadius: 5,
+            border: "1px solid " + (C2.line || "rgba(0,0,0,0.08)"),
+            background: C2.bg,
+            color: C2.ink,
+            fontSize: 12,
+            outline: "none",
+            flex: "0 0 auto"
+          }
+        }),
+        !readOnly && onSave ? h3("button", {
+          type: "button",
+          disabled: busy || !dirty,
+          onClick: () => onSave(trimWorkbookForSave(workbookRef.current)),
+          className: "tether-hover tether-press",
+          style: {
+            height: 26,
+            padding: "0 10px",
+            border: 0,
+            borderRadius: 6,
+            background: dirty ? accent : C2.soft,
+            color: dirty ? "#ffffff" : C2.mute,
+            fontSize: 12,
+            cursor: busy || !dirty ? "default" : "pointer",
+            opacity: busy || !dirty ? 0.6 : 1,
+            flex: "0 0 auto",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5
+          }
+        }, Glyph ? h3(Glyph, { name: "save", size: 13 }) : null, busy ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58") : null
+      ),
+      // Read-only lock notice if protected (macros / charts / permissions)
+      readOnlyReason ? h3("div", {
+        style: {
+          padding: "5px 12px",
+          fontSize: 11.5,
+          color: C2.amber || "#b54708",
+          background: "color-mix(in srgb, " + (C2.amber || "#b54708") + " 10%, transparent)",
+          borderBottom: "1px solid " + (C2.line || "rgba(0,0,0,0.08)"),
+          flex: "0 0 auto"
+        }
+      }, readOnlyReason) : null,
+      // Grid viewport
+      h3(
+        "div",
+        { className: "tether-scroll tether-table-scroll", style: { position: "relative" } },
+        h3(
+          "table",
+          {
+            className: "tether-table",
+            role: "grid",
+            "aria-label": "\u7535\u5B50\u8868\u683C",
+            style: { tableLayout: "fixed", userSelect: "none" }
+          },
+          h3(
+            "thead",
+            null,
+            h3(
+              "tr",
+              null,
+              h3("th", { scope: "col", style: { width: 42, minWidth: 42, textAlign: "center", position: "sticky", left: 0, zIndex: 4 } }, ""),
+              Array.from({ length: colCount }, (_2, c) => {
+                const colActive = c >= normSel.c0 && c <= normSel.c1;
+                return h3("th", {
+                  key: c,
+                  scope: "col",
+                  onClick: () => setSel({ r0: 0, c0: c, r1: rowCount - 1, c1: c }),
+                  style: {
+                    width: 112,
+                    minWidth: 92,
+                    textAlign: "center",
+                    cursor: "pointer",
+                    color: colActive ? accent : C2.mute,
+                    background: colActive ? "color-mix(in srgb, " + accent + " 10%, " + C2.panel + ")" : void 0
+                  }
+                }, colIndexToLetter(c));
+              })
+            )
+          ),
+          h3(
+            "tbody",
+            null,
+            visibleRowIndices.map((r) => h3(
+              "tr",
+              { key: r },
+              h3("td", {
+                onClick: () => setSel({ r0: r, c0: 0, r1: r, c1: colCount - 1 }),
+                className: "tether-num",
+                style: {
+                  width: 42,
+                  textAlign: "center",
+                  color: r >= normSel.r0 && r <= normSel.r1 ? accent : C2.mute,
+                  background: "var(--tether-table-head, " + C2.panel + ")",
+                  position: "sticky",
+                  left: 0,
+                  zIndex: 2,
+                  cursor: "pointer",
+                  fontSize: 11
+                }
+              }, r + 1),
+              Array.from({ length: colCount }, (_2, c) => {
+                const isAnchor2 = r === sel.r0 && c === sel.c0;
+                const isSelected = r >= normSel.r0 && r <= normSel.r1 && c >= normSel.c0 && c <= normSel.c1;
+                const isFillEdge = !readOnly && r === normSel.r1 && c === normSel.c1;
+                const inFillRange = fillPreview && r >= fillPreview.r0 && r <= fillPreview.r1 && c >= fillPreview.c0 && c <= fillPreview.c1;
+                const isEditingCell = editing && editing.row === r && editing.col === c;
+                const display = String(evaluatedGrid(r, c) ?? "");
+                const isNum = DISPLAY_NUMBER_RE.test(display.trim());
+                return h3(
+                  "td",
+                  {
+                    key: c,
+                    "data-cell-rc": r + ":" + c,
+                    title: getRaw(r, c).startsWith("=") ? getRaw(r, c) : void 0,
+                    onPointerDown: (ev) => startCellDrag(r, c, ev),
+                    onDoubleClick: () => {
+                      if (!readOnly) setEditing({ row: r, col: c, value: getRaw(r, c) });
+                    },
+                    className: isNum ? "tether-num" : void 0,
+                    style: {
+                      position: "relative",
+                      padding: isEditingCell ? 0 : "4px 8px",
+                      textAlign: isNum ? "right" : "left",
+                      background: isSelected ? selBg : inFillRange ? fillBg : void 0,
+                      boxShadow: isAnchor2 ? "inset 0 0 0 2px " + accent : isSelected ? "inset 0 0 0 1px color-mix(in srgb, " + accent + " 45%, transparent)" : void 0,
+                      color: display.startsWith("#") ? C2.red || "#d92d20" : C2.ink,
+                      maxWidth: 240,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      cursor: "cell"
+                    }
+                  },
+                  isEditingCell ? h3("input", {
+                    ref: editInputRef,
+                    autoFocus: true,
+                    value: editing.value,
+                    onChange: (ev) => setEditing((cur) => cur ? { ...cur, value: ev.target.value } : null),
+                    onBlur: () => commitEdit(0, 0),
+                    onKeyDown: (ev) => {
+                      if (ev.key === "Enter") {
+                        ev.preventDefault();
+                        commitEdit(1, 0);
+                      } else if (ev.key === "Tab") {
+                        ev.preventDefault();
+                        commitEdit(0, ev.shiftKey ? -1 : 1);
+                      } else if (ev.key === "Escape") {
+                        ev.preventDefault();
+                        setEditing(null);
+                        if (rootRef.current) rootRef.current.focus();
+                      }
+                    },
+                    style: {
+                      width: "100%",
+                      height: 26,
+                      boxSizing: "border-box",
+                      padding: "0 7px",
+                      border: 0,
+                      outline: "none",
+                      background: C2.bg,
+                      color: C2.ink,
+                      font: "inherit",
+                      fontSize: 12
+                    }
+                  }) : display,
+                  isFillEdge ? h3("span", {
+                    title: "\u62D6\u52A8\u586B\u5145\u67C4\u81EA\u52A8\u586B\u5145\u5E8F\u5217\u6216\u516C\u5F0F",
+                    onPointerDown: startFillHandleDrag,
+                    style: {
+                      position: "absolute",
+                      right: 0,
+                      bottom: 0,
+                      width: 7,
+                      height: 7,
+                      background: accent,
+                      borderRadius: 1,
+                      cursor: "crosshair",
+                      zIndex: 3
+                    }
+                  }) : null
+                );
+              })
+            ))
+          )
+        )
+      ),
+      // Multi-sheet tabs + live selection summary footer
+      !singleSheet ? h3(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "4px 10px",
+            borderTop: "1px solid " + (C2.line || "rgba(0,0,0,0.08)"),
+            background: C2.panel,
+            flex: "0 0 auto",
+            overflowX: "auto"
+          }
+        },
+        sheets.map((sheet, idx) => {
+          const active = idx === safeSheetIdx;
+          const isRenaming = renamingSheet && renamingSheet.index === idx;
+          return h3(
+            "div",
+            {
+              key: idx + ":" + sheet.name,
+              style: {
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                height: 24,
+                padding: "0 8px",
+                borderRadius: 6,
+                background: active ? C2.bg : "transparent",
+                border: active ? "1px solid " + (C2.line || "rgba(0,0,0,0.12)") : "1px solid transparent",
+                color: active ? C2.ink : C2.mute,
+                fontSize: 11.5,
+                cursor: "pointer",
+                flex: "0 0 auto"
+              }
+            },
+            isRenaming ? h3("input", {
+              autoFocus: true,
+              value: renamingSheet.value,
+              onChange: (ev) => setRenamingSheet((cur) => cur ? { ...cur, value: ev.target.value } : null),
+              onBlur: commitRenameSheet,
+              onKeyDown: (ev) => {
+                if (ev.key === "Enter") commitRenameSheet();
+                if (ev.key === "Escape") setRenamingSheet(null);
+              },
+              style: { width: 88, height: 18, border: 0, outline: "none", background: "transparent", color: C2.ink, fontSize: 11.5 }
+            }) : h3("span", {
+              onClick: () => {
+                setSheetIndex(idx);
+                setSel({ r0: 0, c0: 0, r1: 0, c1: 0 });
+                setEditing(null);
+              },
+              onDoubleClick: () => {
+                if (!readOnly) setRenamingSheet({ index: idx, value: sheet.name });
+              },
+              style: { fontWeight: active ? 600 : 400, whiteSpace: "nowrap" }
+            }, sheet.name),
+            !readOnly && sheets.length > 1 ? h3("button", {
+              type: "button",
+              title: "\u5220\u9664\u5DE5\u4F5C\u8868",
+              "aria-label": "\u5220\u9664\u5DE5\u4F5C\u8868 " + sheet.name,
+              onClick: (ev) => {
+                ev.stopPropagation();
+                deleteSheet(idx);
+              },
+              style: { border: 0, background: "transparent", color: C2.mute, cursor: "pointer", padding: 0, fontSize: 12, lineHeight: "12px" }
+            }, "\xD7") : null
+          );
+        }),
+        !readOnly ? tbBtn("\u65B0\u5EFA\u5DE5\u4F5C\u8868", addSheet, sheets.length >= 20, "+") : null
+      ) : null,
+      h3(
+        "div",
+        { className: "tether-table-status" },
+        h3("span", { className: "tether-num" }, rowCount + " \u884C \xD7 " + colCount + " \u5217"),
+        stats.count > 0 ? h3("span", { className: "tether-num" }, "\u8BA1\u6570 " + stats.count) : null,
+        stats.numericCount > 0 ? h3("span", { className: "tether-num" }, "\u6C42\u548C " + Number(stats.sum.toPrecision(12))) : null,
+        stats.numericCount > 1 ? h3("span", { className: "tether-num" }, "\u5747\u503C " + Number(stats.avg.toPrecision(8))) : null,
+        h3("span", { style: { marginLeft: "auto" } }, readOnly ? "\u53EA\u8BFB" : dirty ? "\u672A\u4FDD\u5B58 \xB7 Ctrl+S \u4FDD\u5B58" : "Ctrl+S \u4FDD\u5B58")
+      )
+    );
+  };
+}
+
 // tether-dsh-flow:tether-dsh-flow-fn
 function tether_dsh_flow_fn_default(ctx, React2) {
   try {
@@ -183649,6 +185048,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   const TeamManagementPage = createTeamManagementPage(React2);
   const { StyledSelect, ToggleSwitch } = createUiControls(React2);
   const { FloatingWindow } = createFloatingWindow(React2);
+  const SpreadsheetEditor = createSpreadsheetEditor(React2);
   const PANEL_ID = "tether";
   const BASE = host.apiBase();
   const C2 = {
@@ -187785,6 +189185,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [band, setBand] = React2.useState(null);
     const [file, setFile] = React2.useState(null);
     const [draft, setDraft] = React2.useState("");
+    const [workbookDraft, setWorkbookDraft] = React2.useState(null);
     const [dirty, setDirty] = React2.useState(false);
     const [externalChanged, setExternalChanged] = React2.useState(false);
     const fileRef = React2.useRef(null);
@@ -190305,12 +191706,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setPathDraft(nextPath);
         pathRef.current = nextPath;
         loadedDirRef.current = requestDevice + "|" + normPath(nextPath);
-        setSelected(null);
+        if (!opts.preserveSelection) setSelected(null);
         if (!opts.keepFile) {
           setFile(null);
           setEditMode(false);
           setDirty(false);
           setDraft("");
+          setWorkbookDraft(null);
         }
       };
       setDirError("");
@@ -190378,7 +191780,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (!sameFile || !dirty) {
           setDraft(data.text || "");
           setDirty(false);
-          setEditMode(data.kind === "text" && data.editable === true && !/\.(csv|tsv)$/i.test(String(entry.name || entry.path || "")));
+          setWorkbookDraft(data.workbook && Array.isArray(data.workbook.sheets) ? data.workbook : null);
+          setEditMode(data.kind === "text" && data.editable === true && !/\.(csv|tsv|xlsx|xlsm)$/i.test(String(entry.name || entry.path || "")));
         }
         if (!sameFile) setTableView(true);
         if (!sameFile) {
@@ -190523,6 +191926,40 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setTableEdit(false);
         setTableEditFormat(null);
         if (path) loadDir(path, { push: false, keepFile: true, fresh: true });
+      } catch (e) {
+        if (e && e.code === "conflict") setNotice("\u76EE\u6807\u6587\u4EF6\u5DF2\u88AB\u5176\u4ED6\u7A0B\u5E8F\u4FEE\u6539\uFF0C\u672A\u4FDD\u5B58\u5185\u5BB9\u5DF2\u4FDD\u7559");
+        else fail2(e);
+      } finally {
+        setBusy(false);
+      }
+    };
+    const saveWorkbook = async (overrideWorkbook) => {
+      if (!file || !file.editable || file.truncated || busy) return;
+      const requestDevice = deviceIdRef.current;
+      const requestFile = file;
+      const payloadWorkbook = trimWorkbookForSave(overrideWorkbook || workbookDraft || requestFile.workbook || { format: "xlsx", sheets: [] });
+      setBusy(true);
+      try {
+        const result = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/write", {
+          path: requestFile.path,
+          workbook: payloadWorkbook,
+          expected_version: requestFile.version
+        });
+        if (!responseBelongsToDevice(result, requestDevice)) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25\uFF0C\u672A\u786E\u8BA4\u4FDD\u5B58");
+        if (deviceIdRef.current !== requestDevice) throw new Error("\u76EE\u6807\u8BBE\u5907\u5DF2\u5207\u6362\uFF0C\u672A\u4FDD\u5B58\u5185\u5BB9\u5DF2\u4FDD\u7559");
+        setDirty(false);
+        setNotice("\u5DF2\u4FDD\u5B58\u5230 " + requestDevice + " \xB7 " + requestFile.path);
+        const key = previewCacheKey(requestDevice, requestFile.path);
+        previewCacheRef.current.delete(key);
+        invalidateDir(requestDevice, parentOf2(requestFile.path));
+        const data = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/preview", { path: requestFile.path });
+        if (!responseBelongsToDevice(data, requestDevice)) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u6587\u4EF6");
+        rememberPreview(key, data);
+        setFile({ ...data, path: requestFile.path, name: requestFile.name });
+        setExternalChanged(false);
+        setDraft(data.text || "");
+        setWorkbookDraft(data.workbook && Array.isArray(data.workbook.sheets) ? data.workbook : null);
+        if (path) loadDir(path, { push: false, keepFile: true, fresh: true, preserveSelection: true });
       } catch (e) {
         if (e && e.code === "conflict") setNotice("\u76EE\u6807\u6587\u4EF6\u5DF2\u88AB\u5176\u4ED6\u7A0B\u5E8F\u4FEE\u6539\uFF0C\u672A\u4FDD\u5B58\u5185\u5BB9\u5DF2\u4FDD\u7559");
         else fail2(e);
@@ -190921,6 +192358,81 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       window.addEventListener("keydown", onKey);
       return () => window.removeEventListener("keydown", onKey);
     }, [view, ask, history, path]);
+    const dirLoadingRef = React2.useRef(false);
+    dirLoadingRef.current = dirLoading;
+    const focusDirRefreshAtRef = React2.useRef(0);
+    const loadDirRef = React2.useRef(loadDir);
+    loadDirRef.current = loadDir;
+    React2.useEffect(() => {
+      if (view !== "files" || !deviceId || !path || file) return void 0;
+      const syncDir = () => {
+        if (typeof document !== "undefined" && document.hidden) return;
+        if (dirLoadingRef.current || !pathRef.current) return;
+        const now = Date.now();
+        if (now - focusDirRefreshAtRef.current < 1500) return;
+        focusDirRefreshAtRef.current = now;
+        invalidateDir(deviceIdRef.current, pathRef.current);
+        void loadDirRef.current(pathRef.current, { push: false, keepFile: true, fresh: true, preserveSelection: true });
+      };
+      const onVisibility = () => {
+        if (typeof document !== "undefined" && !document.hidden) syncDir();
+      };
+      window.addEventListener("focus", syncDir);
+      if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
+      return () => {
+        window.removeEventListener("focus", syncDir);
+        if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+      };
+    }, [view, deviceId, path, file]);
+    const explorerKeysRef = React2.useRef(null);
+    React2.useEffect(() => {
+      if (view !== "files" || file || ask || pathEditing || contextMenu || showSettings) return void 0;
+      const onKey = (event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        const target = event.target;
+        const tag2 = target && target.tagName;
+        if (tag2 === "INPUT" || tag2 === "TEXTAREA" || tag2 === "SELECT") return;
+        if (target && target.closest && (target.closest('[contenteditable="true"]') || target.closest(".monaco-editor"))) return;
+        const ctx = explorerKeysRef.current;
+        if (!ctx) return;
+        if (event.key === "F5") {
+          event.preventDefault();
+          ctx.refreshExplorer();
+          return;
+        }
+        if (event.key === "F2" && ctx.selected) {
+          event.preventDefault();
+          ctx.renameEntry(ctx.selected);
+          return;
+        }
+        if (event.key === "Delete" && ctx.selected) {
+          event.preventDefault();
+          ctx.deleteEntry(ctx.selected);
+          return;
+        }
+        if (!ctx.entries.length) return;
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          const currentPath = ctx.selected ? ctx.selected.path : "";
+          const idx = ctx.entries.findIndex((item) => item.path === currentPath);
+          const nextIdx = event.key === "ArrowDown" ? idx < 0 ? 0 : Math.min(ctx.entries.length - 1, idx + 1) : idx <= 0 ? 0 : idx - 1;
+          const nextEntry = ctx.entries[nextIdx];
+          if (!nextEntry) return;
+          setSelected(nextEntry);
+          setSelectedPaths([nextEntry.path]);
+          const rowEl = Array.from(document.querySelectorAll("[data-row-path]")).find((el2) => el2.getAttribute("data-row-path") === nextEntry.path);
+          if (rowEl && typeof rowEl.scrollIntoView === "function") rowEl.scrollIntoView({ block: "nearest" });
+          return;
+        }
+        if (event.key === "Enter" && ctx.selected) {
+          if (target && target.getAttribute && target.getAttribute("data-row-path")) return;
+          event.preventDefault();
+          ctx.openFile(ctx.selected);
+        }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [view, file, ask, pathEditing, contextMenu, showSettings]);
     const renderHoverTip = () => {
       if (!hoverTip || contextMenu || deviceMenu) return null;
       const entry = hoverTip.entry;
@@ -191292,6 +192804,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setEditMode(false);
         setDirty(false);
         setDraft("");
+        setWorkbookDraft(null);
         setPreviewError("");
         setTableEdit(false);
         setTableEditFormat(null);
@@ -191306,6 +192819,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "data-active": active ? "true" : void 0,
         className: "tether-hover tether-viewtoggle-btn"
       }, h3(Glyph, { name: icon, size: 13 }), h3("span", null, label));
+      const isWorkbookFile = !!(file && file.workbook && Array.isArray(file.workbook.sheets));
       const tableCanEdit = !!(file && tablePreview && tableFormatOf(file) && !file.truncated && !tablePreview.truncatedRows && !tablePreview.truncatedColumns);
       const codeEditorFile = !!(file && file.kind === "text" && CODE_FILE.test(String(file.name || file.path || "")));
       const markdownCanToggle = !!(file && file.kind === "markdown" && editableFile);
@@ -191341,7 +192855,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           file.truncated ? pill("\u5DF2\u622A\u65AD", C2.amber) : null,
           file.converted ? pill("\u5DF2\u8F6C PDF", C2.mute) : null,
           externalChanged ? pill(dirty ? "\u76EE\u6807\u7AEF\u5DF2\u6709\u65B0\u7248\u672C" : "\u76EE\u6807\u7AEF\u5DF2\u53D8\u5316", C2.amber) : null,
-          tablePreview && !tableEdit ? h3(
+          !isWorkbookFile && tablePreview && !tableEdit ? h3(
             "div",
             { className: "tether-viewtoggle", role: "group", "aria-label": "\u9884\u89C8\u89C6\u56FE" },
             viewToggle("table", "\u8868\u683C", tableView, () => setTableView(true)),
@@ -191352,7 +192866,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             "span",
             { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 2 } },
             tableEdit ? iconButton("eye", "\u9000\u51FA\u8868\u683C\u7F16\u8F91", cancelTableEdit, false) : tablePreview && tableView && tableCanEdit && file.writable ? iconButton("pencil", "\u7F16\u8F91\u8868\u683C", startTableEdit, false) : markdownCanToggle ? iconButton(editMode ? "eye" : "pencil", editMode ? "\u9884\u89C8 Markdown" : "\u7F16\u8F91 Markdown", () => setEditMode((value) => !value), false) : null,
-            editableFile ? iconButton("save", "\u4FDD\u5B58", () => tableEdit ? saveTable() : saveFile(), !dirty && !tableEdit || busy) : null,
+            editableFile ? iconButton("save", "\u4FDD\u5B58", () => isWorkbookFile ? saveWorkbook() : tableEdit ? saveTable() : saveFile(), !dirty && !tableEdit || busy) : null,
             h3("span", { className: "tether-num", style: { fontSize: 10.5, color: C2.mute, marginLeft: 4 } }, formatBytes2(file.size))
           )
         )
@@ -191389,6 +192903,20 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           return h3("div", { className: "tether-file-scroll", style: { flex: "1 1 auto", overflow: "auto", padding: "22px 28px 40px" } }, h3("div", { className: "tether-file-markdown" }, h3(Markdown, { text: draft || "", labels: nativeMarkdownLabels })));
         }
         if (file.kind === "text") {
+          if (isWorkbookFile) return h3(SpreadsheetEditor, {
+            colors: C2,
+            Glyph,
+            workbook: workbookDraft || file.workbook,
+            readOnly: !file.editable || !!file.truncated || !!file.workbook.read_only_reason,
+            readOnlyReason: file.workbook.read_only_reason || (file.editable === false ? "\u5F53\u524D\u4E3A\u53EA\u8BFB\u6A21\u5F0F" : ""),
+            dirty,
+            busy,
+            onChange: (nextWorkbook) => {
+              setWorkbookDraft(nextWorkbook);
+              setDirty(true);
+            },
+            onSave: saveWorkbook
+          });
           if (codeEditorFile) return h3(CodeEditor, {
             deviceId,
             path: file.path,
@@ -191423,6 +192951,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         );
       };
       const entries2 = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search2);
+      explorerKeysRef.current = { entries: entries2, selected, refreshExplorer, openFile, renameEntry, deleteEntry };
       const filtering = !!search2.trim();
       const columns = "minmax(0,1fr) 132px 104px 78px";
       const copyPathText = (list2) => {
@@ -191607,7 +193136,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: "fixed", left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 120, background: C2.layer1, borderRadius: 8, boxShadow: C2.shadow, padding: 4, userSelect: "none" }
+          className: "tether-glass",
+          style: { position: "fixed", left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 120, borderRadius: 10, padding: 4, userSelect: "none" }
         },
         contextMenu.entry ? menuItem("file", "\u6253\u5F00", () => {
           setContextMenu(null);

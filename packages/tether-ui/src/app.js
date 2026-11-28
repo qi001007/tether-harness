@@ -9,6 +9,7 @@ import { createTerminalDock } from './terminal-dock.js'
 import { createAgentsPage } from './agents-page.js'
 import { createUiControls } from './ui-controls.js'
 import { createFloatingWindow } from './floating-window.js'
+import { createSpreadsheetEditor, trimWorkbookForSave } from './spreadsheet-editor.js'
 import { TetherFolderPickDialog } from './tether-folder-pick-dialog.js'
 import { createGlyph } from './tether-glyph.js'
 import { invalidateDirectory, peekDirectory, rememberDirectory } from './file-cache.js'
@@ -1249,6 +1250,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
     const TeamManagementPage = createTeamManagementPage(React)
     const { StyledSelect, ToggleSwitch } = createUiControls(React)
     const { FloatingWindow } = createFloatingWindow(React)
+    const SpreadsheetEditor = createSpreadsheetEditor(React)
     const PANEL_ID = 'tether'
     const BASE = host.apiBase()
 
@@ -4735,6 +4737,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [band, setBand] = React.useState(null)
       const [file, setFile] = React.useState(null)
       const [draft, setDraft] = React.useState('')
+      const [workbookDraft, setWorkbookDraft] = React.useState(null)
       const [dirty, setDirty] = React.useState(false)
       const [externalChanged, setExternalChanged] = React.useState(false)
       const fileRef = React.useRef(null)
@@ -6974,8 +6977,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setDirEntries(entries)
           setPath(nextPath); setPathDraft(nextPath); pathRef.current = nextPath
           loadedDirRef.current = requestDevice + '|' + normPath(nextPath)
-          setSelected(null)
-          if (!opts.keepFile) { setFile(null); setEditMode(false); setDirty(false); setDraft('') }
+          if (!opts.preserveSelection) setSelected(null)
+          if (!opts.keepFile) { setFile(null); setEditMode(false); setDirty(false); setDraft(''); setWorkbookDraft(null) }
         }
         setDirError('')
         setDirLoading(true)
@@ -7042,7 +7045,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setExternalChanged(false)
           if (!sameFile || !dirty) {
             setDraft(data.text || ''); setDirty(false)
-            setEditMode(data.kind === 'text' && data.editable === true && !/\.(csv|tsv)$/i.test(String(entry.name || entry.path || '')))
+            setWorkbookDraft(data.workbook && Array.isArray(data.workbook.sheets) ? data.workbook : null)
+            setEditMode(data.kind === 'text' && data.editable === true && !/\.(csv|tsv|xlsx|xlsm)$/i.test(String(entry.name || entry.path || '')))
           }
           if (!sameFile) setTableView(true)
         if (!sameFile) { setTableEdit(false); setTableEditFormat(null) }
@@ -7167,6 +7171,37 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setTableEdit(false)
           setTableEditFormat(null)
           if (path) loadDir(path, { push: false, keepFile: true, fresh: true })
+        } catch (e) {
+          if (e && e.code === 'conflict') setNotice('目标文件已被其他程序修改，未保存内容已保留')
+          else fail(e)
+        } finally { setBusy(false) }
+      }
+      const saveWorkbook = async (overrideWorkbook) => {
+        if (!file || !file.editable || file.truncated || busy) return
+        const requestDevice = deviceIdRef.current
+        const requestFile = file
+        const payloadWorkbook = trimWorkbookForSave(overrideWorkbook || workbookDraft || requestFile.workbook || { format: 'xlsx', sheets: [] })
+        setBusy(true)
+        try {
+          const result = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/write', {
+            path: requestFile.path,
+            workbook: payloadWorkbook,
+            expected_version: requestFile.version
+          })
+          if (!responseBelongsToDevice(result, requestDevice)) throw new Error('目标设备身份校验失败，未确认保存')
+          if (deviceIdRef.current !== requestDevice) throw new Error('目标设备已切换，未保存内容已保留')
+          setDirty(false); setNotice('已保存到 ' + requestDevice + ' · ' + requestFile.path)
+          const key = previewCacheKey(requestDevice, requestFile.path)
+          previewCacheRef.current.delete(key)
+          invalidateDir(requestDevice, parentOf(requestFile.path))
+          const data = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/preview', { path: requestFile.path })
+          if (!responseBelongsToDevice(data, requestDevice)) throw new Error('目标设备身份校验失败，请重新打开文件')
+          rememberPreview(key, data)
+          setFile({ ...data, path: requestFile.path, name: requestFile.name })
+          setExternalChanged(false)
+          setDraft(data.text || '')
+          setWorkbookDraft(data.workbook && Array.isArray(data.workbook.sheets) ? data.workbook : null)
+          if (path) loadDir(path, { push: false, keepFile: true, fresh: true, preserveSelection: true })
         } catch (e) {
           if (e && e.code === 'conflict') setNotice('目标文件已被其他程序修改，未保存内容已保留')
           else fail(e)
@@ -7473,6 +7508,71 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return () => window.removeEventListener('keydown', onKey)
       }, [view, ask, history, path])
 
+      const dirLoadingRef = React.useRef(false)
+      dirLoadingRef.current = dirLoading
+      const focusDirRefreshAtRef = React.useRef(0)
+      const loadDirRef = React.useRef(loadDir)
+      loadDirRef.current = loadDir
+      React.useEffect(() => {
+        if (view !== 'files' || !deviceId || !path || file) return undefined
+        const syncDir = () => {
+          if (typeof document !== 'undefined' && document.hidden) return
+          if (dirLoadingRef.current || !pathRef.current) return
+          const now = Date.now()
+          if (now - focusDirRefreshAtRef.current < 1500) return
+          focusDirRefreshAtRef.current = now
+          invalidateDir(deviceIdRef.current, pathRef.current)
+          void loadDirRef.current(pathRef.current, { push: false, keepFile: true, fresh: true, preserveSelection: true })
+        }
+        const onVisibility = () => { if (typeof document !== 'undefined' && !document.hidden) syncDir() }
+        window.addEventListener('focus', syncDir)
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility)
+        return () => {
+          window.removeEventListener('focus', syncDir)
+          if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility)
+        }
+      }, [view, deviceId, path, file])
+
+      const explorerKeysRef = React.useRef(null)
+      React.useEffect(() => {
+        if (view !== 'files' || file || ask || pathEditing || contextMenu || showSettings) return undefined
+        const onKey = (event) => {
+          if (event.altKey || event.ctrlKey || event.metaKey) return
+          const target = event.target
+          const tag = target && target.tagName
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+          if (target && target.closest && (target.closest('[contenteditable="true"]') || target.closest('.monaco-editor'))) return
+          const ctx = explorerKeysRef.current
+          if (!ctx) return
+          if (event.key === 'F5') { event.preventDefault(); ctx.refreshExplorer(); return }
+          if (event.key === 'F2' && ctx.selected) { event.preventDefault(); ctx.renameEntry(ctx.selected); return }
+          if (event.key === 'Delete' && ctx.selected) { event.preventDefault(); ctx.deleteEntry(ctx.selected); return }
+          if (!ctx.entries.length) return
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            const currentPath = ctx.selected ? ctx.selected.path : ''
+            const idx = ctx.entries.findIndex((item) => item.path === currentPath)
+            const nextIdx = event.key === 'ArrowDown'
+              ? (idx < 0 ? 0 : Math.min(ctx.entries.length - 1, idx + 1))
+              : (idx <= 0 ? 0 : idx - 1)
+            const nextEntry = ctx.entries[nextIdx]
+            if (!nextEntry) return
+            setSelected(nextEntry)
+            setSelectedPaths([nextEntry.path])
+            const rowEl = Array.from(document.querySelectorAll('[data-row-path]')).find((el) => el.getAttribute('data-row-path') === nextEntry.path)
+            if (rowEl && typeof rowEl.scrollIntoView === 'function') rowEl.scrollIntoView({ block: 'nearest' })
+            return
+          }
+          if (event.key === 'Enter' && ctx.selected) {
+            if (target && target.getAttribute && target.getAttribute('data-row-path')) return
+            event.preventDefault()
+            ctx.openFile(ctx.selected)
+          }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [view, file, ask, pathEditing, contextMenu, showSettings])
+
       const renderHoverTip = () => {
         if (!hoverTip || contextMenu || deviceMenu) return null
         const entry = hoverTip.entry
@@ -7714,13 +7814,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
         const closePreview = () => {
           if (dirty && !window.confirm('有未保存的修改，确定关闭？')) return
-          setFile(null); setEditMode(false); setDirty(false); setDraft(''); setPreviewError(''); setTableEdit(false); setTableEditFormat(null); if (path) loadDir(path, { push: false })
+          setFile(null); setEditMode(false); setDirty(false); setDraft(''); setWorkbookDraft(null); setPreviewError(''); setTableEdit(false); setTableEditFormat(null); if (path) loadDir(path, { push: false })
         }
         const viewToggle = (icon, label, active, onClick) => h('button', {
           type: 'button', onClick, title: label + '视图', 'aria-label': label + '视图',
           'aria-pressed': active ? 'true' : 'false', 'data-active': active ? 'true' : undefined,
           className: 'tether-hover tether-viewtoggle-btn'
         }, h(Glyph, { name: icon, size: 13 }), h('span', null, label))
+        const isWorkbookFile = !!(file && file.workbook && Array.isArray(file.workbook.sheets))
         const tableCanEdit = !!(file && tablePreview && tableFormatOf(file) && !file.truncated && !tablePreview.truncatedRows && !tablePreview.truncatedColumns)
         const codeEditorFile = !!(file && file.kind === 'text' && CODE_FILE.test(String(file.name || file.path || '')))
         const markdownCanToggle = !!(file && file.kind === 'markdown' && editableFile)
@@ -7745,7 +7846,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             file.truncated ? pill('已截断', C.amber) : null,
             file.converted ? pill('已转 PDF', C.mute) : null,
             externalChanged ? pill(dirty ? '目标端已有新版本' : '目标端已变化', C.amber) : null,
-            tablePreview && !tableEdit ? h('div', { className: 'tether-viewtoggle', role: 'group', 'aria-label': '预览视图' },
+            !isWorkbookFile && tablePreview && !tableEdit ? h('div', { className: 'tether-viewtoggle', role: 'group', 'aria-label': '预览视图' },
               viewToggle('table', '表格', tableView, () => setTableView(true)),
               viewToggle('plainText', '纯文本', !tableView, () => setTableView(false))
             ) : null,
@@ -7755,7 +7856,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 : tablePreview && tableView && tableCanEdit && file.writable ? iconButton('pencil', '编辑表格', startTableEdit, false)
                   : markdownCanToggle ? iconButton(editMode ? 'eye' : 'pencil', editMode ? '预览 Markdown' : '编辑 Markdown', () => setEditMode((value) => !value), false)
                     : null,
-              editableFile ? iconButton('save', '保存', () => (tableEdit ? saveTable() : saveFile()), (!dirty && !tableEdit) || busy) : null,
+              editableFile ? iconButton('save', '保存', () => (isWorkbookFile ? saveWorkbook() : (tableEdit ? saveTable() : saveFile())), (!dirty && !tableEdit) || busy) : null,
               h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
             )
           )
@@ -7778,6 +7879,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             return h('div', { className: 'tether-file-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '22px 28px 40px' } }, h('div', { className: 'tether-file-markdown' }, h(Markdown, { text: draft || '', labels: nativeMarkdownLabels })))
           }
           if (file.kind === 'text') {
+            if (isWorkbookFile) return h(SpreadsheetEditor, {
+              colors: C, Glyph, workbook: workbookDraft || file.workbook,
+              readOnly: !file.editable || !!file.truncated || !!file.workbook.read_only_reason,
+              readOnlyReason: file.workbook.read_only_reason || (file.editable === false ? '当前为只读模式' : ''),
+              dirty, busy,
+              onChange: (nextWorkbook) => { setWorkbookDraft(nextWorkbook); setDirty(true) },
+              onSave: saveWorkbook
+            })
             if (codeEditorFile) return h(CodeEditor, {
               deviceId, path: file.path, value: draft, encoding: file.encoding, newline: file.newline,
               onChange: (next) => { setDraft(next); setDirty(true) }, onSave: saveFile, readOnly: !editableFile
@@ -7797,6 +7906,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
 
         const entries = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search)
+        explorerKeysRef.current = { entries, selected, refreshExplorer, openFile, renameEntry, deleteEntry }
         const filtering = !!search.trim()
         const columns = 'minmax(0,1fr) 132px 104px 78px'
         const copyPathText = (list) => {
@@ -7930,7 +8040,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }, h(Glyph, { name: icon, size: 15 }), h('span', null, label))
         const context = contextMenu ? h('div', {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: 'fixed', left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 120, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+          className: 'tether-glass',
+          style: { position: 'fixed', left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 120, borderRadius: 10, padding: 4, userSelect: 'none' }
         },
           contextMenu.entry ? menuItem('file', '打开', () => { setContextMenu(null); openFile(contextMenu.entry) }) : null,
           terminalAllowed && contextMenu.entry && contextMenu.entry.dir ? menuItem('terminal', '在终端中打开', () => { openTerminal(contextMenu.entry.path); setContextMenu(null) }) : null,

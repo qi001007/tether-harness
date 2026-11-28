@@ -51,6 +51,10 @@ from .mesh_runtime import MeshRelayBusy, MeshRuntimeError
 from .service_access import ServiceAccess, ServiceAccessError
 from .office_preview import OfficePreviewError, office_pdf
 try:
+    import openpyxl
+except ImportError:  # optional dependency for structured xlsx editing
+    openpyxl = None  # type: ignore[assignment]
+try:
     from .dsh_web import DshWeb
 except Exception:  # an older install may not ship the optional Linux web module
     DshWeb = None  # type: ignore[assignment]
@@ -62,6 +66,11 @@ MAX_TRANSFER_BYTES = 64 * 1024 * 1024 * 1024
 TRANSFER_ID_RE = re.compile(r"[a-f0-9]{8,32}")
 MAX_PREVIEW_BYTES = 8 * 1024 * 1024
 MAX_PREVIEW_TEXT = 512 * 1024
+MAX_XLSX_SHEETS = 20
+MAX_XLSX_ROWS = 1000
+MAX_XLSX_COLS = 60
+XLSX_NUMBER_RE = re.compile(r"^-?(?:0|[1-9]\d*)(?:\.\d+)?$")
+XLSX_INVALID_SHEET_RE = re.compile(r"[:\\/?*\[\]]")
 TRANSFER_PRIVATE_OPS = {
     "transfer_job_prepare", "transfer_job_start", "transfer_job_status", "transfer_job_list",
     "transfer_job_cancel", "transfer_job_retry", "transfer_grant_issue", "transfer_grant_revoke",
@@ -2017,9 +2026,17 @@ class FsService:
             if size > MAX_PREVIEW_BYTES:
                 raise FsError("file too large to preview", "too_large")
             try:
-                rows = self._xlsx_rows(p)
-                result.update({"kind": "text", "text": "\n".join(rows), "truncated": len(rows) >= 2000,
-                               "editable": False})
+                workbook, rows = self._xlsx_workbook(p, suffix)
+                editable = bool(writable and suffix == ".xlsx"
+                                and not workbook.get("truncated")
+                                and not workbook.get("read_only_reason"))
+                result.update({
+                    "kind": "text",
+                    "text": "\n".join(rows),
+                    "truncated": bool(workbook.get("truncated")),
+                    "editable": editable,
+                    "workbook": workbook,
+                })
                 return result
             except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:
                 raise FsError(f"xlsx preview failed: {exc}", "preview_unavailable") from exc
@@ -2047,6 +2064,101 @@ class FsService:
         result.update({"kind": "unsupported", "mime": mimetypes.guess_type(str(p))[0] or "",
                        "format": detected.get("format") or "二进制"})
         return result
+
+    @staticmethod
+    def _xlsx_cell_to_str(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if hasattr(value, "isoformat"):
+            try:
+                return str(value.isoformat(sep=" ") if hasattr(value, "hour") and getattr(value, "year", None) else value.isoformat())
+            except TypeError:
+                return str(value.isoformat())
+        return str(value)
+
+    @staticmethod
+    def _coerce_xlsx_cell(raw: Any) -> Any:
+        if raw is None:
+            return None
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, (int, float)):
+            return raw
+        text = str(raw)
+        if text == "":
+            return None
+        if text.startswith("="):
+            return text
+        trimmed = text.strip()
+        if XLSX_NUMBER_RE.fullmatch(trimmed):
+            return float(trimmed) if "." in trimmed else int(trimmed)
+        return text
+
+    @staticmethod
+    def _workbook_has_rich_objects(wb: Any) -> bool:
+        for ws in getattr(wb, "worksheets", []):
+            if (getattr(ws, "_charts", None) or getattr(ws, "_images", None)
+                    or getattr(ws, "_pivots", None)):
+                return True
+        return False
+
+    def _xlsx_workbook(self, source: Path, suffix: str) -> tuple[dict[str, Any], list[str]]:
+        if openpyxl is None:
+            rows = self._xlsx_rows(source)
+            grid = [line.split("\t") for line in rows]
+            return ({
+                "format": "xlsx",
+                "sheets": [{"name": "Sheet1", "rows": grid}],
+                "truncated": len(rows) >= 2000,
+                "read_only_reason": "当前节点缺少 openpyxl，仅支持只读预览",
+            }, rows)
+        wb = openpyxl.load_workbook(source, data_only=False)
+        try:
+            has_macros = suffix == ".xlsm" or bool(getattr(wb, "vba_archive", None))
+            has_rich = self._workbook_has_rich_objects(wb)
+            sheet_names = list(wb.sheetnames)
+            truncated = len(sheet_names) > MAX_XLSX_SHEETS
+            sheets: list[dict[str, Any]] = []
+            for name in sheet_names[:MAX_XLSX_SHEETS]:
+                ws = wb[name]
+                max_row = ws.max_row or 0
+                max_col = ws.max_column or 0
+                if max_row > MAX_XLSX_ROWS or max_col > MAX_XLSX_COLS:
+                    truncated = True
+                row_cap = min(max_row, MAX_XLSX_ROWS)
+                col_cap = min(max_col, MAX_XLSX_COLS)
+                grid: list[list[str]] = []
+                if row_cap > 0 and col_cap > 0:
+                    for row_vals in ws.iter_rows(
+                        min_row=1, max_row=row_cap, min_col=1, max_col=col_cap, values_only=True
+                    ):
+                        cells = [self._xlsx_cell_to_str(val) for val in row_vals]
+                        while cells and cells[-1] == "":
+                            cells.pop()
+                        grid.append(cells)
+                    while grid and not grid[-1]:
+                        grid.pop()
+                sheets.append({"name": ws.title, "rows": grid})
+            if not sheets:
+                sheets.append({"name": "Sheet1", "rows": []})
+            reason = ""
+            if suffix == ".xlsm" or has_macros:
+                reason = "含宏工作簿仅支持只读预览"
+            elif has_rich:
+                reason = "含图表、图片或透视表，已锁定只读以防损坏原格式"
+            elif truncated:
+                reason = "表格超出在线编辑上限，已切换只读"
+            first_rows = ["\t".join(r) for r in sheets[0]["rows"][:2000]]
+            return ({
+                "format": "xlsx",
+                "sheets": sheets,
+                "truncated": truncated,
+                "read_only_reason": reason,
+            }, first_rows)
+        finally:
+            wb.close()
 
     def _xlsx_rows(self, source: Path) -> list[str]:
         namespace = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
@@ -2140,8 +2252,114 @@ class FsService:
         except OfficePreviewError as exc:
             raise FsError(str(exc), exc.code) from exc
 
+    def _check_expected_version(self, p: Path, expected_version: Any, *, phase: str = "before") -> None:
+        if expected_version is None:
+            return
+        if expected_version == "absent":
+            if p.exists():
+                msg = "file appeared while saving" if phase == "after" else "file exists"
+                raise FsError(msg, "conflict")
+            return
+        if not isinstance(expected_version, str) or len(expected_version) != 64:
+            raise FsError("expected_version must be a SHA-256 digest", "bad_args")
+        current_version = _path_version(p) if p.exists() else ""
+        if current_version != expected_version:
+            raise FsError("file changed on target device", "conflict")
+
+    def _write_xlsx(self, p: Path, args: dict[str, Any]) -> dict[str, Any]:
+        if openpyxl is None:
+            raise FsError("openpyxl is required to save xlsx workbooks", "xlsx_unsupported")
+        workbook = args.get("workbook")
+        raw_sheets = workbook.get("sheets") if isinstance(workbook, dict) else None
+        if not isinstance(raw_sheets, list) or not raw_sheets:
+            raise FsError("workbook.sheets must be a non-empty list", "bad_args")
+        if len(raw_sheets) > MAX_XLSX_SHEETS:
+            raise FsError(f"too many sheets (max {MAX_XLSX_SHEETS})", "bad_args")
+        seen_names: set[str] = set()
+        normalized_sheets: list[tuple[str, list[list[Any]]]] = []
+        for entry in raw_sheets:
+            if not isinstance(entry, dict):
+                raise FsError("each sheet must be an object", "bad_args")
+            name = str(entry.get("name") or "").strip()
+            if not name or len(name) > 31 or XLSX_INVALID_SHEET_RE.search(name):
+                raise FsError("invalid worksheet name", "bad_args")
+            key = name.lower()
+            if key in seen_names:
+                raise FsError(f"duplicate worksheet name: {name}", "bad_args")
+            seen_names.add(key)
+            raw_rows = entry.get("rows")
+            if not isinstance(raw_rows, list) or len(raw_rows) > MAX_XLSX_ROWS:
+                raise FsError("invalid sheet rows", "bad_args")
+            rows: list[list[Any]] = []
+            for raw_row in raw_rows:
+                if not isinstance(raw_row, list) or len(raw_row) > MAX_XLSX_COLS:
+                    raise FsError("invalid sheet row", "bad_args")
+                rows.append([self._coerce_xlsx_cell(cell) for cell in raw_row])
+            normalized_sheets.append((name, rows))
+
+        self._write_guard(p, "write")
+        if p.exists() and not args.get("overwrite", True):
+            raise FsError("file exists", "exists")
+        expected_version = args.get("expected_version")
+        self._check_expected_version(p, expected_version, phase="before")
+
+        if p.exists():
+            wb = openpyxl.load_workbook(p)
+        else:
+            wb = openpyxl.Workbook()
+            if len(wb.worksheets) == 1 and wb.worksheets[0].max_row == 1 and wb.worksheets[0].cell(1, 1).value is None:
+                wb.worksheets[0].title = normalized_sheets[0][0]
+        tmp = p.with_name(p.name + ".tether-tmp." + secrets.token_hex(8))
+        try:
+            if getattr(wb, "vba_archive", None) or self._workbook_has_rich_objects(wb):
+                raise FsError("workbook contains macros or charts and is read-only", "read_only_workbook")
+            existing_by_name = {ws.title: ws for ws in list(wb.worksheets)}
+            ordered_sheets: list[Any] = []
+            for name, rows in normalized_sheets:
+                ws = existing_by_name.get(name)
+                if ws is None:
+                    ws = wb.create_sheet(title=name)
+                old_max_row = ws.max_row or 0
+                old_max_col = ws.max_column or 0
+                new_max_row = len(rows)
+                new_max_col = max((len(r) for r in rows), default=0)
+                for r_idx in range(1, max(old_max_row, new_max_row) + 1):
+                    row_vals = rows[r_idx - 1] if r_idx <= new_max_row else []
+                    row_width = len(row_vals)
+                    for c_idx in range(1, max(old_max_col, row_width) + 1):
+                        val = row_vals[c_idx - 1] if c_idx <= row_width else None
+                        ws.cell(row=r_idx, column=c_idx).value = val
+                ordered_sheets.append(ws)
+            for ws in list(wb.worksheets):
+                if ws not in ordered_sheets:
+                    wb.remove(ws)
+            wb._sheets = ordered_sheets
+            p.parent.mkdir(parents=True, exist_ok=True)
+            wb.save(tmp)
+        finally:
+            try:
+                wb.close()
+            except Exception:
+                pass
+        try:
+            data = tmp.read_bytes()
+            self._write_guard(p, "write", bytes=len(data))
+            self._check_expected_version(p, expected_version, phase="after")
+            os.replace(tmp, p)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
+        st = p.stat()
+        version = _content_version(data)
+        self.audit.add(op="write", path=str(p), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok", bytes=len(data), version=version)
+        return {"path": str(p), "bytes": len(data), "size": st.st_size,
+                "mtime": st.st_mtime, "version": version}
+
     def _op_write(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
+        if p.suffix.lower() == ".xlsx" and isinstance(args.get("workbook"), dict):
+            return self._write_xlsx(p, args)
         content = args.get("text")
         if not isinstance(content, str):
             raise FsError("text is required", "bad_args")

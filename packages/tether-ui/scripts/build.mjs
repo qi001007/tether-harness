@@ -34,6 +34,7 @@ const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src'
 const shared = strip('app.js')
 const uiControls = strip('ui-controls.js')
 const floatingWindow = strip('floating-window.js')
+const spreadsheetEditor = strip('spreadsheet-editor.js')
 const connectionPanel = strip('connection-panel.js')
 const settingsPanel = strip('settings-panel.js')
 const teamManagement = strip('team-management.js')
@@ -68,6 +69,7 @@ ${monacoRuntime}
 ${tetherGlyph}
 ${uiControls}
 ${floatingWindow}
+${spreadsheetEditor}
 ${tetherFolderPickDialog}
 ${targetFileExplorer}
 ${fileCache}

@@ -1,4 +1,15 @@
 // Shared custom UI controls following Owner UI Design rules (no raw <select> or checkbox).
+export function pointInSafeTriangle(point, apex, corner1, corner2) {
+  if (!point || !apex || !corner1 || !corner2) return false
+  const sign = (a, b, c) => (a.x - c.x) * (b.y - c.y) - (b.x - c.x) * (a.y - c.y)
+  const d1 = sign(point, apex, corner1)
+  const d2 = sign(point, corner1, corner2)
+  const d3 = sign(point, corner2, apex)
+  const hasNeg = d1 < 0 || d2 < 0 || d3 < 0
+  const hasPos = d1 > 0 || d2 > 0 || d3 > 0
+  return !(hasNeg && hasPos)
+}
+
 export function createUiControls(React) {
   const h = React.createElement
 
