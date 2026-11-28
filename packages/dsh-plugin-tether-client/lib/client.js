@@ -40504,7 +40504,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
               })
               if (croc) itemBytes = Number(croc.bytes) || item.size
             } catch (error) {
-              if (isTransferAbort(error, controller.signal)) throw error
+              if (isTransferAbort(error, controller.signal) || error?.code === 'croc_status_unconfirmed') throw error
             }
             // One Croc failure means this route pays handshake time for nothing; stop trying.
             if (itemBytes === null) crocUsable = false
@@ -47793,6 +47793,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
       const isLocalTargetDevice = !!(localDeviceId && deviceId === localDeviceId)
       const startUnifiedDsh = () => {
+        if (dsh && dsh.installed === false && dshInstallSupported && (!dshWeb || !dshWeb.supported)) {
+          void runDsh('dsh_install')
+          return
+        }
         if (host.kind === 'app' && host.workbench && host.workbench.open) {
           if (isLocalTargetDevice) {
             void openWorkbenchDsh()
@@ -48531,6 +48535,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!targetId || remoteDesktopBusy || !host || host.kind !== 'app' || !host.workbench || !host.workbench.open) return
         setTopbarDeviceMenuOpen(false)
         setDeviceMenu(null)
+        const previous = remoteDesktopView
         setRemoteDesktopBusy(true)
         try {
           const service = await host.workbench.open(targetId, 'desktop')
@@ -48539,6 +48544,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             throw new Error('主进程没有返回有效的远程桌面会话。')
           }
           setRemoteDesktopView(service)
+          if (previous && host.workbench.close && (previous.targetId !== service.targetId || previous.grantId !== service.grantId)) {
+            void host.workbench.close(previous.targetId, 'desktop', previous.grantId).catch(() => {})
+          }
         } catch (error) {
           fail(error)
         } finally {

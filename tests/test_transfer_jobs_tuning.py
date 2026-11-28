@@ -212,3 +212,40 @@ def test_transfer_info_advertises_directional_engines_without_dropping_legacy_fi
     assert bundled["transfer_engines"]["native_source"] is True
     assert bundled["transfer_engines"]["native_target"] is True
     assert bundled["transfer_engines"]["fallback_safe_marker"] is True
+
+
+def test_run_publishes_terminal_failure_atomically_with_cleanup_done(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    jobs = _jobs(tmp_path)
+    (jobs._grant_dir / "op-atomic").mkdir()
+    _insert_job(jobs, "op-atomic", state="queued", bytes_total=100, files_total=1)
+    dest_root = tmp_path / "dest"
+    dest_root.mkdir()
+    key_file = tmp_path / "id_ed25519"
+    key_file.write_text("dummy", encoding="utf-8")
+
+    observed: list[tuple[str, bool]] = []
+    orig_cleanup = jobs._cleanup_credentials
+
+    def spy_cleanup(operation_id: str) -> None:
+        snap = jobs._get(operation_id)
+        if snap:
+            observed.append((snap["state"], snap["fallback_safe"]))
+        orig_cleanup(operation_id)
+
+    monkeypatch.setattr(jobs, "_cleanup_credentials", spy_cleanup)
+    monkeypatch.setattr(jobs, "_start_rc", lambda *_args: (_ for _ in ()).throw(
+        TransferJobError("source_connection_failed", "cannot reach source", True)))
+
+    jobs._run(
+        "op-atomic", [("a.txt", dest_root / "a.txt", "file", "")],
+        "copy", 100, str(tmp_path), dest_root, _endpoint(), key_file, "fail",
+    )
+
+    assert observed, "cleanup must run during failure teardown"
+    assert all(state not in {"failed", "cancelled", "completed"} for state, _ in observed), (
+        f"terminal state published before cleanup completed: {observed}"
+    )
+    final_snap = jobs._get("op-atomic")
+    assert final_snap["state"] == "failed"
+    assert final_snap["write_started"] is False
+    assert final_snap["fallback_safe"] is True

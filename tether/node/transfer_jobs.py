@@ -619,12 +619,14 @@ class RcloneJobs:
         with self._lock:
             current = self._get(operation_id)
             if current and current["state"] == "cancelling":
-                self._update(operation_id, state="cancelled")
                 self._cleanup_credentials(operation_id)
-                self._update(operation_id, cleanup_done=1)
+                shutil.rmtree(dest_root / ".tether-incoming" / operation_id, ignore_errors=True)
+                self._update(operation_id, state="cancelled", rate=0, cleanup_done=1)
                 return
             self._update(operation_id, state="authorizing")
         bytes_done = files_done = 0
+        terminal_state: str | None = None
+        terminal_updates: dict[str, Any] = {}
         try:
             config_path = self._write_rclone_config(operation_id, endpoint, key_file)
             file_items = [item for item in items if item[2] == "file"]
@@ -633,12 +635,10 @@ class RcloneJobs:
             if batch_files:
                 self._start_rc(operation_id, config_path)
                 if self._get(operation_id)["state"] == "cancelling":
-                    self._update(operation_id, state="cancelled", rate=0)
-                    return
+                    raise TransferJobError("cancelled", "transfer was cancelled")
             for relative, _, kind, _ in items:
                 if self._get(operation_id)["state"] == "cancelling":
-                    self._update(operation_id, state="cancelled", rate=0)
-                    return
+                    raise TransferJobError("cancelled", "transfer was cancelled")
                 if batch_files and kind == "file":
                     continue
                 remote = "transfer:" + posixpath.join(str(endpoint.get("remote_root") or "/").strip("/"), relative)
@@ -648,8 +648,7 @@ class RcloneJobs:
                 if size_result.returncode:
                     raise TransferJobError("source_unavailable", "rclone could not inspect the authorized source", True)
                 if self._get(operation_id)["state"] == "cancelling":
-                    self._update(operation_id, state="cancelled", rate=0)
-                    return
+                    raise TransferJobError("cancelled", "transfer was cancelled")
                 size_data = json.loads(size_result.stdout)
                 bytes_total += int(size_data.get("bytes", 0))
                 files_done += 0
@@ -676,15 +675,13 @@ class RcloneJobs:
                 self._update(operation_id, bytes_total=bytes_total, files_total=files_total)
             with self._lock:
                 if self._get(operation_id)["state"] == "cancelling":
-                    self._update(operation_id, state="cancelled", rate=0)
-                    return
+                    raise TransferJobError("cancelled", "transfer was cancelled")
                 self._update(operation_id, state="running")
             batch_published = False
             for relative, dst, kind, expected_version in items:
                 with self._lock:
                     if self._get(operation_id)["state"] == "cancelling":
-                        self._update(operation_id, state="cancelled")
-                        return
+                        raise TransferJobError("cancelled", "transfer was cancelled")
                 if batch_files and kind == "file":
                     if batch_published:
                         continue
@@ -744,8 +741,7 @@ class RcloneJobs:
                     staged_files = []
                     for batch_relative, batch_dst, _, version in batch_files:
                         if self._get(operation_id)["state"] == "cancelling":
-                            self._update(operation_id, state="cancelled", rate=0)
-                            return
+                            raise TransferJobError("cancelled", "transfer was cancelled")
                         stage_file = self._resolve(str(batch_stage_root / Path(*batch_relative.split("/"))))
                         self._write_guard(stage_file, "write")
                         if (not _inside(stage_file, batch_stage_root) or not stage_file.is_file() or
@@ -756,8 +752,7 @@ class RcloneJobs:
                         staged_files.append((batch_relative, stage_file, batch_dst, version))
                     for _, stage_file, batch_dst, version in staged_files:
                         if self._get(operation_id)["state"] == "cancelling":
-                            self._update(operation_id, state="cancelled", rate=0)
-                            return
+                            raise TransferJobError("cancelled", "transfer was cancelled")
                         if batch_dst.exists():
                             self._write_guard(batch_dst, "write")
                             if conflict_policy != "overwrite" or not version or _destination_version(batch_dst) != version:
@@ -810,8 +805,7 @@ class RcloneJobs:
                     current = self._get(operation_id)
                     if current and current["state"] == "cancelling":
                         self._rc_call(operation_id, "job/stop", {"jobid": job_id})
-                        self._update(operation_id, state="cancelled", rate=0)
-                        return
+                        raise TransferJobError("cancelled", "transfer was cancelled")
                     status = self._rc_call(operation_id, "job/status", {"jobid": job_id})
                     stats = self._rc_call(operation_id, "core/stats", {})
                     self._update(operation_id, bytes_done=min(bytes_total, int(stats.get("bytes", 0))),
@@ -846,8 +840,7 @@ class RcloneJobs:
                             checker.wait(timeout=2)
                         except subprocess.TimeoutExpired:
                             checker.kill()
-                        self._update(operation_id, state="cancelled", rate=0)
-                        return
+                        raise TransferJobError("cancelled", "transfer was cancelled")
                     if time.monotonic() >= deadline:
                         checker.kill()
                         raise TransferJobError("verification_timeout", "content verification exceeded one hour", True)
@@ -869,8 +862,7 @@ class RcloneJobs:
                 files_done += 1
                 with self._lock:
                     if self._get(operation_id)["state"] == "cancelling":
-                        self._update(operation_id, state="cancelled", rate=0)
-                        return
+                        raise TransferJobError("cancelled", "transfer was cancelled")
                     if dst.exists():
                         self._write_guard(dst, "write")
                         if conflict_policy != "overwrite":
@@ -909,29 +901,32 @@ class RcloneJobs:
                 self._update(operation_id, state="running", bytes_done=min(bytes_total, bytes_done), files_done=files_done)
             with self._lock:
                 if self._get(operation_id)["state"] == "cancelling":
-                    self._update(operation_id, state="cancelled", rate=0)
-                    return
-                self._update(operation_id, state="completed", bytes_done=bytes_total,
-                             files_done=self._get(operation_id)["files_total"], rate=0)
+                    raise TransferJobError("cancelled", "transfer was cancelled")
+                terminal_state = "completed"
+                terminal_updates = {"bytes_done": bytes_total,
+                                    "files_done": self._get(operation_id)["files_total"], "rate": 0}
         except TransferJobError as exc:
             if exc.code == "cancelled":
-                self._update(operation_id, state="cancelled", error=None, rate=0)
+                terminal_state = "cancelled"
+                terminal_updates = {"error": None, "rate": 0}
             else:
-                self._update(operation_id, state="failed", error=json.dumps({"code": exc.code, "message": str(exc), "retryable": exc.retryable}), rate=0)
+                terminal_state = "failed"
+                terminal_updates = {"error": json.dumps({"code": exc.code, "message": str(exc), "retryable": exc.retryable}), "rate": 0}
         except Exception as exc:  # persist operational errors for the next APP session
-            self._update(operation_id, state="failed", error=json.dumps({"code": "transfer_failed", "message": str(exc)[:300], "retryable": True}), rate=0)
+            terminal_state = "failed"
+            terminal_updates = {"error": json.dumps({"code": "transfer_failed", "message": str(exc)[:300], "retryable": True}), "rate": 0}
         finally:
-            with self._lock:
-                self._active.pop(operation_id, None)
             self._stop_rc(operation_id)
-            current = self._get(operation_id)
-            state = current["state"] if current else None
-            if state in {"completed", "cancelled", "failed"}:
+            if terminal_state in {"completed", "cancelled", "failed"}:
                 self._cleanup_credentials(operation_id)
                 shutil.rmtree(dest_root / ".tether-incoming" / operation_id, ignore_errors=True)
-                self._update(operation_id, cleanup_done=1)
-            elif state in TERMINAL:
-                shutil.rmtree(dest_root / ".tether-incoming" / operation_id, ignore_errors=True)
+                self._update(operation_id, state=terminal_state, cleanup_done=1, **terminal_updates)
+            else:
+                current = self._get(operation_id)
+                if current and current["state"] in TERMINAL:
+                    shutil.rmtree(dest_root / ".tether-incoming" / operation_id, ignore_errors=True)
+            with self._lock:
+                self._active.pop(operation_id, None)
 
     def _receive_relays(self, authority: dict[str, Any], endpoint: dict[str, Any], *,
                         allow_local_adapter: bool = True) -> list[SftpRelay]:

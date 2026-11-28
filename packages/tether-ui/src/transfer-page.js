@@ -589,7 +589,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
               })
               if (croc) itemBytes = Number(croc.bytes) || item.size
             } catch (error) {
-              if (isTransferAbort(error, controller.signal)) throw error
+              if (isTransferAbort(error, controller.signal) || error?.code === 'croc_status_unconfirmed') throw error
             }
             // One Croc failure means this route pays handshake time for nothing; stop trying.
             if (itemBytes === null) crocUsable = false

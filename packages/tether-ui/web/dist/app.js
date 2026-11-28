@@ -176508,7 +176508,7 @@ function createTransferPage({
               });
               if (croc) itemBytes = Number(croc.bytes) || item.size;
             } catch (error) {
-              if (isTransferAbort(error, controller.signal)) throw error;
+              if (isTransferAbort(error, controller.signal) || error?.code === "croc_status_unconfirmed") throw error;
             }
             if (itemBytes === null) crocUsable = false;
           }
@@ -186245,6 +186245,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     };
     const isLocalTargetDevice = !!(localDeviceId && deviceId === localDeviceId);
     const startUnifiedDsh = () => {
+      if (dsh && dsh.installed === false && dshInstallSupported && (!dshWeb || !dshWeb.supported)) {
+        void runDsh("dsh_install");
+        return;
+      }
       if (host.kind === "app" && host.workbench && host.workbench.open) {
         if (isLocalTargetDevice) {
           void openWorkbenchDsh();
@@ -187069,6 +187073,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (!targetId || remoteDesktopBusy || !host || host.kind !== "app" || !host.workbench || !host.workbench.open) return;
       setTopbarDeviceMenuOpen(false);
       setDeviceMenu(null);
+      const previous = remoteDesktopView;
       setRemoteDesktopBusy(true);
       try {
         const service = await host.workbench.open(targetId, "desktop");
@@ -187076,6 +187081,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           throw new Error("\u4E3B\u8FDB\u7A0B\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684\u8FDC\u7A0B\u684C\u9762\u4F1A\u8BDD\u3002");
         }
         setRemoteDesktopView(service);
+        if (previous && host.workbench.close && (previous.targetId !== service.targetId || previous.grantId !== service.grantId)) {
+          void host.workbench.close(previous.targetId, "desktop", previous.grantId).catch(() => {
+          });
+        }
       } catch (error) {
         fail2(error);
       } finally {
