@@ -1,5 +1,8 @@
+import { createUiControls } from './ui-controls.js'
+
 export function createTeamManagementPage(React) {
   const h = React.createElement
+  const { StyledSelect, StyledCheckbox, SegmentedControl } = createUiControls(React)
   const PERMISSIONS = [
     ['files.read', '文件读取'],
     ['files.write', '文件写入'],
@@ -36,11 +39,11 @@ export function createTeamManagementPage(React) {
     const manager = !!selectedTeam && ['owner', 'admin'].includes(selectedTeam.role)
     const selectedShare = shares.find((share) => share.device_id === deviceId) || null
     const style = {
-      field: { height: 32, minWidth: 0, boxSizing: 'border-box', border: '1px solid #e4e7ec', borderRadius: 6, padding: '0 9px', background: '#fff', color: '#101828', fontSize: 12 },
-      button: { height: 30, padding: '0 10px', border: 0, borderRadius: 6, background: '#f2f4f7', color: '#344054', fontSize: 12, cursor: 'pointer' },
-      primary: { height: 30, padding: '0 11px', border: 0, borderRadius: 6, background: '#101828', color: '#fff', fontSize: 12, cursor: 'pointer' },
-      card: { padding: 12, border: '1px solid #eaecf0', borderRadius: 8, background: '#fff' },
-      muted: { color: '#667085', fontSize: 11.5, lineHeight: 1.55 }
+      field: { height: 32, minWidth: 0, boxSizing: 'border-box', border: '1px solid var(--dsw-alias-border-l2, #e4e7ec)', borderRadius: 6, padding: '0 9px', background: 'var(--dsw-alias-bg-base, #fff)', color: 'var(--dsw-alias-label-primary, #101828)', fontSize: 12 },
+      button: { height: 30, padding: '0 10px', border: 0, borderRadius: 6, background: 'var(--dsw-alias-interactive-bg-hover, #f2f4f7)', color: 'var(--dsw-alias-label-secondary, #344054)', fontSize: 12, cursor: 'pointer' },
+      primary: { height: 30, padding: '0 11px', border: 0, borderRadius: 6, background: 'var(--dsw-alias-button-primary-fill, #101828)', color: 'var(--dsw-alias-label-primary-inverted, #fff)', fontSize: 12, cursor: 'pointer' },
+      card: { padding: 12, border: '1px solid var(--dsw-alias-border-l1, #eaecf0)', borderRadius: 10, background: 'var(--dsw-alias-bg-layer-1, #fff)' },
+      muted: { color: 'var(--dsw-alias-label-tertiary, #667085)', fontSize: 11.5, lineHeight: 1.55 }
     }
 
     const readJson = async (path) => api(path)
@@ -159,8 +162,10 @@ export function createTeamManagementPage(React) {
       try { await navigator.clipboard.writeText(issuedToken) } catch (_) { setError('无法访问剪贴板，请手动复制邀请令牌。') }
     }
     const permissionLabel = (permission) => (PERMISSIONS.find((entry) => entry[0] === permission) || [permission, permission])[1]
-    const teamOptions = teams.map((team) => h('option', { key: team.team_id, value: team.team_id },
-      (team.name || team.team_id) + ' · ' + roleName(team.role)))
+    const teamOptions = teams.map((team) => ({
+      value: team.team_id,
+      label: (team.name || team.team_id) + ' · ' + roleName(team.role)
+    }))
     const sectionTitle = (title, detail) => h('div', { style: { display: 'grid', gap: 3, marginBottom: 9 } },
       h('strong', { style: { color: '#344054', fontSize: 12.5 } }, title), detail ? h('span', { style: style.muted }, detail) : null)
     const memberRows = members.map((member) => h('div', { key: member.user_id, style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 34, borderTop: '1px solid #f2f4f7' } },
@@ -184,10 +189,17 @@ export function createTeamManagementPage(React) {
 
     return h('div', { style: { display: 'grid', gap: 14, maxWidth: 620 } },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-        h('select', { value: teamId, onChange: (event) => { const next = event.target.value; setTeamId(next); setError(''); setIssuedToken(''); void refresh(next) }, disabled: busy || !teams.length, style: { ...style.field, flex: '1 1 auto' } },
-          teamOptions.length ? teamOptions : h('option', { value: '' }, '还没有团队')),
+        h(StyledSelect, {
+          value: teamId,
+          options: teamOptions,
+          placeholder: '还没有团队',
+          ariaLabel: '选择团队',
+          disabled: busy || !teams.length,
+          style: { flex: '1 1 auto' },
+          onChange: (next) => { setTeamId(next); setError(''); setIssuedToken(''); void refresh(next) }
+        }),
         h('button', { type: 'button', disabled: busy, onClick: () => { void refresh(teamId) }, style: style.button }, busy ? '读取中…' : '刷新')),
-      error ? h('div', { role: 'alert', style: { padding: '8px 10px', borderRadius: 6, background: '#fef3f2', color: '#b42318', fontSize: 11.5, overflowWrap: 'anywhere' } }, error) : null,
+      error ? h('div', { role: 'alert', style: { padding: '8px 10px', borderRadius: 6, background: 'rgba(180,35,24,.10)', color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 11.5, overflowWrap: 'anywhere' } }, error) : null,
       h('div', { style: style.card },
         sectionTitle('创建团队'),
         h('form', { onSubmit: createTeam, style: { display: 'flex', gap: 8 } },
@@ -204,10 +216,17 @@ export function createTeamManagementPage(React) {
           memberRows.length ? memberRows : h('div', { style: style.muted }, '暂无成员')),
         manager ? h('div', { style: style.card },
           sectionTitle('邀请成员', '邀请令牌有效期 7 天。系统返回令牌，请通过可信渠道交给被邀请者。'),
-          h('form', { onSubmit: issueInvite, style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 120px auto', gap: 8 } },
-            h('input', { type: 'email', value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), placeholder: '邮箱（可选）', disabled: busy, style: style.field }),
-            h('select', { value: inviteRole, onChange: (event) => setInviteRole(event.target.value), disabled: busy, style: style.field },
-              h('option', { value: 'member' }, '成员'), selectedTeam.role === 'owner' ? h('option', { value: 'admin' }, '管理员') : null),
+          h('form', { onSubmit: issueInvite, style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 } },
+            h('input', { type: 'email', value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), placeholder: '邮箱（可选）', disabled: busy, style: { ...style.field, flex: '1 1 180px' } }),
+            h(SegmentedControl, {
+              value: inviteRole,
+              ariaLabel: '邀请角色',
+              disabled: busy,
+              options: selectedTeam.role === 'owner'
+                ? [{ value: 'member', label: '成员' }, { value: 'admin', label: '管理员' }]
+                : [{ value: 'member', label: '成员' }],
+              onChange: (next) => setInviteRole(next)
+            }),
             h('button', { type: 'submit', disabled: busy, style: style.button }, '生成邀请')),
           issuedToken ? h('div', { style: { display: 'grid', gap: 6, marginTop: 10 } },
             h('span', { style: style.muted }, '此令牌只显示在本次创建结果中。'),
@@ -217,17 +236,30 @@ export function createTeamManagementPage(React) {
         h('div', { style: { ...style.card, display: 'grid', gap: 10 } },
           sectionTitle('设备共享', '只列出你拥有的设备。文件权限必须限定目标设备上的绝对目录。'),
           h('form', { onSubmit: saveShare, style: { display: 'grid', gap: 10 } },
-            h('select', { value: deviceId, onChange: (event) => setDeviceId(event.target.value), disabled: busy || !ownDevices.length, style: style.field },
-              h('option', { value: '' }, ownDevices.length ? '选择自己的设备' : '当前账号没有可分享设备'),
-              ownDevices.map((device) => h('option', { key: device.device_id, value: device.device_id }, (device.name || device.device_id) + (device.online ? ' · 在线' : ' · 离线')))),
-            h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 6 } },
-              PERMISSIONS.map(([permission, label, enabled = true]) => h('label', { key: permission, title: enabled ? '' : '远控授权接口尚未接入', style: { display: 'flex', alignItems: 'center', gap: 6, color: enabled ? '#475467' : '#98a2b3', fontSize: 11.5 } },
-                h('input', { type: 'checkbox', checked: permissions.includes(permission), disabled: busy || !enabled,
-                  onChange: () => togglePermission(permission) }), label))),
-            permissions.some((item) => item === 'files.read' || item === 'files.write') ? h('label', { style: { display: 'grid', gap: 5, color: '#475467', fontSize: 11.5 } },
+            h(StyledSelect, {
+              value: deviceId,
+              ariaLabel: '选择共享设备',
+              placeholder: ownDevices.length ? '选择自己的设备' : '当前账号没有可分享设备',
+              disabled: busy || !ownDevices.length,
+              options: ownDevices.map((device) => ({
+                value: device.device_id,
+                label: (device.name || device.device_id) + (device.online ? ' · 在线' : ' · 离线')
+              })),
+              onChange: (next) => setDeviceId(next)
+            }),
+            h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 4 } },
+              PERMISSIONS.map(([permission, label, enabled = true]) => h(StyledCheckbox, {
+                key: permission,
+                label,
+                title: enabled ? '' : '远控授权接口尚未接入',
+                checked: permissions.includes(permission),
+                disabled: busy || !enabled,
+                onChange: () => togglePermission(permission)
+              }))),
+            permissions.some((item) => item === 'files.read' || item === 'files.write') ? h('label', { style: { display: 'grid', gap: 5, color: 'var(--dsw-alias-label-secondary, #475467)', fontSize: 11.5 } },
               '文件允许目录（每行一个绝对路径）',
               h('textarea', { rows: 3, value: allowedRoots, onChange: (event) => setAllowedRoots(event.target.value), disabled: busy,
-                placeholder: '例如：D:/Shared', style: { boxSizing: 'border-box', width: '100%', resize: 'vertical', border: '1px solid #e4e7ec', borderRadius: 6, padding: 8, color: '#344054', fontSize: 11.5 } })) : null,
+                placeholder: '例如：D:/Shared', style: { boxSizing: 'border-box', width: '100%', resize: 'vertical', border: '1px solid var(--dsw-alias-border-l2, #e4e7ec)', borderRadius: 6, padding: 8, background: 'var(--dsw-alias-bg-base, #fff)', color: 'var(--dsw-alias-label-primary, #344054)', fontSize: 11.5 } })) : null,
             h('button', { type: 'submit', disabled: busy || !teamId || !deviceId || !permissions.length, style: style.primary }, selectedShare ? '保存共享权限' : '共享设备'))),
         h('div', { style: style.card },
           sectionTitle('已共享设备'),

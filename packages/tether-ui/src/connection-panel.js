@@ -241,25 +241,24 @@ export function createConnectionPanel(React) {
     ]
     const visual = h('div', { className: 'tether-login-visual', style: {
       position: 'relative', padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-      background: 'linear-gradient(155deg, #0b1220 0%, #13233f 55%, #0b1220 100%)', overflow: 'hidden'
+      background: '#1B1E24', borderRight: '1px solid rgba(255,255,255,.08)', overflow: 'hidden'
     } },
-      h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, background: 'radial-gradient(circle at 52% 42%, rgba(59,130,246,.28), transparent 58%)', pointerEvents: 'none' } }),
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, color: '#fff', position: 'relative', zIndex: 1 } },
-        h('span', { style: { width: 28, height: 28, borderRadius: 8, background: '#fff', display: 'grid', placeItems: 'center', color: '#101828', fontWeight: 700, fontSize: 15 } }, 'T'),
-        h('span', { style: { fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.8 } }, 'Tether')),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, color: '#E6E8EC', position: 'relative', zIndex: 1 } },
+        h('span', { style: { width: 28, height: 28, borderRadius: 6, background: '#E6E8EC', display: 'grid', placeItems: 'center', color: '#121418', fontWeight: 700, fontSize: 15 } }, 'T'),
+        h('span', { style: { fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.85 } }, 'Tether')),
       h(LoginNetwork),
-      h('div', { style: { fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,.55)', position: 'relative', zIndex: 1 } }, '私有设备网'))
+      h('div', { style: { fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase', color: '#9CA3AF', position: 'relative', zIndex: 1 } }, '私有设备网'))
     return h('div', { style: {
       position: embedded ? 'relative' : 'absolute', inset: embedded ? undefined : 0, zIndex: 80,
       minHeight: embedded ? '100%' : undefined, display: 'grid', placeItems: 'center', padding: 24,
-      background: 'radial-gradient(1200px 600px at 18% 8%, #eaf1ff 0%, transparent 60%), radial-gradient(900px 500px at 88% 92%, #fff4e5 0%, transparent 55%), #f7f8fb',
+      background: 'var(--tether-workbench-bg, var(--dsw-alias-bg-base, #f4f5f7))',
       color: ink, overflow: 'auto'
     } },
       h('style', null, '@media (max-width: 760px){.tether-login-card{grid-template-columns:1fr!important}.tether-login-visual{display:none!important}}'),
       h('div', { className: 'tether-login-card', style: {
         position: 'relative', width: 'min(820px, 100%)', display: 'grid',
-        gridTemplateColumns: '320px minmax(0, 1fr)', borderRadius: 18, overflow: 'hidden', background: bg,
-        boxShadow: '0 24px 70px rgba(16,24,40,.22)', border: '1px solid rgba(16,24,40,.06)'
+        gridTemplateColumns: '320px minmax(0, 1fr)', borderRadius: 16, overflow: 'hidden', background: bg,
+        boxShadow: '0 24px 64px rgba(16,24,40,.18), 0 2px 8px rgba(16,24,40,.08)', border: '1px solid ' + line
       } },
         visual,
         h('div', { className: 'tether-login-stage', style: { position: 'relative', minHeight: 0, padding: '28px 0 26px', display: 'flex', flexDirection: 'column' } },

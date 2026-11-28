@@ -7,6 +7,7 @@ import { createTeamManagementPage } from './team-management.js'
 import { createTransferPage } from './transfer-page.js'
 import { createTerminalDock } from './terminal-dock.js'
 import { createAgentsPage } from './agents-page.js'
+import { createUiControls } from './ui-controls.js'
 import { TetherFolderPickDialog } from './tether-folder-pick-dialog.js'
 import { createGlyph } from './tether-glyph.js'
 import { invalidateDirectory, peekDirectory, rememberDirectory } from './file-cache.js'
@@ -1245,6 +1246,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
     const Connection = createConnectionPanel(React)
     const Settings = createSettingsPanel(React)
     const TeamManagementPage = createTeamManagementPage(React)
+    const { StyledSelect, ToggleSwitch } = createUiControls(React)
     const PANEL_ID = 'tether'
     const BASE = host.apiBase()
 
@@ -1252,7 +1254,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       ink: 'var(--dsw-alias-label-primary, #101828)',
       sub: 'var(--dsw-alias-label-secondary, #475467)',
       mute: 'var(--dsw-alias-label-tertiary, #667085)',
-      line: 'var(--dsw-alias-border-l1, rgba(9, 30, 66, 0.04))',
+      line: 'var(--dsw-alias-border-l1, rgba(9, 30, 66, 0.06))',
       soft: 'var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06))',
       hover: 'var(--dsw-alias-interactive-bg-hover-solid, #f2f4f7)',
       active: 'var(--dsw-alias-interactive-bg-active, rgba(38, 49, 72, 0.10))',
@@ -1262,10 +1264,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       layer2: 'var(--dsw-alias-bg-layer-2, #ffffff)',
       layer3: 'var(--dsw-alias-bg-layer-3, #ffffff)',
       input: 'var(--dsw-specific-input-major, #ffffff)',
-      green: 'var(--dsw-alias-state-success-primary, #16a34a)',
+      green: 'var(--dsw-alias-state-success-primary, #15803d)',
       red: 'var(--dsw-alias-state-error-primary, #b42318)',
       blue: 'var(--dsw-alias-state-business-primary, #1570ef)',
-      amber: 'var(--dsw-alias-state-warn-primary, #b54708)',
+      amber: 'var(--dsw-alias-state-warn-primary, #b45309)',
       primary: 'var(--dsw-alias-button-primary-fill, #101828)',
       onPrimary: 'var(--dsw-alias-label-primary-inverted, #ffffff)',
       bubble: 'var(--dsw-specific-bubble, #f2f4f7)',
@@ -1273,6 +1275,21 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       nodeChildActive: 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 13%, var(--dsw-specific-sidebar-fill, #f9fafb))',
       block: 'var(--dsw-alias-markdown-code-block, #f8fafc)',
       shadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))'
+    }
+
+    const classifyNoticeLevel = (text) => {
+      const msg = String(text || '')
+      if (/失败|错误|拒绝|无效|超时|不可达|不能|未保存|error|fail/i.test(msg)) return 'error'
+      if (/已被其他程序修改|未能在线重载|无法在线重启|请重新登录|待更新|warn/i.test(msg)) return 'warning'
+      if (/^(Saved |Policy updated|已保存|已接入|登录成功|已重命名|已复制|已粘贴|已请求|插件更新已立即生效|插件已安装)/.test(msg)) return 'success'
+      return 'info'
+    }
+    const normalizeToastValue = (value, explicitLevel) => {
+      if (!value) return ''
+      const text = typeof value === 'string' ? value : String(value.text || '')
+      if (!text) return ''
+      const level = explicitLevel || (typeof value === 'object' && value.level) || classifyNoticeLevel(text)
+      return { text, level }
     }
 
     let apiBaseList = host && host.apiBases ? host.apiBases() : [BASE]
@@ -1834,6 +1851,15 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
     const SCROLL_CSS = `
       .tether-root { --tether-strong: 600; --tether-strong-2: 650; --tether-body: 400;
+        --tether-space-1: 4px; --tether-space-2: 8px; --tether-space-3: 12px;
+        --tether-space-4: 16px; --tether-space-6: 24px; --tether-space-8: 32px;
+        --tether-radius-sm: 6px; --tether-radius-md: 10px; --tether-radius-lg: 16px;
+        --tether-ease: cubic-bezier(0.22, 1, 0.36, 1);
+        --tether-duration-fast: 150ms; --tether-duration-normal: 220ms;
+        --tether-glass-bg: rgba(255, 255, 255, 0.86);
+        --tether-glass-border: rgba(16, 24, 40, 0.10);
+        --tether-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+        --tether-glass-shadow: 0 12px 32px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.08);
         --tether-topbar-bg: #efeff0;
         --tether-activity-bg: #e8e8ea;
         --tether-explorer-bg: #efeff1;
@@ -1853,22 +1879,45 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         --tether-table-grid: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 6%, transparent);
         --tether-tab-bg: #ffffff; }
       body[data-ds-dark-theme] .tether-root {
-        --tether-strong: 500; --tether-strong-2: 520; --tether-body: 350;
-        --tether-topbar-bg: #242426;
-        --tether-activity-bg: #1d1d1f;
-        --tether-explorer-bg: #28282b;
-        --tether-command-bg: #202022;
-        --tether-workbench-bg: #1e1e1e;
-        --tether-status-bg: #2a2a2d;
-        --tether-status-ink: #b8b8bb;
-        --tether-tree-selected: #3a3a3d;
-        --tether-chrome-ink: #ededee;
-        --tether-chrome-muted: #a1a1a6;
-        --tether-chrome-hover: #343438;
-        --tether-focus: #a2a2a6;
-        --tether-tabstrip: #2b2b2e;
-        --tether-tab-bg: #1e1e1e;
-        --tether-split: rgba(255, 255, 255, 0.12); }
+        --tether-strong: 500; --tether-strong-2: 520; --tether-body: 400;
+        --dsw-alias-bg-base: #121418;
+        --dsw-alias-bg-layer-1: #1B1E24;
+        --dsw-alias-bg-layer-2: #252931;
+        --dsw-alias-bg-layer-3: #252931;
+        --dsw-specific-sidebar-fill: #1B1E24;
+        --dsw-specific-input-major: #1B1E24;
+        --dsw-alias-label-primary: #E6E8EC;
+        --dsw-alias-label-secondary: #CBD2DC;
+        --dsw-alias-label-tertiary: #9CA3AF;
+        --dsw-alias-border-l1: rgba(255, 255, 255, 0.08);
+        --dsw-alias-border-l2: rgba(255, 255, 255, 0.14);
+        --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, 0.06);
+        --dsw-alias-interactive-bg-hover-solid: #252931;
+        --dsw-alias-interactive-bg-active: rgba(255, 255, 255, 0.12);
+        --dsw-alias-state-success-primary: #4ADE80;
+        --dsw-alias-state-error-primary: #F87171;
+        --dsw-alias-state-warn-primary: #FBBF24;
+        --tether-glass-bg: rgba(37, 41, 49, 0.84);
+        --tether-glass-border: rgba(255, 255, 255, 0.10);
+        --tether-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        --tether-glass-shadow: 0 16px 36px rgba(0, 0, 0, 0.48), 0 2px 8px rgba(0, 0, 0, 0.28);
+        --tether-topbar-bg: #1B1E24;
+        --tether-activity-bg: #121418;
+        --tether-explorer-bg: #1B1E24;
+        --tether-command-bg: #1B1E24;
+        --tether-workbench-bg: #121418;
+        --tether-status-bg: #1B1E24;
+        --tether-status-ink: #9CA3AF;
+        --tether-tree-selected: #252931;
+        --tether-chrome-ink: #E6E8EC;
+        --tether-chrome-muted: #9CA3AF;
+        --tether-chrome-hover: #252931;
+        --tether-focus: #9CA3AF;
+        --tether-tabstrip: #1B1E24;
+        --tether-tab-bg: #121418;
+        --tether-split: rgba(255, 255, 255, 0.08); }
+      .tether-glass { background: var(--tether-glass-bg) !important; backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%); border: 1px solid var(--tether-glass-border) !important; box-shadow: var(--tether-glass-highlight), var(--tether-glass-shadow) !important; color: var(--dsw-alias-label-primary, #101828); }
+      .tether-sidebar { background: var(--tether-explorer-bg) !important; transition: transform var(--tether-duration-normal) var(--tether-ease), opacity var(--tether-duration-fast) var(--tether-ease); }
       .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; -webkit-app-region: drag; }
       .tether-topbar button, .tether-topbar input, .tether-topbar [role="button"], .tether-topbar a { -webkit-app-region: no-drag; }
       .tether-window-control:hover { background: var(--tether-chrome-hover) !important; color: var(--tether-chrome-ink) !important; }
@@ -2600,17 +2649,23 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         .filter((row) => !term || [row.left, row.right].some((item) => String(item.name || '').toLowerCase().includes(term) || String(item.device_id).toLowerCase().includes(term)))
         .sort((a, b) => String(a.left.name || a.left.device_id).localeCompare(String(b.left.name || b.left.device_id)))
       const pairOn = networkEdgeConnected(edges, from, to)
-      const select = (value, onChange) => h('select', {
-        value, onChange: (event) => onChange(event.target.value), 'aria-label': '选择设备',
-        style: { flex: '1 1 0', minWidth: 0, height: 30, border: '1px solid ' + C.line, borderRadius: 6, background: C.bg, color: C.ink, fontSize: 12, padding: '0 6px' }
-      }, devices.map((item) => h('option', { key: item.device_id, value: item.device_id }, (item.name || item.device_id) + (item.online ? '' : ' · 离线'))))
+      const select = (value, onChange) => h(StyledSelect, {
+        value,
+        ariaLabel: '选择设备',
+        style: { flex: '1 1 0', height: 30, background: C.bg, color: C.ink, borderRadius: 6 },
+        options: devices.map((item) => ({
+          value: item.device_id,
+          label: (item.name || item.device_id) + (item.online ? '' : ' · 离线')
+        })),
+        onChange
+      })
       return h('div', {
         onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() },
         style: { position: 'absolute', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.35)' }
       },
         h('section', {
           role: 'dialog', 'aria-label': '连接管理', onPointerDown: (event) => event.stopPropagation(),
-          style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg, borderRadius: 12, boxShadow: C.shadow }
+          style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg, borderRadius: 16, boxShadow: C.shadow }
         },
           h('header', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', height: 44, borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
             h('strong', { style: { fontSize: 14 } }, '连接管理'),
@@ -2679,17 +2734,31 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         placeItems: 'center', background: 'rgba(16,24,40,.35)' },
         onPointerDown: event => { if (!saving && event.target === event.currentTarget) onClose() } },
         h('section', { role: 'dialog', 'aria-modal': true, 'aria-label': '自动中转', style: {
-          width: 'min(440px, 100%)', display: 'grid', gap: 12, padding: 16, borderRadius: 12, background: C.bg, boxShadow: C.shadow } },
+          width: 'min(420px, 100%)', display: 'grid', gap: 16, padding: 16, borderRadius: 16, background: C.bg, boxShadow: C.shadow } },
           h('header', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-            h('strong', null, '自动中转'), btn('关闭', onClose, { disabled: saving })),
-          h('label', { style: { display: 'grid', gap: 4 } }, '我的私网',
-            h('select', { value: id, disabled: saving, onChange: event => setId(event.target.value) },
-              networks.map(network => h('option', { key: network.id, value: network.id }, network.name || network.id)))),
-          h('label', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-            h('input', { type: 'checkbox', checked: !!policy?.persistent, disabled: saving || policy?.network_id !== id, onChange: toggle }),
-            '允许这台设备为此私网自动转发'),
-          h('div', { style: { color: C.mute } }, '开启后，其他设备传文件时可自动借道这台设备。此设置会保留，直到你关闭。'),
-          error ? h('div', { role: 'alert', style: { color: C.red } }, error) : null))
+            h('strong', { style: { fontSize: 14 } }, '自动中转'),
+            h('button', {
+              type: 'button', disabled: saving, onClick: onClose, title: '关闭', 'aria-label': '关闭', className: 'tether-hover',
+              style: { width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: C.mute, fontSize: 18, cursor: saving ? 'default' : 'pointer', display: 'grid', placeItems: 'center' }
+            }, '×')),
+          h('div', { style: { display: 'grid', gap: 6 } },
+            h('span', { style: { fontSize: 12, color: C.sub } }, '私网'),
+            h(StyledSelect, {
+              value: id,
+              ariaLabel: '私网',
+              disabled: saving,
+              options: networks.map(network => ({ value: network.id, label: network.name || network.id })),
+              onChange: (next) => setId(next)
+            })),
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 } },
+            h('span', { style: { fontSize: 12.5, color: C.ink } }, '允许这台设备为此私网自动转发'),
+            h(ToggleSwitch, {
+              checked: !!policy?.persistent,
+              disabled: saving || policy?.network_id !== id,
+              ariaLabel: '允许这台设备为此私网自动转发',
+              onChange: () => { void toggle() }
+            })),
+          error ? h('div', { role: 'alert', style: { color: C.red, fontSize: 12 } }, error) : null))
     }
 
     function FileTree({ roots, children, open, onToggle, onOpenFile, onContextMenuNode, selected, onHoverEntry, onLeaveEntry }) {
@@ -4559,7 +4628,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [privateNetworks, setPrivateNetworks] = React.useState([])
       const [privateNetworksError, setPrivateNetworksError] = React.useState('')
       const [retryingNetworkId, setRetryingNetworkId] = React.useState('')
-      const [notice, setNotice] = React.useState('')
+      const [notice, setNoticeRaw] = React.useState('')
+      const setNotice = React.useCallback((value, level) => {
+        setNoticeRaw(normalizeToastValue(value, level))
+      }, [])
       const [busy, setBusy] = React.useState(false)
       const [native, setNative] = React.useState([])
       const [nativeError, setNativeError] = React.useState('')
@@ -4736,7 +4808,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const autoUpdateChecksRef = React.useRef({})
       const lastUpdateToastRef = React.useRef({})
       const activeUpdateToastKeyRef = React.useRef('')
-      const [updateToast, setUpdateToast] = React.useState('')
+      const [updateToast, setUpdateToastRaw] = React.useState('')
+      const setUpdateToast = React.useCallback((value, level) => {
+        setUpdateToastRaw(normalizeToastValue(value, level))
+      }, [])
       const [showAppSettings, setShowAppSettings] = React.useState(false)
       const [showHub, setShowHub] = React.useState(false)
       const [desktopAppVersion, setDesktopAppVersion] = React.useState('')
@@ -4829,7 +4904,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setHubToken('')
           setHubRole('')
           setHubLoggedIn(false)
-          setNotice('登录已过期，请重新登录')
+          setNotice('登录已过期，请重新登录', 'warning')
           return
         }
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
@@ -4837,7 +4912,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         // state; a red toast on a slow remote folder is noise, not information.
         if (e && (e.name === 'AbortError' || e.code === 'update_timeout' || e.code === 'node_timeout'
           || e.code === 'device_busy' || e.code === 'device_offline' || (e.status && e.status >= 500))) return
-        setNotice(String((e && e.message) || e))
+        setNotice(String((e && e.message) || e), 'error')
       }
       const probeConfiguredHub = async ({ silent = false } = {}) => {
         if (!host || typeof host.probeConnection !== 'function') return null
@@ -4914,7 +4989,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (lastUpdateToastRef.current[key] !== message) {
             lastUpdateToastRef.current[key] = message
             activeUpdateToastKeyRef.current = key
-            setUpdateToast(message)
+            setUpdateToast(message, 'error')
           }
         } else if (!message) {
           delete lastUpdateToastRef.current[key]
@@ -6167,7 +6242,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [deviceId])
 
       const loadProjects = React.useCallback(async () => {
-        if (!deviceId) { setProjects(null); setProject(null); setProjectsDevice(''); projectsRef.current = null; projectRef.current = null; projectsDeviceRef.current = ''; setProjectsError(''); return }
+        if (!deviceId || (host && host.kind === 'app' && !EXPLICIT_AUTHORITY && !workbenchAuthReadyRef.current)) {
+          setProjects(null); setProject(null); setProjectsDevice(''); projectsRef.current = null; projectRef.current = null; projectsDeviceRef.current = ''; setProjectsError(''); return
+        }
         setProjectsError('')
         const requestDevice = deviceId
         const requestEpoch = treeDeviceEpochRef.current
@@ -6214,7 +6291,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               : '读取工作区失败，请检查节点连接和接口版本后重试。')
           }
         }
-      }, [deviceId])
+      }, [deviceId, workbenchAuthReady])
 
       React.useEffect(() => {
         setProjects(null); setProject(null); setProjectsDevice(''); projectsDeviceRef.current = ''
@@ -6225,7 +6302,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setDirEntries([]); setDirLoading(false); setDirError(''); setHistory({ back: [], forward: [] }); setSearch(''); setContextMenu(null)
         setPreviewBusy(false); setEditMode(false); loadedDirRef.current = ''
         loadProjects()
-      }, [deviceId, loadProjects])
+      }, [deviceId, workbenchAuthReady, loadProjects])
 
       const loadNative = React.useCallback(async () => {
         if (!deviceId) return
@@ -7465,28 +7542,36 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
 
       const renderToasts = () => {
+        const toneColor = (level) => level === 'success' ? C.green : (level === 'warning' ? C.amber : (level === 'error' ? C.red : C.sub))
         const row = (text, color, onClose, extra) => h('div', {
           role: 'alert',
+          className: 'tether-glass',
           style: {
-            display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px',
-            background: C.layer1, border: '1px solid rgba(16, 24, 40, 0.16)', borderRadius: 8,
-            boxShadow: C.shadow, color, fontSize: 12, lineHeight: '17px',
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+            borderRadius: 10, color: C.ink, fontSize: 12, lineHeight: '17px',
             pointerEvents: 'auto', minWidth: 0
           }
         },
+          h('span', { 'aria-hidden': true, style: { width: 7, height: 7, borderRadius: '50%', background: color, flex: '0 0 auto' } }),
           h('span', { style: { flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' } }, text),
           extra || null,
           h('button', {
-            title: '关闭', 'aria-label': '关闭提示', onClick: onClose,
-            style: { border: 0, background: 'transparent', color: C.mute, fontSize: 14, lineHeight: '16px', cursor: 'pointer', padding: '0 2px', flex: '0 0 auto' }
+            title: '关闭', 'aria-label': '关闭提示', onClick: onClose, className: 'tether-hover',
+            style: { border: 0, borderRadius: 6, background: 'transparent', color: C.mute, fontSize: 14, lineHeight: '16px', cursor: 'pointer', width: 22, height: 22, display: 'grid', placeItems: 'center', flex: '0 0 auto' }
           }, '×'))
         const rows = []
-        if (updateToast) rows.push(row(updateToast, C.red, () => setUpdateToast('')))
-        if (notice) rows.push(row(notice, /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, () => setNotice('')))
+        if (updateToast) {
+          const item = typeof updateToast === 'string' ? { text: updateToast, level: classifyNoticeLevel(updateToast) } : updateToast
+          rows.push(row(item.text, toneColor(item.level), () => setUpdateToast('')))
+        }
+        if (notice) {
+          const item = typeof notice === 'string' ? { text: notice, level: classifyNoticeLevel(notice) } : notice
+          rows.push(row(item.text, toneColor(item.level), () => setNotice('')))
+        }
         if (projectsError) rows.push(row(projectsError, C.red, () => setProjectsError(''), btn('重试工作区', loadProjects)))
         return h('div', {
           style: {
-            position: 'absolute', bottom: 14, right: 12, zIndex: 85, display: 'grid', gap: 6,
+            position: 'absolute', bottom: 14, right: 12, zIndex: 85, display: 'grid', gap: 8,
             justifyContent: 'end', pointerEvents: 'none', maxWidth: 'min(480px, calc(100% - 24px))'
           }
         }, rows)

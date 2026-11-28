@@ -172659,18 +172659,18 @@ function createConnectionPanel(React2) {
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
-        background: "linear-gradient(155deg, #0b1220 0%, #13233f 55%, #0b1220 100%)",
+        background: "#1B1E24",
+        borderRight: "1px solid rgba(255,255,255,.08)",
         overflow: "hidden"
       } },
-      h3("div", { "aria-hidden": true, style: { position: "absolute", inset: 0, background: "radial-gradient(circle at 52% 42%, rgba(59,130,246,.28), transparent 58%)", pointerEvents: "none" } }),
       h3(
         "div",
-        { style: { display: "flex", alignItems: "center", gap: 10, color: "#fff", position: "relative", zIndex: 1 } },
-        h3("span", { style: { width: 28, height: 28, borderRadius: 8, background: "#fff", display: "grid", placeItems: "center", color: "#101828", fontWeight: 700, fontSize: 15 } }, "T"),
-        h3("span", { style: { fontSize: 13, letterSpacing: ".12em", textTransform: "uppercase", opacity: 0.8 } }, "Tether")
+        { style: { display: "flex", alignItems: "center", gap: 10, color: "#E6E8EC", position: "relative", zIndex: 1 } },
+        h3("span", { style: { width: 28, height: 28, borderRadius: 6, background: "#E6E8EC", display: "grid", placeItems: "center", color: "#121418", fontWeight: 700, fontSize: 15 } }, "T"),
+        h3("span", { style: { fontSize: 13, letterSpacing: ".12em", textTransform: "uppercase", opacity: 0.85 } }, "Tether")
       ),
       h3(LoginNetwork),
-      h3("div", { style: { fontSize: 11.5, letterSpacing: ".08em", textTransform: "uppercase", color: "rgba(255,255,255,.55)", position: "relative", zIndex: 1 } }, "\u79C1\u6709\u8BBE\u5907\u7F51")
+      h3("div", { style: { fontSize: 11.5, letterSpacing: ".08em", textTransform: "uppercase", color: "#9CA3AF", position: "relative", zIndex: 1 } }, "\u79C1\u6709\u8BBE\u5907\u7F51")
     );
     return h3(
       "div",
@@ -172682,7 +172682,7 @@ function createConnectionPanel(React2) {
         display: "grid",
         placeItems: "center",
         padding: 24,
-        background: "radial-gradient(1200px 600px at 18% 8%, #eaf1ff 0%, transparent 60%), radial-gradient(900px 500px at 88% 92%, #fff4e5 0%, transparent 55%), #f7f8fb",
+        background: "var(--tether-workbench-bg, var(--dsw-alias-bg-base, #f4f5f7))",
         color: ink,
         overflow: "auto"
       } },
@@ -172694,11 +172694,11 @@ function createConnectionPanel(React2) {
           width: "min(820px, 100%)",
           display: "grid",
           gridTemplateColumns: "320px minmax(0, 1fr)",
-          borderRadius: 18,
+          borderRadius: 16,
           overflow: "hidden",
           background: bg,
-          boxShadow: "0 24px 70px rgba(16,24,40,.22)",
-          border: "1px solid rgba(16,24,40,.06)"
+          boxShadow: "0 24px 64px rgba(16,24,40,.18), 0 2px 8px rgba(16,24,40,.08)",
+          border: "1px solid " + line
         } },
         visual,
         h3(
@@ -173888,9 +173888,425 @@ function createSettingsPanel(React2) {
   return { SettingsPanel };
 }
 
+// src/ui-controls.js
+function createUiControls(React2) {
+  const h3 = React2.createElement;
+  function chevronSvg(open) {
+    return h3("svg", {
+      width: 12,
+      height: 12,
+      viewBox: "0 0 12 12",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 1.5,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      "aria-hidden": true,
+      style: {
+        flex: "0 0 auto",
+        transform: open ? "rotate(180deg)" : "rotate(0deg)",
+        transition: "transform var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))"
+      }
+    }, h3("path", { d: "M3 4.5L6 7.5L9 4.5" }));
+  }
+  function checkSvg() {
+    return h3("svg", {
+      width: 10,
+      height: 10,
+      viewBox: "0 0 12 12",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 2,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      "aria-hidden": true
+    }, h3("path", { d: "M2.5 6.2L5 8.7L9.5 3.6" }));
+  }
+  function StyledSelect({
+    value = "",
+    options = [],
+    onChange,
+    disabled = false,
+    placeholder = "\u8BF7\u9009\u62E9\u2026",
+    searchable,
+    ariaLabel,
+    title,
+    style = {},
+    menuMinWidth = 180
+  }) {
+    const [open, setOpen] = React2.useState(false);
+    const [query, setQuery] = React2.useState("");
+    const [activeIndex, setActiveIndex] = React2.useState(-1);
+    const rootRef = React2.useRef(null);
+    const listRef = React2.useRef(null);
+    const normalized = React2.useMemo(() => (options || []).map((item) => typeof item === "object" && item !== null ? { value: String(item.value ?? ""), label: String(item.label ?? item.value ?? ""), disabled: !!item.disabled } : { value: String(item), label: String(item), disabled: false }), [options]);
+    const current = normalized.find((item) => item.value === String(value ?? "")) || null;
+    const useSearch = typeof searchable === "boolean" ? searchable : normalized.length > 8;
+    const filtered = React2.useMemo(() => {
+      const term = query.trim().toLowerCase();
+      if (!useSearch || !term) return normalized;
+      return normalized.filter((item) => item.label.toLowerCase().includes(term) || item.value.toLowerCase().includes(term));
+    }, [normalized, query, useSearch]);
+    React2.useEffect(() => {
+      if (!open) {
+        setQuery("");
+        return void 0;
+      }
+      const selectedIdx = filtered.findIndex((item) => item.value === String(value ?? "") && !item.disabled);
+      setActiveIndex(selectedIdx >= 0 ? selectedIdx : filtered.findIndex((item) => !item.disabled));
+      const onPointerDown = (event) => {
+        if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+      };
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") {
+          setOpen(false);
+          event.stopPropagation();
+        }
+      };
+      document.addEventListener("pointerdown", onPointerDown);
+      document.addEventListener("keydown", onKeyDown, true);
+      return () => {
+        document.removeEventListener("pointerdown", onPointerDown);
+        document.removeEventListener("keydown", onKeyDown, true);
+      };
+    }, [open]);
+    const selectValue = (nextValue) => {
+      setOpen(false);
+      if (onChange && nextValue !== value) onChange(nextValue);
+    };
+    const onTriggerKeyDown = (event) => {
+      if (disabled) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (!open) {
+          setOpen(true);
+          return;
+        }
+        const pick = filtered[activeIndex];
+        if (pick && !pick.disabled) selectValue(pick.value);
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (!open) {
+          setOpen(true);
+          return;
+        }
+        if (!filtered.length) return;
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        let next = activeIndex;
+        for (let i = 0; i < filtered.length; i += 1) {
+          next = (next + step + filtered.length) % filtered.length;
+          if (!filtered[next].disabled) {
+            setActiveIndex(next);
+            break;
+          }
+        }
+      }
+    };
+    const border = "var(--dsw-alias-border-l2, rgba(9, 30, 66, 0.14))";
+    const bg = style.background || "var(--dsw-specific-input-major, var(--dsw-alias-bg-base, #ffffff))";
+    const ink = style.color || "var(--dsw-alias-label-primary, #101828)";
+    const mute = "var(--dsw-alias-label-tertiary, #667085)";
+    return h3(
+      "div",
+      {
+        ref: rootRef,
+        style: {
+          position: "relative",
+          display: "inline-flex",
+          minWidth: 0,
+          ...style.flex ? { flex: style.flex } : {},
+          ...style.width ? { width: style.width } : {}
+        }
+      },
+      h3(
+        "button",
+        {
+          type: "button",
+          role: "combobox",
+          "aria-expanded": open,
+          "aria-haspopup": "listbox",
+          "aria-label": ariaLabel || title || placeholder,
+          title: title || (current ? current.label : placeholder),
+          disabled,
+          onClick: () => {
+            if (!disabled) setOpen((prev) => !prev);
+          },
+          onKeyDown: onTriggerKeyDown,
+          className: "tether-hover",
+          style: {
+            width: "100%",
+            height: style.height || 32,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            padding: "0 10px",
+            boxSizing: "border-box",
+            border: style.border !== void 0 ? style.border : "1px solid " + border,
+            borderRadius: style.borderRadius || "var(--tether-radius-sm, 6px)",
+            background: bg,
+            color: current ? ink : mute,
+            fontSize: style.fontSize || 12,
+            cursor: disabled ? "default" : "pointer",
+            opacity: disabled ? 0.5 : 1,
+            minWidth: 0,
+            textAlign: "left",
+            outline: "none"
+          }
+        },
+        h3(
+          "span",
+          { style: { flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          current ? current.label : placeholder
+        ),
+        chevronSvg(open)
+      ),
+      open ? h3(
+        "div",
+        {
+          ref: listRef,
+          role: "listbox",
+          className: "tether-glass tether-scroll",
+          style: {
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            minWidth: "max(100%, " + menuMinWidth + "px)",
+            maxWidth: 340,
+            maxHeight: 240,
+            overflowY: "auto",
+            zIndex: 120,
+            padding: 4,
+            borderRadius: "var(--tether-radius-md, 10px)",
+            boxShadow: "var(--tether-glass-shadow, 0 12px 32px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.08))",
+            display: "grid",
+            gap: 2
+          }
+        },
+        useSearch ? h3("input", {
+          type: "text",
+          value: query,
+          autoFocus: true,
+          placeholder: "\u7B5B\u9009\u2026",
+          onChange: (event) => {
+            setQuery(event.target.value);
+            setActiveIndex(0);
+          },
+          style: {
+            height: 28,
+            marginBottom: 2,
+            padding: "0 8px",
+            boxSizing: "border-box",
+            border: "1px solid " + border,
+            borderRadius: "var(--tether-radius-sm, 6px)",
+            background: "var(--dsw-alias-bg-base, #ffffff)",
+            color: ink,
+            fontSize: 12,
+            outline: "none"
+          }
+        }) : null,
+        filtered.length ? filtered.map((item, idx) => {
+          const isSelected = item.value === String(value ?? "");
+          const isActive = idx === activeIndex;
+          return h3(
+            "button",
+            {
+              key: item.value,
+              type: "button",
+              role: "option",
+              "aria-selected": isSelected,
+              disabled: item.disabled,
+              onMouseEnter: () => setActiveIndex(idx),
+              onClick: () => {
+                if (!item.disabled) selectValue(item.value);
+              },
+              style: {
+                width: "100%",
+                minHeight: 30,
+                padding: "4px 8px",
+                border: 0,
+                borderRadius: "var(--tether-radius-sm, 6px)",
+                background: isSelected ? "var(--dsw-alias-interactive-bg-active, rgba(38, 49, 72, 0.10))" : isActive ? "var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06))" : "transparent",
+                color: item.disabled ? mute : ink,
+                fontSize: 12,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                textAlign: "left",
+                cursor: item.disabled ? "default" : "pointer",
+                opacity: item.disabled ? 0.5 : 1
+              }
+            },
+            h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.label),
+            isSelected ? h3("span", { style: { color: "var(--dsw-alias-state-business-primary, #1570ef)", display: "inline-flex", flex: "0 0 auto" } }, checkSvg()) : null
+          );
+        }) : h3("div", { style: { padding: "8px 10px", color: mute, fontSize: 12, textAlign: "center" } }, "\u65E0\u5339\u914D\u9879")
+      ) : null
+    );
+  }
+  function ToggleSwitch({ checked = false, onChange, disabled = false, label, ariaLabel }) {
+    const activeBg = "var(--dsw-alias-state-business-primary, #1570ef)";
+    const offBg = "var(--dsw-alias-interactive-bg-active, rgba(38, 49, 72, 0.18))";
+    return h3(
+      "button",
+      {
+        type: "button",
+        role: "switch",
+        "aria-checked": !!checked,
+        "aria-label": ariaLabel || label || "\u5207\u6362",
+        disabled,
+        onClick: () => {
+          if (!disabled && onChange) onChange(!checked);
+        },
+        style: {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          border: 0,
+          padding: 0,
+          background: "transparent",
+          color: "var(--dsw-alias-label-primary, #101828)",
+          fontSize: 12.5,
+          cursor: disabled ? "default" : "pointer",
+          opacity: disabled ? 0.5 : 1
+        }
+      },
+      h3(
+        "span",
+        {
+          style: {
+            position: "relative",
+            width: 34,
+            height: 20,
+            borderRadius: 999,
+            background: checked ? activeBg : offBg,
+            transition: "background-color var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+            flex: "0 0 auto"
+          }
+        },
+        h3("span", {
+          style: {
+            position: "absolute",
+            top: 2,
+            left: 2,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            background: "#ffffff",
+            boxShadow: "0 1px 2px rgba(0, 0, 0, 0.24)",
+            transform: checked ? "translateX(14px)" : "translateX(0)",
+            transition: "transform var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1))"
+          }
+        })
+      ),
+      label ? h3("span", { style: { textAlign: "left" } }, label) : null
+    );
+  }
+  function StyledCheckbox({ checked = false, onChange, disabled = false, label, title }) {
+    const border = "var(--dsw-alias-border-l2, rgba(9, 30, 66, 0.2))";
+    const active = "var(--dsw-alias-state-business-primary, #1570ef)";
+    const ink = "var(--dsw-alias-label-secondary, #475467)";
+    const mute = "var(--dsw-alias-label-tertiary, #98a2b3)";
+    return h3(
+      "button",
+      {
+        type: "button",
+        role: "checkbox",
+        "aria-checked": !!checked,
+        disabled,
+        title,
+        onClick: () => {
+          if (!disabled && onChange) onChange(!checked);
+        },
+        className: "tether-hover",
+        style: {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "4px 6px",
+          border: 0,
+          borderRadius: "var(--tether-radius-sm, 6px)",
+          background: "transparent",
+          color: disabled ? mute : ink,
+          fontSize: 12,
+          cursor: disabled ? "default" : "pointer",
+          textAlign: "left",
+          minWidth: 0
+        }
+      },
+      h3("span", {
+        "aria-hidden": true,
+        style: {
+          width: 16,
+          height: 16,
+          borderRadius: "var(--tether-radius-sm, 6px)",
+          border: "1px solid " + (checked ? active : border),
+          background: checked ? active : "transparent",
+          color: "#ffffff",
+          display: "grid",
+          placeItems: "center",
+          flex: "0 0 auto",
+          transition: "background-color var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1)), border-color var(--tether-duration-fast, 150ms)"
+        }
+      }, checked ? checkSvg() : null),
+      label ? h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, label) : null
+    );
+  }
+  function SegmentedControl({ value, options = [], onChange, disabled = false, ariaLabel }) {
+    const track = "var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06))";
+    const activeBg = "var(--dsw-alias-bg-base, #ffffff)";
+    const ink = "var(--dsw-alias-label-primary, #101828)";
+    const mute = "var(--dsw-alias-label-tertiary, #667085)";
+    return h3("div", {
+      role: "radiogroup",
+      "aria-label": ariaLabel,
+      style: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 2,
+        padding: 2,
+        borderRadius: "var(--tether-radius-sm, 6px)",
+        background: track,
+        opacity: disabled ? 0.55 : 1
+      }
+    }, (options || []).map((item) => {
+      const val = String(item.value);
+      const active = val === String(value);
+      return h3("button", {
+        key: val,
+        type: "button",
+        role: "radio",
+        "aria-checked": active,
+        disabled: disabled || !!item.disabled,
+        onClick: () => {
+          if (!disabled && !item.disabled && onChange) onChange(val);
+        },
+        style: {
+          height: 26,
+          padding: "0 10px",
+          border: 0,
+          borderRadius: 4,
+          background: active ? activeBg : "transparent",
+          color: active ? ink : mute,
+          fontSize: 12,
+          fontWeight: active ? 500 : 400,
+          boxShadow: active ? "0 1px 2px rgba(16, 24, 40, 0.10)" : "none",
+          cursor: disabled || item.disabled ? "default" : "pointer",
+          transition: "background-color var(--tether-duration-fast, 150ms) var(--tether-ease, cubic-bezier(0.22, 1, 0.36, 1)), color var(--tether-duration-fast, 150ms)"
+        }
+      }, item.label);
+    }));
+  }
+  return { StyledSelect, ToggleSwitch, StyledCheckbox, SegmentedControl };
+}
+
 // src/team-management.js
 function createTeamManagementPage(React2) {
   const h3 = React2.createElement;
+  const { StyledSelect, StyledCheckbox, SegmentedControl } = createUiControls(React2);
   const PERMISSIONS = [
     ["files.read", "\u6587\u4EF6\u8BFB\u53D6"],
     ["files.write", "\u6587\u4EF6\u5199\u5165"],
@@ -173926,11 +174342,11 @@ function createTeamManagementPage(React2) {
     const manager = !!selectedTeam && ["owner", "admin"].includes(selectedTeam.role);
     const selectedShare = shares.find((share) => share.device_id === deviceId) || null;
     const style = {
-      field: { height: 32, minWidth: 0, boxSizing: "border-box", border: "1px solid #e4e7ec", borderRadius: 6, padding: "0 9px", background: "#fff", color: "#101828", fontSize: 12 },
-      button: { height: 30, padding: "0 10px", border: 0, borderRadius: 6, background: "#f2f4f7", color: "#344054", fontSize: 12, cursor: "pointer" },
-      primary: { height: 30, padding: "0 11px", border: 0, borderRadius: 6, background: "#101828", color: "#fff", fontSize: 12, cursor: "pointer" },
-      card: { padding: 12, border: "1px solid #eaecf0", borderRadius: 8, background: "#fff" },
-      muted: { color: "#667085", fontSize: 11.5, lineHeight: 1.55 }
+      field: { height: 32, minWidth: 0, boxSizing: "border-box", border: "1px solid var(--dsw-alias-border-l2, #e4e7ec)", borderRadius: 6, padding: "0 9px", background: "var(--dsw-alias-bg-base, #fff)", color: "var(--dsw-alias-label-primary, #101828)", fontSize: 12 },
+      button: { height: 30, padding: "0 10px", border: 0, borderRadius: 6, background: "var(--dsw-alias-interactive-bg-hover, #f2f4f7)", color: "var(--dsw-alias-label-secondary, #344054)", fontSize: 12, cursor: "pointer" },
+      primary: { height: 30, padding: "0 11px", border: 0, borderRadius: 6, background: "var(--dsw-alias-button-primary-fill, #101828)", color: "var(--dsw-alias-label-primary-inverted, #fff)", fontSize: 12, cursor: "pointer" },
+      card: { padding: 12, border: "1px solid var(--dsw-alias-border-l1, #eaecf0)", borderRadius: 10, background: "var(--dsw-alias-bg-layer-1, #fff)" },
+      muted: { color: "var(--dsw-alias-label-tertiary, #667085)", fontSize: 11.5, lineHeight: 1.55 }
     };
     const readJson = async (path) => api2(path);
     const send = async (path, method, body) => api2(path, {
@@ -174074,11 +174490,10 @@ function createTeamManagementPage(React2) {
       }
     };
     const permissionLabel = (permission) => (PERMISSIONS.find((entry) => entry[0] === permission) || [permission, permission])[1];
-    const teamOptions = teams.map((team) => h3(
-      "option",
-      { key: team.team_id, value: team.team_id },
-      (team.name || team.team_id) + " \xB7 " + roleName(team.role)
-    ));
+    const teamOptions = teams.map((team) => ({
+      value: team.team_id,
+      label: (team.name || team.team_id) + " \xB7 " + roleName(team.role)
+    }));
     const sectionTitle = (title, detail) => h3(
       "div",
       { style: { display: "grid", gap: 3, marginBottom: 9 } },
@@ -174126,22 +174541,25 @@ function createTeamManagementPage(React2) {
       h3(
         "div",
         { style: { display: "flex", alignItems: "center", gap: 8 } },
-        h3(
-          "select",
-          { value: teamId, onChange: (event) => {
-            const next = event.target.value;
+        h3(StyledSelect, {
+          value: teamId,
+          options: teamOptions,
+          placeholder: "\u8FD8\u6CA1\u6709\u56E2\u961F",
+          ariaLabel: "\u9009\u62E9\u56E2\u961F",
+          disabled: busy || !teams.length,
+          style: { flex: "1 1 auto" },
+          onChange: (next) => {
             setTeamId(next);
             setError("");
             setIssuedToken("");
             void refresh(next);
-          }, disabled: busy || !teams.length, style: { ...style.field, flex: "1 1 auto" } },
-          teamOptions.length ? teamOptions : h3("option", { value: "" }, "\u8FD8\u6CA1\u6709\u56E2\u961F")
-        ),
+          }
+        }),
         h3("button", { type: "button", disabled: busy, onClick: () => {
           void refresh(teamId);
         }, style: style.button }, busy ? "\u8BFB\u53D6\u4E2D\u2026" : "\u5237\u65B0")
       ),
-      error ? h3("div", { role: "alert", style: { padding: "8px 10px", borderRadius: 6, background: "#fef3f2", color: "#b42318", fontSize: 11.5, overflowWrap: "anywhere" } }, error) : null,
+      error ? h3("div", { role: "alert", style: { padding: "8px 10px", borderRadius: 6, background: "rgba(180,35,24,.10)", color: "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 11.5, overflowWrap: "anywhere" } }, error) : null,
       h3(
         "div",
         { style: style.card },
@@ -174179,14 +174597,15 @@ function createTeamManagementPage(React2) {
           sectionTitle("\u9080\u8BF7\u6210\u5458", "\u9080\u8BF7\u4EE4\u724C\u6709\u6548\u671F 7 \u5929\u3002\u7CFB\u7EDF\u8FD4\u56DE\u4EE4\u724C\uFF0C\u8BF7\u901A\u8FC7\u53EF\u4FE1\u6E20\u9053\u4EA4\u7ED9\u88AB\u9080\u8BF7\u8005\u3002"),
           h3(
             "form",
-            { onSubmit: issueInvite, style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 120px auto", gap: 8 } },
-            h3("input", { type: "email", value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), placeholder: "\u90AE\u7BB1\uFF08\u53EF\u9009\uFF09", disabled: busy, style: style.field }),
-            h3(
-              "select",
-              { value: inviteRole, onChange: (event) => setInviteRole(event.target.value), disabled: busy, style: style.field },
-              h3("option", { value: "member" }, "\u6210\u5458"),
-              selectedTeam.role === "owner" ? h3("option", { value: "admin" }, "\u7BA1\u7406\u5458") : null
-            ),
+            { onSubmit: issueInvite, style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 } },
+            h3("input", { type: "email", value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), placeholder: "\u90AE\u7BB1\uFF08\u53EF\u9009\uFF09", disabled: busy, style: { ...style.field, flex: "1 1 180px" } }),
+            h3(SegmentedControl, {
+              value: inviteRole,
+              ariaLabel: "\u9080\u8BF7\u89D2\u8272",
+              disabled: busy,
+              options: selectedTeam.role === "owner" ? [{ value: "member", label: "\u6210\u5458" }, { value: "admin", label: "\u7BA1\u7406\u5458" }] : [{ value: "member", label: "\u6210\u5458" }],
+              onChange: (next) => setInviteRole(next)
+            }),
             h3("button", { type: "submit", disabled: busy, style: style.button }, "\u751F\u6210\u9080\u8BF7")
           ),
           issuedToken ? h3(
@@ -174208,30 +174627,32 @@ function createTeamManagementPage(React2) {
           h3(
             "form",
             { onSubmit: saveShare, style: { display: "grid", gap: 10 } },
-            h3(
-              "select",
-              { value: deviceId, onChange: (event) => setDeviceId(event.target.value), disabled: busy || !ownDevices.length, style: style.field },
-              h3("option", { value: "" }, ownDevices.length ? "\u9009\u62E9\u81EA\u5DF1\u7684\u8BBE\u5907" : "\u5F53\u524D\u8D26\u53F7\u6CA1\u6709\u53EF\u5206\u4EAB\u8BBE\u5907"),
-              ownDevices.map((device) => h3("option", { key: device.device_id, value: device.device_id }, (device.name || device.device_id) + (device.online ? " \xB7 \u5728\u7EBF" : " \xB7 \u79BB\u7EBF")))
-            ),
+            h3(StyledSelect, {
+              value: deviceId,
+              ariaLabel: "\u9009\u62E9\u5171\u4EAB\u8BBE\u5907",
+              placeholder: ownDevices.length ? "\u9009\u62E9\u81EA\u5DF1\u7684\u8BBE\u5907" : "\u5F53\u524D\u8D26\u53F7\u6CA1\u6709\u53EF\u5206\u4EAB\u8BBE\u5907",
+              disabled: busy || !ownDevices.length,
+              options: ownDevices.map((device) => ({
+                value: device.device_id,
+                label: (device.name || device.device_id) + (device.online ? " \xB7 \u5728\u7EBF" : " \xB7 \u79BB\u7EBF")
+              })),
+              onChange: (next) => setDeviceId(next)
+            }),
             h3(
               "div",
-              { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 6 } },
-              PERMISSIONS.map(([permission, label, enabled = true]) => h3(
-                "label",
-                { key: permission, title: enabled ? "" : "\u8FDC\u63A7\u6388\u6743\u63A5\u53E3\u5C1A\u672A\u63A5\u5165", style: { display: "flex", alignItems: "center", gap: 6, color: enabled ? "#475467" : "#98a2b3", fontSize: 11.5 } },
-                h3("input", {
-                  type: "checkbox",
-                  checked: permissions.includes(permission),
-                  disabled: busy || !enabled,
-                  onChange: () => togglePermission(permission)
-                }),
-                label
-              ))
+              { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 4 } },
+              PERMISSIONS.map(([permission, label, enabled = true]) => h3(StyledCheckbox, {
+                key: permission,
+                label,
+                title: enabled ? "" : "\u8FDC\u63A7\u6388\u6743\u63A5\u53E3\u5C1A\u672A\u63A5\u5165",
+                checked: permissions.includes(permission),
+                disabled: busy || !enabled,
+                onChange: () => togglePermission(permission)
+              }))
             ),
             permissions.some((item) => item === "files.read" || item === "files.write") ? h3(
               "label",
-              { style: { display: "grid", gap: 5, color: "#475467", fontSize: 11.5 } },
+              { style: { display: "grid", gap: 5, color: "var(--dsw-alias-label-secondary, #475467)", fontSize: 11.5 } },
               "\u6587\u4EF6\u5141\u8BB8\u76EE\u5F55\uFF08\u6BCF\u884C\u4E00\u4E2A\u7EDD\u5BF9\u8DEF\u5F84\uFF09",
               h3("textarea", {
                 rows: 3,
@@ -174239,7 +174660,7 @@ function createTeamManagementPage(React2) {
                 onChange: (event) => setAllowedRoots(event.target.value),
                 disabled: busy,
                 placeholder: "\u4F8B\u5982\uFF1AD:/Shared",
-                style: { boxSizing: "border-box", width: "100%", resize: "vertical", border: "1px solid #e4e7ec", borderRadius: 6, padding: 8, color: "#344054", fontSize: 11.5 }
+                style: { boxSizing: "border-box", width: "100%", resize: "vertical", border: "1px solid var(--dsw-alias-border-l2, #e4e7ec)", borderRadius: 6, padding: 8, background: "var(--dsw-alias-bg-base, #fff)", color: "var(--dsw-alias-label-primary, #344054)", fontSize: 11.5 }
               })
             ) : null,
             h3("button", { type: "submit", disabled: busy || !teamId || !deviceId || !permissions.length, style: style.primary }, selectedShare ? "\u4FDD\u5B58\u5171\u4EAB\u6743\u9650" : "\u5171\u4EAB\u8BBE\u5907")
@@ -175890,6 +176311,7 @@ function createTransferPage({
   hubOnly = false
 }) {
   const h3 = React2.createElement;
+  const { StyledSelect } = createUiControls(React2);
   const field = {
     height: 26,
     boxSizing: "border-box",
@@ -176240,28 +176662,24 @@ function createTransferPage({
       h3(
         "div",
         { style: { display: "flex", alignItems: "center", gap: 4, padding: "6px 8px", background: C2.soft, flex: "0 0 auto" } },
-        h3(
-          "select",
-          {
-            value: deviceId || "",
-            onChange: (event) => {
-              onDevice(event.target.value);
-              onPath("");
-              onSelection([]);
-              onActivate();
-              event.currentTarget.blur();
-            },
-            "aria-label": "\u8BBE\u5907",
-            title: "\u9009\u62E9\u8FD9\u53F0\u7535\u8111",
-            style: { ...field, flex: "1 1 auto", minWidth: 0 }
-          },
-          !deviceId ? h3("option", { value: "" }, "\u9009\u62E9\u8BBE\u5907\u2026") : null,
-          devices.map((item) => h3("option", {
-            key: item.device_id,
+        h3(StyledSelect, {
+          value: deviceId || "",
+          ariaLabel: "\u8BBE\u5907",
+          title: "\u9009\u62E9\u8FD9\u53F0\u7535\u8111",
+          placeholder: "\u9009\u62E9\u8BBE\u5907\u2026",
+          style: { height: 26, border: 0, borderRadius: 6, background: C2.bg, color: C2.ink, flex: "1 1 auto" },
+          options: devices.map((item) => ({
             value: item.device_id,
-            disabled: !item.online && item.device_id !== deviceId || item.device_id === otherDeviceId
-          }, (item.name || item.device_id) + (item.online ? "" : " \xB7 \u79BB\u7EBF") + (item.device_id === otherDeviceId ? " \xB7 \u5DF2\u5728\u53E6\u4E00\u4FA7" : "")))
-        ),
+            disabled: !item.online && item.device_id !== deviceId || item.device_id === otherDeviceId,
+            label: (item.name || item.device_id) + (item.online ? "" : " \xB7 \u79BB\u7EBF") + (item.device_id === otherDeviceId ? " \xB7 \u5DF2\u5728\u53E6\u4E00\u4FA7" : "")
+          })),
+          onChange: (next) => {
+            onDevice(next);
+            onPath("");
+            onSelection([]);
+            onActivate();
+          }
+        }),
         iconButton("folderPlus", "\u65B0\u5EFA\u6587\u4EF6\u5939", onNewFolder, !deviceId || !path),
         iconButton("filePlus", "\u65B0\u5EFA\u6587\u4EF6", onNewFile, !deviceId || !path),
         iconButton("pencil", "\u91CD\u547D\u540D", onRename, !selection.length),
@@ -178032,6 +178450,10 @@ var TETHER_GLYPHS = {
     { d: "M2.8 6.3H1.9v2.8h.9M13.2 6.3h.9v2.8h-.9" },
     { d: "M6.1 7.2v1.5M9.9 7.2v1.5" },
     { d: "M3.6 13.8h8.8" }
+  ] },
+  chat: { cap: "round", join: "round", parts: [
+    { d: "M3 4a1.6 1.6 0 0 1 1.6-1.6h6.8A1.6 1.6 0 0 1 13 4v5.2a1.6 1.6 0 0 1-1.6 1.6H6.8L4 13.4v-2.6h-.4A1.6 1.6 0 0 1 3 9.2V4Z" },
+    { d: "M5.6 5.8h4.8M5.6 8h3.1" }
   ] },
   refresh: { parts: [
     { d: "M13 8a5 5 0 1 1-1.5-3.56" },
@@ -182984,13 +183406,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   const Connection = createConnectionPanel(React2);
   const Settings2 = createSettingsPanel(React2);
   const TeamManagementPage = createTeamManagementPage(React2);
+  const { StyledSelect, ToggleSwitch } = createUiControls(React2);
   const PANEL_ID = "tether";
   const BASE = host.apiBase();
   const C2 = {
     ink: "var(--dsw-alias-label-primary, #101828)",
     sub: "var(--dsw-alias-label-secondary, #475467)",
     mute: "var(--dsw-alias-label-tertiary, #667085)",
-    line: "var(--dsw-alias-border-l1, rgba(9, 30, 66, 0.04))",
+    line: "var(--dsw-alias-border-l1, rgba(9, 30, 66, 0.06))",
     soft: "var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06))",
     hover: "var(--dsw-alias-interactive-bg-hover-solid, #f2f4f7)",
     active: "var(--dsw-alias-interactive-bg-active, rgba(38, 49, 72, 0.10))",
@@ -183000,10 +183423,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     layer2: "var(--dsw-alias-bg-layer-2, #ffffff)",
     layer3: "var(--dsw-alias-bg-layer-3, #ffffff)",
     input: "var(--dsw-specific-input-major, #ffffff)",
-    green: "var(--dsw-alias-state-success-primary, #16a34a)",
+    green: "var(--dsw-alias-state-success-primary, #15803d)",
     red: "var(--dsw-alias-state-error-primary, #b42318)",
     blue: "var(--dsw-alias-state-business-primary, #1570ef)",
-    amber: "var(--dsw-alias-state-warn-primary, #b54708)",
+    amber: "var(--dsw-alias-state-warn-primary, #b45309)",
     primary: "var(--dsw-alias-button-primary-fill, #101828)",
     onPrimary: "var(--dsw-alias-label-primary-inverted, #ffffff)",
     bubble: "var(--dsw-specific-bubble, #f2f4f7)",
@@ -183011,6 +183434,20 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     nodeChildActive: "color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 13%, var(--dsw-specific-sidebar-fill, #f9fafb))",
     block: "var(--dsw-alias-markdown-code-block, #f8fafc)",
     shadow: "var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))"
+  };
+  const classifyNoticeLevel = (text2) => {
+    const msg = String(text2 || "");
+    if (/失败|错误|拒绝|无效|超时|不可达|不能|未保存|error|fail/i.test(msg)) return "error";
+    if (/已被其他程序修改|未能在线重载|无法在线重启|请重新登录|待更新|warn/i.test(msg)) return "warning";
+    if (/^(Saved |Policy updated|已保存|已接入|登录成功|已重命名|已复制|已粘贴|已请求|插件更新已立即生效|插件已安装)/.test(msg)) return "success";
+    return "info";
+  };
+  const normalizeToastValue = (value, explicitLevel) => {
+    if (!value) return "";
+    const text2 = typeof value === "string" ? value : String(value.text || "");
+    if (!text2) return "";
+    const level = explicitLevel || typeof value === "object" && value.level || classifyNoticeLevel(text2);
+    return { text: text2, level };
   };
   let apiBaseList = host && host.apiBases ? host.apiBases() : [BASE];
   let ACTIVE_BASE = apiBaseList[0] || BASE;
@@ -183672,6 +184109,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   }
   const SCROLL_CSS = `
       .tether-root { --tether-strong: 600; --tether-strong-2: 650; --tether-body: 400;
+        --tether-space-1: 4px; --tether-space-2: 8px; --tether-space-3: 12px;
+        --tether-space-4: 16px; --tether-space-6: 24px; --tether-space-8: 32px;
+        --tether-radius-sm: 6px; --tether-radius-md: 10px; --tether-radius-lg: 16px;
+        --tether-ease: cubic-bezier(0.22, 1, 0.36, 1);
+        --tether-duration-fast: 150ms; --tether-duration-normal: 220ms;
+        --tether-glass-bg: rgba(255, 255, 255, 0.86);
+        --tether-glass-border: rgba(16, 24, 40, 0.10);
+        --tether-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+        --tether-glass-shadow: 0 12px 32px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.08);
         --tether-topbar-bg: #efeff0;
         --tether-activity-bg: #e8e8ea;
         --tether-explorer-bg: #efeff1;
@@ -183691,22 +184137,45 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         --tether-table-grid: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 6%, transparent);
         --tether-tab-bg: #ffffff; }
       body[data-ds-dark-theme] .tether-root {
-        --tether-strong: 500; --tether-strong-2: 520; --tether-body: 350;
-        --tether-topbar-bg: #242426;
-        --tether-activity-bg: #1d1d1f;
-        --tether-explorer-bg: #28282b;
-        --tether-command-bg: #202022;
-        --tether-workbench-bg: #1e1e1e;
-        --tether-status-bg: #2a2a2d;
-        --tether-status-ink: #b8b8bb;
-        --tether-tree-selected: #3a3a3d;
-        --tether-chrome-ink: #ededee;
-        --tether-chrome-muted: #a1a1a6;
-        --tether-chrome-hover: #343438;
-        --tether-focus: #a2a2a6;
-        --tether-tabstrip: #2b2b2e;
-        --tether-tab-bg: #1e1e1e;
-        --tether-split: rgba(255, 255, 255, 0.12); }
+        --tether-strong: 500; --tether-strong-2: 520; --tether-body: 400;
+        --dsw-alias-bg-base: #121418;
+        --dsw-alias-bg-layer-1: #1B1E24;
+        --dsw-alias-bg-layer-2: #252931;
+        --dsw-alias-bg-layer-3: #252931;
+        --dsw-specific-sidebar-fill: #1B1E24;
+        --dsw-specific-input-major: #1B1E24;
+        --dsw-alias-label-primary: #E6E8EC;
+        --dsw-alias-label-secondary: #CBD2DC;
+        --dsw-alias-label-tertiary: #9CA3AF;
+        --dsw-alias-border-l1: rgba(255, 255, 255, 0.08);
+        --dsw-alias-border-l2: rgba(255, 255, 255, 0.14);
+        --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, 0.06);
+        --dsw-alias-interactive-bg-hover-solid: #252931;
+        --dsw-alias-interactive-bg-active: rgba(255, 255, 255, 0.12);
+        --dsw-alias-state-success-primary: #4ADE80;
+        --dsw-alias-state-error-primary: #F87171;
+        --dsw-alias-state-warn-primary: #FBBF24;
+        --tether-glass-bg: rgba(37, 41, 49, 0.84);
+        --tether-glass-border: rgba(255, 255, 255, 0.10);
+        --tether-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        --tether-glass-shadow: 0 16px 36px rgba(0, 0, 0, 0.48), 0 2px 8px rgba(0, 0, 0, 0.28);
+        --tether-topbar-bg: #1B1E24;
+        --tether-activity-bg: #121418;
+        --tether-explorer-bg: #1B1E24;
+        --tether-command-bg: #1B1E24;
+        --tether-workbench-bg: #121418;
+        --tether-status-bg: #1B1E24;
+        --tether-status-ink: #9CA3AF;
+        --tether-tree-selected: #252931;
+        --tether-chrome-ink: #E6E8EC;
+        --tether-chrome-muted: #9CA3AF;
+        --tether-chrome-hover: #252931;
+        --tether-focus: #9CA3AF;
+        --tether-tabstrip: #1B1E24;
+        --tether-tab-bg: #121418;
+        --tether-split: rgba(255, 255, 255, 0.08); }
+      .tether-glass { background: var(--tether-glass-bg) !important; backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%); border: 1px solid var(--tether-glass-border) !important; box-shadow: var(--tether-glass-highlight), var(--tether-glass-shadow) !important; color: var(--dsw-alias-label-primary, #101828); }
+      .tether-sidebar { background: var(--tether-explorer-bg) !important; transition: transform var(--tether-duration-normal) var(--tether-ease), opacity var(--tether-duration-fast) var(--tether-ease); }
       .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; -webkit-app-region: drag; }
       .tether-topbar button, .tether-topbar input, .tether-topbar [role="button"], .tether-topbar a { -webkit-app-region: no-drag; }
       .tether-window-control:hover { background: var(--tether-chrome-hover) !important; color: var(--tether-chrome-ink) !important; }
@@ -184691,12 +185160,16 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const term = search2.trim().toLowerCase();
     const rows = (edges || []).map((edge) => ({ edge, left: lookup.get(edge.from), right: lookup.get(edge.to) })).filter((row) => row.left && row.right).filter((row) => !term || [row.left, row.right].some((item) => String(item.name || "").toLowerCase().includes(term) || String(item.device_id).toLowerCase().includes(term))).sort((a, b2) => String(a.left.name || a.left.device_id).localeCompare(String(b2.left.name || b2.left.device_id)));
     const pairOn = networkEdgeConnected(edges, from, to);
-    const select = (value, onChange) => h3("select", {
+    const select = (value, onChange) => h3(StyledSelect, {
       value,
-      onChange: (event) => onChange(event.target.value),
-      "aria-label": "\u9009\u62E9\u8BBE\u5907",
-      style: { flex: "1 1 0", minWidth: 0, height: 30, border: "1px solid " + C2.line, borderRadius: 6, background: C2.bg, color: C2.ink, fontSize: 12, padding: "0 6px" }
-    }, devices.map((item) => h3("option", { key: item.device_id, value: item.device_id }, (item.name || item.device_id) + (item.online ? "" : " \xB7 \u79BB\u7EBF"))));
+      ariaLabel: "\u9009\u62E9\u8BBE\u5907",
+      style: { flex: "1 1 0", height: 30, background: C2.bg, color: C2.ink, borderRadius: 6 },
+      options: devices.map((item) => ({
+        value: item.device_id,
+        label: (item.name || item.device_id) + (item.online ? "" : " \xB7 \u79BB\u7EBF")
+      })),
+      onChange
+    });
     return h3(
       "div",
       {
@@ -184711,7 +185184,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           role: "dialog",
           "aria-label": "\u8FDE\u63A5\u7BA1\u7406",
           onPointerDown: (event) => event.stopPropagation(),
-          style: { width: "min(760px, 100%)", height: "min(560px, 100%)", display: "flex", flexDirection: "column", overflow: "hidden", background: C2.bg, borderRadius: 12, boxShadow: C2.shadow }
+          style: { width: "min(760px, 100%)", height: "min(560px, 100%)", display: "flex", flexDirection: "column", overflow: "hidden", background: C2.bg, borderRadius: 16, boxShadow: C2.shadow }
         },
         h3(
           "header",
@@ -184832,38 +185305,54 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       h3(
         "section",
         { role: "dialog", "aria-modal": true, "aria-label": "\u81EA\u52A8\u4E2D\u8F6C", style: {
-          width: "min(440px, 100%)",
+          width: "min(420px, 100%)",
           display: "grid",
-          gap: 12,
+          gap: 16,
           padding: 16,
-          borderRadius: 12,
+          borderRadius: 16,
           background: C2.bg,
           boxShadow: C2.shadow
         } },
         h3(
           "header",
           { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-          h3("strong", null, "\u81EA\u52A8\u4E2D\u8F6C"),
-          btn("\u5173\u95ED", onClose, { disabled: saving })
+          h3("strong", { style: { fontSize: 14 } }, "\u81EA\u52A8\u4E2D\u8F6C"),
+          h3("button", {
+            type: "button",
+            disabled: saving,
+            onClick: onClose,
+            title: "\u5173\u95ED",
+            "aria-label": "\u5173\u95ED",
+            className: "tether-hover",
+            style: { width: 28, height: 28, border: 0, borderRadius: 6, background: "transparent", color: C2.mute, fontSize: 18, cursor: saving ? "default" : "pointer", display: "grid", placeItems: "center" }
+          }, "\xD7")
         ),
         h3(
-          "label",
-          { style: { display: "grid", gap: 4 } },
-          "\u6211\u7684\u79C1\u7F51",
-          h3(
-            "select",
-            { value: id, disabled: saving, onChange: (event) => setId(event.target.value) },
-            networks.map((network) => h3("option", { key: network.id, value: network.id }, network.name || network.id))
-          )
+          "div",
+          { style: { display: "grid", gap: 6 } },
+          h3("span", { style: { fontSize: 12, color: C2.sub } }, "\u79C1\u7F51"),
+          h3(StyledSelect, {
+            value: id,
+            ariaLabel: "\u79C1\u7F51",
+            disabled: saving,
+            options: networks.map((network) => ({ value: network.id, label: network.name || network.id })),
+            onChange: (next) => setId(next)
+          })
         ),
         h3(
-          "label",
-          { style: { display: "flex", alignItems: "center", gap: 8 } },
-          h3("input", { type: "checkbox", checked: !!policy?.persistent, disabled: saving || policy?.network_id !== id, onChange: toggle }),
-          "\u5141\u8BB8\u8FD9\u53F0\u8BBE\u5907\u4E3A\u6B64\u79C1\u7F51\u81EA\u52A8\u8F6C\u53D1"
+          "div",
+          { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 } },
+          h3("span", { style: { fontSize: 12.5, color: C2.ink } }, "\u5141\u8BB8\u8FD9\u53F0\u8BBE\u5907\u4E3A\u6B64\u79C1\u7F51\u81EA\u52A8\u8F6C\u53D1"),
+          h3(ToggleSwitch, {
+            checked: !!policy?.persistent,
+            disabled: saving || policy?.network_id !== id,
+            ariaLabel: "\u5141\u8BB8\u8FD9\u53F0\u8BBE\u5907\u4E3A\u6B64\u79C1\u7F51\u81EA\u52A8\u8F6C\u53D1",
+            onChange: () => {
+              void toggle();
+            }
+          })
         ),
-        h3("div", { style: { color: C2.mute } }, "\u5F00\u542F\u540E\uFF0C\u5176\u4ED6\u8BBE\u5907\u4F20\u6587\u4EF6\u65F6\u53EF\u81EA\u52A8\u501F\u9053\u8FD9\u53F0\u8BBE\u5907\u3002\u6B64\u8BBE\u7F6E\u4F1A\u4FDD\u7559\uFF0C\u76F4\u5230\u4F60\u5173\u95ED\u3002"),
-        error ? h3("div", { role: "alert", style: { color: C2.red } }, error) : null
+        error ? h3("div", { role: "alert", style: { color: C2.red, fontSize: 12 } }, error) : null
       )
     );
   }
@@ -186975,7 +187464,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [privateNetworks, setPrivateNetworks] = React2.useState([]);
     const [privateNetworksError, setPrivateNetworksError] = React2.useState("");
     const [retryingNetworkId, setRetryingNetworkId] = React2.useState("");
-    const [notice, setNotice] = React2.useState("");
+    const [notice, setNoticeRaw] = React2.useState("");
+    const setNotice = React2.useCallback((value, level) => {
+      setNoticeRaw(normalizeToastValue(value, level));
+    }, []);
     const [busy, setBusy] = React2.useState(false);
     const [native, setNative] = React2.useState([]);
     const [nativeError, setNativeError] = React2.useState("");
@@ -187161,7 +187653,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const autoUpdateChecksRef = React2.useRef({});
     const lastUpdateToastRef = React2.useRef({});
     const activeUpdateToastKeyRef = React2.useRef("");
-    const [updateToast, setUpdateToast] = React2.useState("");
+    const [updateToast, setUpdateToastRaw] = React2.useState("");
+    const setUpdateToast = React2.useCallback((value, level) => {
+      setUpdateToastRaw(normalizeToastValue(value, level));
+    }, []);
     const [showAppSettings, setShowAppSettings] = React2.useState(false);
     const [showHub, setShowHub] = React2.useState(false);
     const [desktopAppVersion, setDesktopAppVersion] = React2.useState("");
@@ -187284,7 +187779,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setHubToken("");
         setHubRole("");
         setHubLoggedIn(false);
-        setNotice("\u767B\u5F55\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+        setNotice("\u767B\u5F55\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55", "warning");
         return;
       }
       if (e && e.code === "node_update_required") {
@@ -187292,7 +187787,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return;
       }
       if (e && (e.name === "AbortError" || e.code === "update_timeout" || e.code === "node_timeout" || e.code === "device_busy" || e.code === "device_offline" || e.status && e.status >= 500)) return;
-      setNotice(String(e && e.message || e));
+      setNotice(String(e && e.message || e), "error");
     };
     const probeConfiguredHub = async ({ silent = false } = {}) => {
       if (!host || typeof host.probeConnection !== "function") return null;
@@ -187372,7 +187867,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (lastUpdateToastRef.current[key] !== message) {
           lastUpdateToastRef.current[key] = message;
           activeUpdateToastKeyRef.current = key;
-          setUpdateToast(message);
+          setUpdateToast(message, "error");
         }
       } else if (!message) {
         delete lastUpdateToastRef.current[key];
@@ -188753,7 +189248,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       };
     }, [deviceId]);
     const loadProjects = React2.useCallback(async () => {
-      if (!deviceId) {
+      if (!deviceId || host && host.kind === "app" && !EXPLICIT_AUTHORITY && !workbenchAuthReadyRef.current) {
         setProjects(null);
         setProject(null);
         setProjectsDevice("");
@@ -188814,7 +189309,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           setProjectsError(e && e.message === "\u5DE5\u4F5C\u533A\u63A5\u53E3\u8FD4\u56DE\u7684\u6570\u636E\u683C\u5F0F\u65E0\u6548" ? "\u5DE5\u4F5C\u533A\u63A5\u53E3\u8FD4\u56DE\u7684\u6570\u636E\u683C\u5F0F\u65E0\u6548\uFF0C\u8BF7\u68C0\u67E5\u76EE\u6807\u8282\u70B9\u7248\u672C\u540E\u91CD\u8BD5\u3002" : "\u8BFB\u53D6\u5DE5\u4F5C\u533A\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u8282\u70B9\u8FDE\u63A5\u548C\u63A5\u53E3\u7248\u672C\u540E\u91CD\u8BD5\u3002");
         }
       }
-    }, [deviceId]);
+    }, [deviceId, workbenchAuthReady]);
     React2.useEffect(() => {
       setProjects(null);
       setProject(null);
@@ -188845,7 +189340,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       setEditMode(false);
       loadedDirRef.current = "";
       loadProjects();
-    }, [deviceId, loadProjects]);
+    }, [deviceId, workbenchAuthReady, loadProjects]);
     const loadNative = React2.useCallback(async () => {
       if (!deviceId) return;
       if (typeof document !== "undefined" && document.hidden) return;
@@ -190352,38 +190847,45 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       );
     };
     const renderToasts = () => {
+      const toneColor = (level) => level === "success" ? C2.green : level === "warning" ? C2.amber : level === "error" ? C2.red : C2.sub;
       const row = (text2, color, onClose, extra) => h3(
         "div",
         {
           role: "alert",
+          className: "tether-glass",
           style: {
             display: "flex",
-            alignItems: "flex-start",
+            alignItems: "center",
             gap: 8,
-            padding: "8px 10px",
-            background: C2.layer1,
-            border: "1px solid rgba(16, 24, 40, 0.16)",
-            borderRadius: 8,
-            boxShadow: C2.shadow,
-            color,
+            padding: "8px 12px",
+            borderRadius: 10,
+            color: C2.ink,
             fontSize: 12,
             lineHeight: "17px",
             pointerEvents: "auto",
             minWidth: 0
           }
         },
+        h3("span", { "aria-hidden": true, style: { width: 7, height: 7, borderRadius: "50%", background: color, flex: "0 0 auto" } }),
         h3("span", { style: { flex: "1 1 auto", minWidth: 0, overflowWrap: "anywhere" } }, text2),
         extra || null,
         h3("button", {
           title: "\u5173\u95ED",
           "aria-label": "\u5173\u95ED\u63D0\u793A",
           onClick: onClose,
-          style: { border: 0, background: "transparent", color: C2.mute, fontSize: 14, lineHeight: "16px", cursor: "pointer", padding: "0 2px", flex: "0 0 auto" }
+          className: "tether-hover",
+          style: { border: 0, borderRadius: 6, background: "transparent", color: C2.mute, fontSize: 14, lineHeight: "16px", cursor: "pointer", width: 22, height: 22, display: "grid", placeItems: "center", flex: "0 0 auto" }
         }, "\xD7")
       );
       const rows = [];
-      if (updateToast) rows.push(row(updateToast, C2.red, () => setUpdateToast("")));
-      if (notice) rows.push(row(notice, /^Saved |^Policy updated|^已重命名/.test(notice) ? C2.green : C2.red, () => setNotice("")));
+      if (updateToast) {
+        const item = typeof updateToast === "string" ? { text: updateToast, level: classifyNoticeLevel(updateToast) } : updateToast;
+        rows.push(row(item.text, toneColor(item.level), () => setUpdateToast("")));
+      }
+      if (notice) {
+        const item = typeof notice === "string" ? { text: notice, level: classifyNoticeLevel(notice) } : notice;
+        rows.push(row(item.text, toneColor(item.level), () => setNotice("")));
+      }
       if (projectsError) rows.push(row(projectsError, C2.red, () => setProjectsError(""), btn("\u91CD\u8BD5\u5DE5\u4F5C\u533A", loadProjects)));
       return h3("div", {
         style: {
@@ -190392,7 +190894,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           right: 12,
           zIndex: 85,
           display: "grid",
-          gap: 6,
+          gap: 8,
           justifyContent: "end",
           pointerEvents: "none",
           maxWidth: "min(480px, calc(100% - 24px))"

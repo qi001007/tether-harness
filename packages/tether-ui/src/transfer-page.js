@@ -1,6 +1,7 @@
 import { newTransferId, transferCrocViaHub, transferFile, transferFileCroc, transferNativeJob } from './transfer.js'
 import { TargetFileExplorer } from './target-file-explorer.js'
 import { invalidateDirectory, loadDirectory } from './file-cache.js'
+import { createUiControls } from './ui-controls.js'
 
 const NATIVE_TRANSFER_MAX_ITEMS = 1024 // Matches the Controller's request limit.
 const CROC_ROUTE_PREFERENCE_MS = 120_000
@@ -139,6 +140,7 @@ async function directErrorResponse(response, operation, signal) {
 export function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', userId,
   onNotice, onError, onLocalRelay, hubOnly = false }) {
   const h = React.createElement
+  const { StyledSelect } = createUiControls(React)
   const field = {
     height: 26, boxSizing: 'border-box', border: 0, borderRadius: 6,
     background: C.soft, color: C.ink, fontSize: 12, padding: '0 8px', outline: 'none'
@@ -394,16 +396,19 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       }
     },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', background: C.soft, flex: '0 0 auto' } },
-        h('select', {
-          value: deviceId || '', onChange: (event) => { onDevice(event.target.value); onPath(''); onSelection([]); onActivate(); event.currentTarget.blur() },
-          'aria-label': '设备', title: '选择这台电脑',
-          style: { ...field, flex: '1 1 auto', minWidth: 0 }
-        },
-          !deviceId ? h('option', { value: '' }, '选择设备…') : null,
-          devices.map((item) => h('option', {
-            key: item.device_id, value: item.device_id,
-            disabled: (!item.online && item.device_id !== deviceId) || item.device_id === otherDeviceId
-          }, (item.name || item.device_id) + (item.online ? '' : ' · 离线') + (item.device_id === otherDeviceId ? ' · 已在另一侧' : '')))),
+        h(StyledSelect, {
+          value: deviceId || '',
+          ariaLabel: '设备',
+          title: '选择这台电脑',
+          placeholder: '选择设备…',
+          style: { height: 26, border: 0, borderRadius: 6, background: C.bg, color: C.ink, flex: '1 1 auto' },
+          options: devices.map((item) => ({
+            value: item.device_id,
+            disabled: (!item.online && item.device_id !== deviceId) || item.device_id === otherDeviceId,
+            label: (item.name || item.device_id) + (item.online ? '' : ' · 离线') + (item.device_id === otherDeviceId ? ' · 已在另一侧' : '')
+          })),
+          onChange: (next) => { onDevice(next); onPath(''); onSelection([]); onActivate() }
+        }),
         iconButton('folderPlus', '新建文件夹', onNewFolder, !deviceId || !path),
         iconButton('filePlus', '新建文件', onNewFile, !deviceId || !path),
         iconButton('pencil', '重命名', onRename, !selection.length),
